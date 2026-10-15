@@ -3,9 +3,8 @@ __pycache__/
 *.py[cod]
 .coverage
 
-# Local agent configuration and work-record scratch
+# Local agent configuration
 .pi/
-.scratch/
 
 # Optional in-repository private database/export locations
 .dojo-data/
