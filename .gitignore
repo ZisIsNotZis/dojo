@@ -1,0 +1,16 @@
+# Python standard-library POC runtime artifacts
+__pycache__/
+*.py[cod]
+.coverage
+
+# Local agent configuration and work-record scratch
+.pi/
+.scratch/
+
+# Optional in-repository private database/export locations
+.dojo-data/
+exports/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
