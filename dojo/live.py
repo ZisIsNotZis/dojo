@@ -364,6 +364,7 @@ def run_chat(
             except DojoError:
                 current_id = None
         context += "\n\n用户本轮输入：\n" + text
+        context += "\n（请按系统提示的 json 格式返回。）"
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history[-MAX_HISTORY_MESSAGES:], {"role": "user", "content": context}]
         requests_sent += 1
         try:
