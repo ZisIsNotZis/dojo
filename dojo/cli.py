@@ -135,7 +135,8 @@ def _parser() -> argparse.ArgumentParser:
     demo.add_argument("--workdir", help="保存到一个新建/空目录；不覆盖已有数据库或总结")
 
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
-    sub.add_parser("discuss", help="自然语言对齐式讨论；结论会写入本地草稿")
+    discuss = sub.add_parser("discuss", help="自然语言对齐式讨论；结论会写入本地草稿并生成本地轨迹")
+    discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
 
     packets = sub.add_parser("freeze-materials", help="生成四份冻结模型输入；C 摘录来自真实本地 Store 检索")
     packets.add_argument("--outdir", default="docs/packets/frozen-conversation-v2", help="新输出目录；已有目录会拒绝覆盖")
@@ -310,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
                 db_path.chmod(0o600)
             except OSError:
                 pass
-            return run_discuss(store, config=config)
+            return run_discuss(store, config=config, no_trace=args.no_trace)
         if args.command == "compare":
             run_compare(full=args.full, output=sys.stdout)
             return 0

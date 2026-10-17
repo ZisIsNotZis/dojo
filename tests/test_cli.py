@@ -197,6 +197,18 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertIn("未发送网络请求", result.stderr)
         self.assertFalse((self.root / "discuss.sqlite3").exists())
 
+    def test_discuss_no_trace_flag_is_accepted_without_creating_a_trace(self):
+        env = {key: value for key, value in self.env.items() if key not in {"DOJO_LLM_BASE_URL", "DOJO_LLM_MODEL", "DOJO_LLM_API_KEY"}}
+        db_path = self.root / "no-trace.sqlite3"
+        result = subprocess.run(
+            [sys.executable, "-m", "dojo", "--db", str(db_path), "discuss", "--no-trace"],
+            cwd=ROOT, env=env, text=True, input="", capture_output=True, timeout=10,
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("未配置 DOJO_LLM_BASE_URL", result.stderr)
+        self.assertFalse(db_path.exists())
+        self.assertFalse((self.root / "sessions").exists())
+
     def test_live_command_without_endpoint_fails_before_creating_default_database(self):
         env = {key: value for key, value in self.env.items() if key not in {"DOJO_LLM_BASE_URL", "DOJO_LLM_MODEL", "DOJO_LLM_API_KEY"}}
         db_path = self.root / "must-not-be-created.sqlite3"

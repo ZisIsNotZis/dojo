@@ -189,8 +189,9 @@ class ConversationTests(unittest.TestCase):
         empty_store = Store(self.root / "discuss-http.sqlite3")
         self.addCleanup(empty_store.close)
         discuss_result = {**VALID_MODEL_RESULT, "user_stance": "neutral"}
-        with LocalMockEndpoint([endpoint_response(discuss_result), endpoint_response(discuss_result)]) as endpoint:
-            answers = iter(["讨论一个想法", ""])
+        accepted_result = {**VALID_MODEL_RESULT, "user_stance": "accept"}
+        with LocalMockEndpoint([endpoint_response(discuss_result), endpoint_response(accepted_result)]) as endpoint:
+            answers = iter(["讨论一个想法", "是的，我明确认可这条结论"])
 
             def read_line(_prompt):
                 try:
