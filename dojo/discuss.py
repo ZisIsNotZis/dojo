@@ -62,7 +62,7 @@ def _ask(read_line: Callable[[str], str]) -> str | None:
 
 def _conclusion_sentence(candidate: dict[str, Any]) -> str:
     scope = "；".join(candidate["scope"])
-    return f"我把我们目前一致的结论理解为：“{candidate['statement']}”（范围与限制：{scope}）；如果哪里不对，你可以直接纠正。"
+    return f"我先这样记下来，你看有没有要改的：『{candidate['statement']}』；适用范围是{scope}。"
 
 
 def _save_conclusion(
@@ -150,7 +150,7 @@ def run_discuss(
             return 0
         if text is None:
             if pending is not None:
-                _save_conclusion(store, pending, session, output)
+                print("讨论在你表态前结束，这条结论未保存。", file=output)
             print("讨论已结束；会话原文未保存。", file=output)
             return 0
         text = text.strip()

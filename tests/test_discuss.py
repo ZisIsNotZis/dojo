@@ -105,7 +105,7 @@ class DiscussTests(unittest.TestCase):
         self.assertNotIn("我总在开始动手前就拖延", json.dumps(state, ensure_ascii=False))
         transcript = output.getvalue()
         self.assertIn("不对", " ".join(message["content"] for turn in client.messages for message in turn))
-        self.assertIn("你可以直接纠正", transcript)
+        self.assertIn("你看有没有要改的", transcript)
         self.assertNotIn("[y/N]", transcript)
         self.assertNotIn("编号选项", transcript)
 
@@ -186,10 +186,28 @@ class DiscussTests(unittest.TestCase):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, SYSTEM_PROMPT)
 
-    def test_conclusion_sentence_does_not_duplicate_scope_wording(self):
+    def test_eof_before_user_response_does_not_save_pending_conclusion(self):
+        client = FakeClient([result("我听到你开始前会被任务的庞大感卡住。", CONCLUSION)])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["我总难以开始。"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual([], self.store.list_candidates())
+        transcript = output.getvalue()
+        self.assertIn("我先这样记下来", transcript)
+        self.assertIn("讨论在你表态前结束，这条结论未保存。", transcript)
+        self.assertIn("讨论已结束；会话原文未保存。", transcript)
+        self.assertNotIn(CONCLUSION["statement"], json.dumps(self.store.list_candidates(), ensure_ascii=False))
+
+    def test_conclusion_sentence_invites_correction_without_presuming_agreement(self):
         sentence = _conclusion_sentence(CONCLUSION)
-        self.assertIn("（范围与限制：知道目标但因任务显得庞大而迟迟未开始时）", sentence)
-        self.assertNotIn("适用于适用于", sentence)
+        self.assertIn(f"我先这样记下来，你看有没有要改的：『{CONCLUSION['statement']}』", sentence)
+        self.assertIn("适用范围是知道目标但因任务显得庞大而迟迟未开始时", sentence)
+        self.assertNotIn("一致的结论", sentence)
+        self.assertNotIn("双方认同", sentence)
 
     def test_model_context_includes_round_number_and_late_round_convergence_signal(self):
         answers = [f"第 {number} 轮的自然语言输入" for number in range(1, 10)]
