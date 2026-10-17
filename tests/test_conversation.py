@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dojo.demo import CHALLENGE, TARGET_FACTS, freeze_materials
+from dojo.discuss import run_discuss
 from dojo.live import LiveConfig, LiveError, MAX_HTTP_RESPONSE_BYTES, MAX_REQUEST_CHARS, run_chat, OpenAICompatibleClient, _validate_model_content
 from dojo.storage import DojoError, Store, load_simulated_seeds
 
@@ -172,6 +173,41 @@ class ConversationTests(unittest.TestCase):
         serialized_database = json.dumps(state, ensure_ascii=False)
         self.assertNotIn("降低摩擦让行为更容易持续", serialized_database)
         self.assertNotIn("候选原文：交界约定可能需要单独讨论", serialized_database)
+
+    def test_chat_schema_stays_strict_while_discuss_opts_into_user_stance(self):
+        discuss_result = {**VALID_MODEL_RESULT, "user_stance": "neutral"}
+        content = json.dumps(discuss_result, ensure_ascii=False)
+
+        with self.assertRaises(LiveError):
+            _validate_model_content(content)
+        self.assertEqual(
+            discuss_result,
+            _validate_model_content(content, allowed_extra_keys=frozenset({"user_stance"})),
+        )
+
+    def test_discuss_http_contract_accepts_user_stance(self):
+        empty_store = Store(self.root / "discuss-http.sqlite3")
+        self.addCleanup(empty_store.close)
+        discuss_result = {**VALID_MODEL_RESULT, "user_stance": "neutral"}
+        with LocalMockEndpoint([endpoint_response(discuss_result), endpoint_response(discuss_result)]) as endpoint:
+            answers = iter(["讨论一个想法", ""])
+
+            def read_line(_prompt):
+                try:
+                    return next(answers)
+                except StopIteration:
+                    raise EOFError
+
+            output = io.StringIO()
+            code = run_discuss(
+                empty_store,
+                config=LiveConfig(endpoint.base_url, "github-copilot/gpt-6-luna", None),
+                read_line=read_line, output=output,
+            )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, len(endpoint.requests))
+        self.assertEqual(1, len(empty_store.list_candidates()))
 
     def test_model_candidate_reject_and_eof_leave_store_unchanged(self):
         before_ids = {item["id"] for item in self.store.list_candidates()}

@@ -90,8 +90,9 @@ class _RejectRedirects(urllib.request.HTTPRedirectHandler):
 class OpenAICompatibleClient:
     """One-request JSON-mode adapter; credentials are sent only as a header."""
 
-    def __init__(self, config: LiveConfig):
+    def __init__(self, config: LiveConfig, *, allowed_extra_keys: frozenset[str] = frozenset()):
         self.config = config
+        self.allowed_extra_keys = allowed_extra_keys
 
     def complete(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         payload = {
@@ -141,7 +142,7 @@ class OpenAICompatibleClient:
         content = message["content"]
         if len(content) > 8_000:
             raise LiveError("model completion exceeded the output budget; no candidate was saved")
-        return _validate_model_content(content)
+        return _validate_model_content(content, allowed_extra_keys=self.allowed_extra_keys)
 
 
 def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -164,19 +165,28 @@ def _string_array(value: Any, label: str) -> list[str]:
     return result
 
 
-def _validate_model_content(content: str) -> dict[str, Any]:
+def _validate_model_content(
+    content: str,
+    *,
+    allowed_extra_keys: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     try:
         value = json.loads(content, object_pairs_hook=_no_duplicate_keys)
     except (json.JSONDecodeError, ValueError):
         raise LiveError("model completion was not strict JSON; no candidate was saved") from None
-    if not isinstance(value, dict) or set(value) != {"answer", "candidate"}:
+    required_keys = {"answer", "candidate"}
+    if (
+        not isinstance(value, dict)
+        or not required_keys.issubset(value)
+        or not set(value).issubset(required_keys | allowed_extra_keys)
+    ):
         raise LiveError("model completion did not match the required response schema; no candidate was saved")
     answer = value["answer"]
     if not isinstance(answer, str) or not answer.strip() or len(answer) > MAX_ANSWER_CHARS:
         raise LiveError("model answer was empty or exceeded its output budget; no candidate was saved")
     candidate = value["candidate"]
     if candidate is None:
-        return {"answer": answer.strip(), "candidate": None}
+        return {**{key: value[key] for key in value if key in allowed_extra_keys}, "answer": answer.strip(), "candidate": None}
     keys = {"statement", "kind", "premises", "scope", "alternatives", "contradictions", "unknowns"}
     if not isinstance(candidate, dict) or set(candidate) != keys:
         raise LiveError("model candidate did not match the strict candidate schema; no candidate was saved")
@@ -189,7 +199,11 @@ def _validate_model_content(content: str) -> dict[str, Any]:
     normalized = {"statement": statement.strip(), "kind": kind}
     for field in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
         normalized[field] = _string_array(candidate[field], field)
-    return {"answer": answer.strip(), "candidate": normalized}
+    return {
+        **{key: value[key] for key in value if key in allowed_extra_keys},
+        "answer": answer.strip(),
+        "candidate": normalized,
+    }
 
 
 def _retrieval_for_prompt(store: Store, query: str) -> dict[str, Any]:
