@@ -70,7 +70,8 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 ## 当前基线
 
-- 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`。
-- 27 项标准库测试通过；窗口 `live.py` 一处缺陷已修复并提交（commit `05e50b3`）。
-- 已知缺口：`discuss` 不存在；管线不存在；广播呈现为列表而非转述。
+- 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、**M1 的 `discuss`**。
+- 38 项标准库测试通过；`live.py` 与 `discuss.py` 的两处缺陷已修复（commit `05e50b3`、`c414162`）。
+- M1 已交付并经两轮独立评审通过（先 FAIL 于 EOF 未表态写入，修复后 PASS）。
+- 已知缺口：管线（M2）、广播转述（M3）、manifest（M4）、反奉承负控制（M5）均未实现；反奉承效果尚未做对抗验证。
 - 见 `../.scratch/active-work.md` 获取恢复入口。
