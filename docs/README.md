@@ -1,0 +1,22 @@
+# docs 索引
+
+本目录的编排：每个文件拥有一个层的当前事实，下列文件是导航而非第二事实来源。
+
+| 文件 | 拥有的事实 |
+|---|---|
+| `pain.md` | 痛点层：谁在受苦、痛苦是什么、证据在哪 |
+| `need.md` | 需求层：什么必须成为真 |
+| `product.md` | 产品层：行为、质量维度、非目标（当前产品方向的唯一入口） |
+| `design.md` | 架构与方法层：不变量、模块、管线、防风暴与防污染 |
+| `plan.md` | 计划层：里程碑、验收、预算、交付契约 |
+| `philosophy.md` | 用户已确认的优先事项与可撤销的 POC 设计选择 |
+| `current-demo-direction.md` | 已实现三幕 Demo 的说明（不再是产品方向入口） |
+| `cli-guide.md` | 当前 CLI 每个命令的用法与限制 |
+| `demo-guide.md` | 预设 Demo 的运行说明 |
+| `evaluation.md` | 旧评价方法与结果（历史证据） |
+| `roleplay-guide.md`、`facilitator-notes.md` | 角色扮演演练指南 |
+| `packets/` | 冻结的 seed 与角色材料 |
+| `templates/` | 会话与评价记录模板 |
+| `evidence/` | 归档证据，非当前事实 |
+
+用户原稿是仓库根的 `../idea.md`，保留不改写。
