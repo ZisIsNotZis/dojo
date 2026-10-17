@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dojo.discuss import run_discuss, validate_conclusion
+from dojo.discuss import SYSTEM_PROMPT, _conclusion_sentence, run_discuss, validate_conclusion
 from dojo.live import LiveConfig, LiveError
 from dojo.storage import Store
 
@@ -172,6 +172,40 @@ class DiscussTests(unittest.TestCase):
                 self.assertIn(expected, output.getvalue())
                 self.assertIn("未写入", output.getvalue())
                 self.assertEqual([], self.store.list_candidates())
+
+    def test_prompt_requires_scoped_settlement_closure_and_identical_candidate_repeat(self):
+        for instruction in (
+            "适用范围、前提和未知这三样信息",
+            "用户表示“我没有更多能确定的”",
+            "必须立刻落定，不得追问",
+            "结论可以明确带有 unknowns",
+            "必须落定，并留出一轮让用户回应",
+            "完全相同的 candidate 让它入库",
+            "用户若未提出修正或补充、明确表示认可，或明确表示收束",
+        ):
+            with self.subTest(instruction=instruction):
+                self.assertIn(instruction, SYSTEM_PROMPT)
+
+    def test_conclusion_sentence_does_not_duplicate_scope_wording(self):
+        sentence = _conclusion_sentence(CONCLUSION)
+        self.assertIn("（范围与限制：知道目标但因任务显得庞大而迟迟未开始时）", sentence)
+        self.assertNotIn("适用于适用于", sentence)
+
+    def test_model_context_includes_round_number_and_late_round_convergence_signal(self):
+        answers = [f"第 {number} 轮的自然语言输入" for number in range(1, 10)]
+        client = FakeClient([result("我会继续理解这件事。") for _ in answers])
+        output = io.StringIO()
+
+        code = run_discuss(self.store, client=client, read_line=read_lines(answers), output=output)
+
+        self.assertEqual(0, code)
+        self.assertEqual(9, len(client.messages))
+        user_contexts = [turn[-1]["content"] for turn in client.messages]
+        for number, context in enumerate(user_contexts, start=1):
+            with self.subTest(round_number=number):
+                self.assertIn(f"本次讨论第 {number} 轮 / 最多 12 轮。", context)
+        self.assertNotIn("轮次已接近上限", user_contexts[7])
+        self.assertIn("轮次已接近上限，请尽快落定", user_contexts[8])
 
     def test_request_keeps_litellm_json_workaround_and_transcript_is_not_stored(self):
         client = FakeClient([result("我们还需要了解这件事。")])
