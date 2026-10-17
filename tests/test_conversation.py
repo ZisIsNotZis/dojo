@@ -17,8 +17,10 @@ from dojo.live import (
     MAX_DISCUSS_FIELD_CHARS,
     MAX_DISCUSS_FIELDS_PER_LIST,
     MAX_DISCUSS_RAW_RESPONSE_CHARS,
+    MAX_DISCUSS_REQUEST_CHARS,
     MAX_DISCUSS_RESPONSE_BYTES,
     MAX_DISCUSS_STATEMENT_CHARS,
+    MAX_DISCUSS_USER_TURN_CHARS,
     MAX_HTTP_RESPONSE_BYTES,
     MAX_REQUEST_CHARS,
     OpenAICompatibleClient,
@@ -227,12 +229,20 @@ class ConversationTests(unittest.TestCase):
     def test_discuss_accepts_long_answers_without_loosening_chat_contract(self):
         long_answer = "长" * 30_000
         discuss_result = {"answer": long_answer, "candidate": None, "user_stance": "neutral"}
+        turns = iter(["请继续讨论"])
+
+        def read_line(_prompt):
+            try:
+                return next(turns)
+            except StopIteration:
+                raise EOFError
+
         with LocalMockEndpoint([endpoint_response(discuss_result)]) as endpoint:
             output = io.StringIO()
             code = run_discuss(
                 self.store,
                 config=LiveConfig(endpoint.base_url, "github_copilot/gpt-6-luna", None),
-                environ={}, read_line=lambda _prompt: "请继续讨论", output=output,
+                environ={}, read_line=read_line, output=output,
             )
         self.assertEqual(0, code, output.getvalue())
         self.assertIn(long_answer, output.getvalue())
@@ -246,6 +256,35 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(long_answer, row["answer"])
         self.assertEqual("low", row["reasoning_effort"])
         self.assertFalse(row["reasoning_effort_fallback"])
+
+    def test_discuss_sends_long_user_input_with_the_larger_request_envelope(self):
+        long_input = "用户补充的真实讨论上下文。" * 2_500
+        response = {"answer": "已收到较长上下文。", "candidate": None, "user_stance": "neutral"}
+        turns = iter([long_input])
+
+        def read_line(_prompt):
+            try:
+                return next(turns)
+            except StopIteration:
+                raise EOFError
+
+        with LocalMockEndpoint([endpoint_response(response)]) as endpoint:
+            output = io.StringIO()
+            code = run_discuss(
+                self.store,
+                config=LiveConfig(endpoint.base_url, "github_copilot/gpt-6-luna", None),
+                environ={}, read_line=read_line, output=output,
+            )
+
+        self.assertEqual(0, code, output.getvalue())
+        self.assertEqual(1, len(endpoint.requests))
+        payload = endpoint.requests[0]["payload"]
+        serialized_request = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.assertGreater(len(long_input), 1_600)
+        self.assertLessEqual(len(long_input), MAX_DISCUSS_USER_TURN_CHARS)
+        self.assertGreater(len(serialized_request), MAX_REQUEST_CHARS)
+        self.assertLessEqual(len(serialized_request), MAX_DISCUSS_REQUEST_CHARS)
+        self.assertIn(long_input, json.dumps(payload["messages"], ensure_ascii=False))
 
     def test_discuss_reasoning_effort_environment_override_is_sent_and_traced(self):
         response = {"answer": "按中等级继续讨论。", "candidate": None, "user_stance": "neutral"}

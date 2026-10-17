@@ -158,6 +158,23 @@ class DiscussTests(unittest.TestCase):
         self.assertNotIn("", [row["user"] for row in rounds])
         self.assertEqual(2, records[-1]["requests_sent"])
 
+    def test_discuss_keeps_history_longer_than_eight_messages_for_the_model(self):
+        responses = [result(f"第{index}轮的主持人回答。") for index in range(1, 7)]
+        client = FakeClient(responses)
+        user_turns = [f"第{index}轮较长讨论输入，继续补充之前的边界。" for index in range(1, 7)]
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(user_turns), output=io.StringIO(),
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(6, len(client.messages))
+        sixth_request = client.messages[5]
+        self.assertEqual(12, len(sixth_request))
+        self.assertIn(user_turns[0], sixth_request[1]["content"])
+        self.assertEqual("第1轮的主持人回答。", sixth_request[2]["content"])
+        self.assertEqual("第5轮的主持人回答。", sixth_request[10]["content"])
+
     def test_closure_or_uncertainty_is_not_acceptance(self):
         client = FakeClient([
             result("先形成一条待复核结论。", CONCLUSION),

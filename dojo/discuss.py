@@ -23,11 +23,12 @@ from .live import (
     MAX_DISCUSS_FIELDS_PER_LIST,
     MAX_DISCUSS_RAW_RESPONSE_CHARS,
     MAX_DISCUSS_RESPONSE_BYTES,
+    MAX_DISCUSS_REQUEST_CHARS,
     MAX_DISCUSS_STATEMENT_CHARS,
-    MAX_HISTORY_MESSAGES,
+    MAX_DISCUSS_HISTORY_MESSAGES,
+    MAX_DISCUSS_USER_TURN_CHARS,
     MAX_MODEL_REQUESTS,
     MAX_TOKENS,
-    MAX_USER_TURN_CHARS,
     LiveConfig,
     LiveError,
     OpenAICompatibleClient,
@@ -373,7 +374,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                 {"role": "user", "content": row["user"]},
                 {"role": "assistant", "content": row["answer"]},
             ])
-    history = history[-MAX_HISTORY_MESSAGES:]
+    history = history[-MAX_DISCUSS_HISTORY_MESSAGES:]
     last_round = rounds[-1]
     pending_value = last_round.get("pending_after")
     pending: dict[str, Any] | None = None
@@ -457,6 +458,7 @@ def run_discuss(
             max_field_chars=MAX_DISCUSS_FIELD_CHARS,
             max_fields_per_list=MAX_DISCUSS_FIELDS_PER_LIST,
             reasoning_effort=active_reasoning_effort,
+            max_request_chars=MAX_DISCUSS_REQUEST_CHARS,
         )
     elif hasattr(client, "reasoning_effort"):
         client.reasoning_effort = active_reasoning_effort
@@ -534,8 +536,8 @@ def run_discuss(
         text = original_text.strip()
         if not text:
             continue
-        if len(text) > MAX_USER_TURN_CHARS:
-            print(f"这段内容超过单轮长度上限（{MAX_USER_TURN_CHARS} 字），尚未发送；请用自然语言缩短后再说。", file=output)
+        if len(text) > MAX_DISCUSS_USER_TURN_CHARS:
+            print(f"这段内容超过单轮安全长度上限（{MAX_DISCUSS_USER_TURN_CHARS} 字），尚未发送；请用自然语言缩短后再说。", file=output)
             continue
         if requests_sent >= MAX_MODEL_REQUESTS:
             print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；尚未明确同意的结论未写入。", file=output)
@@ -553,7 +555,7 @@ def run_discuss(
         context += "\n\n请按系统约定返回 json。"
         base_messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            *history[-MAX_HISTORY_MESSAGES:],
+            *history[-MAX_DISCUSS_HISTORY_MESSAGES:],
             {"role": "user", "content": context},
         ]
         invalid_retries = 0
@@ -764,8 +766,8 @@ def run_discuss(
             "attempts": attempts,
         })
         history.extend([{"role": "user", "content": context}, {"role": "assistant", "content": answer}])
-        if len(history) > MAX_HISTORY_MESSAGES:
-            history = history[-MAX_HISTORY_MESSAGES:]
+        if len(history) > MAX_DISCUSS_HISTORY_MESSAGES:
+            history = history[-MAX_DISCUSS_HISTORY_MESSAGES:]
         if requests_sent >= MAX_MODEL_REQUESTS:
             print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；尚未明确同意的结论未写入。", file=output)
             return finish("limit")

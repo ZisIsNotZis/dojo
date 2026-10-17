@@ -19,13 +19,16 @@ DEFAULT_MODEL = "github-copilot/gpt-6-luna"
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_HTTP_RESPONSE_BYTES = 24_000
 MAX_REQUEST_CHARS = 26_000
+MAX_DISCUSS_REQUEST_CHARS = 1_000_000  # UTF-8 请求体安全包络；实际会话上下文不得靠小数字裁掉。
 MAX_USER_TURN_CHARS = 1_600
+MAX_DISCUSS_USER_TURN_CHARS = 65_536  # discuss 单轮输入安全包络；chat 仍保持 1,600 字契约。
 MAX_ANSWER_CHARS = 4_000
 MAX_FIELD_CHARS = 600
 MAX_FIELDS_PER_LIST = 8
 MAX_CANDIDATE_STATEMENT_CHARS = 1_200
-MAX_MODEL_REQUESTS = 12
+MAX_MODEL_REQUESTS = 12  # discuss 会话长度预算；达到上限时未获明确认可的结论不得写入。
 MAX_HISTORY_MESSAGES = 8
+MAX_DISCUSS_HISTORY_MESSAGES = 256  # discuss 保留完整历史至请求体安全包络，不由此处的小轮数裁切。
 MAX_TOKENS = 65_536  # discuss 的上游契约上限，不作为成本开关；成本由推理等级控制。
 CHAT_MAX_TOKENS = 900  # 保持既有 chat 请求契约不变。
 MAX_RAW_RESPONSE_CHARS = 4_000  # chat 的既有诊断截断行为。
@@ -135,6 +138,7 @@ class OpenAICompatibleClient:
         max_field_chars: int = MAX_FIELD_CHARS,
         max_fields_per_list: int = MAX_FIELDS_PER_LIST,
         reasoning_effort: str | None = None,
+        max_request_chars: int = MAX_REQUEST_CHARS,
     ):
         self.config = config
         self.allowed_extra_keys = allowed_extra_keys
@@ -147,6 +151,7 @@ class OpenAICompatibleClient:
         self.max_field_chars = max_field_chars
         self.max_fields_per_list = max_fields_per_list
         self.reasoning_effort = reasoning_effort
+        self.max_request_chars = max_request_chars
 
     def complete(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         payload = {
@@ -158,7 +163,7 @@ class OpenAICompatibleClient:
         if self.reasoning_effort is not None:
             payload["reasoning_effort"] = self.reasoning_effort
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        if len(data) > MAX_REQUEST_CHARS:
+        if len(data) > self.max_request_chars:
             raise LiveError("chat context exceeds the request budget; no request was sent")
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.config.api_key:
