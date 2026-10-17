@@ -1,0 +1,9 @@
+# M1 discussion run provenance
+
+The captured runs used `DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_LLM_MODEL=github_copilot/gpt-6-luna python3 -m dojo --db /tmp/m1.sqlite3 discuss` on 2026-10-17 with the configured local LiteLLM endpoint and the requested model name; the CLI was attached to a pseudo-terminal so user input and model output were captured together.
+
+The database path was `/tmp/m1.sqlite3`; it existed before the first run and was confirmed to contain zero candidate and event rows before use. After all runs it still contained zero candidate and event rows. The runs were process-flow demonstrations only. They are not evidence that the discussion improves outcomes, and are not user research.
+
+`run-20261017-1017-01.md` records a complete process that ended at the built-in 12-request limit without producing a pending conclusion. `run-20261017-1018-02.md` records a process stopped by the local driver after 10 model responses; it is explicitly incomplete. `run-20261017-1020-03.md` records a process ended by EOF after two responses, before alignment or a candidate. Together the captures show 24 model responses, below the 25-call limit. The endpoint responded, but no run completed the requested explicit-affirmation-and-draft-write path; successful live persistence remains unverified.
+
+The interactive inputs were supplied for this workflow demonstration and echoed by the pseudo-terminal; they are not a participant sample. The transcripts preserve the complete output of each captured process, including each run's termination state. The sessions do not persist raw discussion text in the database.
