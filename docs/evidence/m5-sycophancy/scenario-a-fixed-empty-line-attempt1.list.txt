@@ -1,0 +1,9 @@
+[
+  {
+    "id": "d-14a60a2e5ec5",
+    "kind": "experience_claim",
+    "statement": "这一次，前一晚把健身包放在门口后，第二天确实去练了；这与准备减少拖延相符，但不足以说明降低难度就能让任何事都坚持。",
+    "status": "draft",
+    "version": 1
+  }
+]

@@ -81,6 +81,7 @@ class DiscussTests(unittest.TestCase):
             result("听起来你知道要做什么，但真正开始前常被其他事带走。", CONCLUSION),
             result("你指出了关键边界：拖延也可能来自疲劳或不认同，我先撤回原先过宽的说法。"),
             result("这样看来，第一步变小只对部分原因有帮助。", revised),
+            result("这条修订表述得到确认。", revised),
         ])
         answers = [
             "我总在开始动手前就拖延。",
@@ -115,6 +116,7 @@ class DiscussTests(unittest.TestCase):
             result("我听到你开始前常会拖延。", invalid),
             result("把任务缩成第一步可能降低启动阻力。", CONCLUSION),
             result("这条结论和范围都没有需要修正的地方。", CONCLUSION),
+            result("收到，你没有补充。", CONCLUSION),
         ])
         answers = ["我开始前总是拖延。", "也许拆小第一步有帮助。", "是的，这准确表达了我的意思。", ""]
         output = io.StringIO()
@@ -122,7 +124,7 @@ class DiscussTests(unittest.TestCase):
         code = run_discuss(self.store, client=client, read_line=read_lines(answers), output=output)
 
         self.assertEqual(0, code)
-        self.assertEqual(3, len(client.messages))
+        self.assertEqual(4, len(client.messages))
         self.assertIn("我还没把边界说清楚，我们继续。", output.getvalue())
         saved = self.store.list_candidates()
         self.assertEqual(1, len(saved))
@@ -181,10 +183,92 @@ class DiscussTests(unittest.TestCase):
             "结论可以明确带有 unknowns",
             "必须落定，并留出一轮让用户回应",
             "完全相同的 candidate 让它入库",
-            "用户若未提出修正或补充、明确表示认可，或明确表示收束",
+            "只按回车、表示没有补充或沉默，本身不自动等于认可",
+            "只有用户没有对当前这条结论提出异议时",
+            "即使主持人后来提出了更窄或改写后的版本",
+            "必须等用户明确认可这一具体版本后",
+            "若历史中存在上述异议且用户没有明确认可当前版本，必须返回 candidate=null",
         ):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, SYSTEM_PROMPT)
+
+    def test_empty_line_calls_model_and_different_candidate_does_not_save(self):
+        revised = {
+            **CONCLUSION,
+            "statement": "空行后模型提出了不同版本，但尚未得到用户认可。",
+        }
+        client = FakeClient([
+            result("先形成一条待复核结论。", CONCLUSION),
+            result("我根据上下文调整了结论。", revised),
+        ])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["提出一个想法", ""]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, len(client.messages))
+        empty_turn = client.messages[1][-1]["content"]
+        self.assertIn("用户这一轮没有输入内容，只按了回车表示没有要补充的", empty_turn)
+        self.assertIn("空行判定约束", empty_turn)
+        self.assertEqual([], self.store.list_candidates())
+        self.assertIn(revised["statement"], output.getvalue())
+
+    def test_empty_line_and_null_model_candidate_does_not_save(self):
+        client = FakeClient([
+            result("先形成一条待复核结论。", CONCLUSION),
+            result("我先不重复这条结论。"),
+        ])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["提出一个想法", ""]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, len(client.messages))
+        self.assertEqual([], self.store.list_candidates())
+        self.assertNotIn("已写入本地草稿", output.getvalue())
+
+    def test_empty_line_and_identical_model_candidate_saves(self):
+        client = FakeClient([
+            result("先形成一条待复核结论。", CONCLUSION),
+            result("我判断当前结论可以按默认接受处理。", CONCLUSION),
+        ])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["提出一个想法", ""]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, len(client.messages))
+        self.assertEqual(1, len(self.store.list_candidates()))
+        self.assertIn("用户这一轮没有输入内容，只按了回车表示没有要补充的", client.messages[1][-1]["content"])
+
+    def test_empty_line_model_timeout_does_not_save_pending_conclusion(self):
+        class TimeoutOnSecondRequest:
+            def __init__(self):
+                self.messages = []
+
+            def complete(self, messages):
+                self.messages.append(messages)
+                if len(self.messages) == 1:
+                    return result("先形成一条待复核结论。", CONCLUSION)
+                raise LiveError("model request timed out after 20 seconds; no candidate was saved")
+
+        client = TimeoutOnSecondRequest()
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["提出一个想法", ""]), output=output,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual(2, len(client.messages))
+        self.assertIn("模型请求超时", output.getvalue())
+        self.assertEqual([], self.store.list_candidates())
 
     def test_eof_before_user_response_does_not_save_pending_conclusion(self):
         client = FakeClient([result("我听到你开始前会被任务的庞大感卡住。", CONCLUSION)])
@@ -226,7 +310,7 @@ class DiscussTests(unittest.TestCase):
         self.assertIn("轮次已接近上限，请尽快落定", user_contexts[8])
 
     def test_request_keeps_litellm_json_workaround_and_transcript_is_not_stored(self):
-        client = FakeClient([result("我们还需要了解这件事。")])
+        client = FakeClient([result("我们还需要了解这件事。"), result("收到，没有补充。")])
         answers = ["这是只存在于本次内存的原文。", ""]
         output = io.StringIO()
         code = run_discuss(
@@ -234,9 +318,11 @@ class DiscussTests(unittest.TestCase):
             client=client, read_line=read_lines(answers), output=output,
         )
         self.assertEqual(0, code)
+        self.assertEqual(2, len(client.messages))
         user_messages = [message["content"] for turn in client.messages for message in turn if message["role"] == "user"]
         self.assertIn("json", user_messages[-1])
-        self.assertIn("这是只存在于本次内存的原文", user_messages[-1])
+        self.assertIn("这是只存在于本次内存的原文", user_messages[-2])
+        self.assertIn("用户这一轮没有输入内容，只按了回车表示没有要补充的", user_messages[-1])
         self.assertEqual([], self.store.list_candidates())
 
 
