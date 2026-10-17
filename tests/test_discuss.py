@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from dojo.discuss import SYSTEM_PROMPT, _conclusion_sentence, run_discuss, validate_conclusion
-from dojo.live import LiveConfig, LiveError
+from dojo.discuss import SYSTEM_PROMPT, _conclusion_sentence, _trace_error, run_discuss, validate_conclusion
+from dojo.live import MAX_DISCUSS_ERROR_DETAIL_CHARS, MAX_DISCUSS_RAW_RESPONSE_CHARS, LiveConfig, LiveError
 from dojo.storage import Store
 
 
@@ -24,7 +24,8 @@ CONCLUSION = {
 
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
-    "pending_after", "raw_response", "finish_reason", "error", "attempts",
+    "pending_after", "raw_response", "finish_reason", "error", "reasoning_effort",
+    "reasoning_effort_fallback", "attempts",
 }
 
 
@@ -464,6 +465,111 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(1, len(paths))
         self.assertIn(str(paths[0]), output.getvalue())
         self.assertEqual(0o700, stat.S_IMODE(custom.stat().st_mode))
+
+    def test_reasoning_effort_rejection_retries_without_field_and_traces_downgrade(self):
+        class RejectingClient(FakeClient):
+            def __init__(self):
+                super().__init__()
+                self.reasoning_effort = None
+                self.efforts = []
+
+            def complete(inner_self, messages):
+                inner_self.messages.append(messages)
+                inner_self.efforts.append(inner_self.reasoning_effort)
+                if inner_self.reasoning_effort is not None:
+                    raise LiveError(
+                        "model endpoint returned HTTP 400; no candidate was saved",
+                        kind="http_error", http_status=400,
+                        raw_response='{"error":{"message":"unsupported reasoning_effort"}}',
+                    )
+                return result("已在不带推理字段的请求后继续。")
+
+        client = RejectingClient()
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, environ={"DOJO_LLM_REASONING": "high"},
+            read_line=read_lines(["继续讨论"]), output=output,
+        )
+
+        self.assertEqual(0, code, output.getvalue())
+        self.assertEqual(["high", None], client.efforts)
+        self.assertIn("已改为不带该字段重试", output.getvalue())
+        _, records = self.trace_records()
+        row = records[0]
+        self.assertEqual(2, row["requests_sent"])
+        self.assertIsNone(row["reasoning_effort"])
+        self.assertTrue(row["reasoning_effort_fallback"])
+        self.assertTrue(row["attempts"][0]["reasoning_effort_fallback"])
+        self.assertIsNone(row["error"])
+        self.assertEqual(2, records[-1]["requests_sent"])
+
+    def test_reasoning_effort_invalid_value_fails_before_model_or_trace(self):
+        client = FakeClient([result("不会调用")])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, environ={"DOJO_LLM_REASONING": "extreme"},
+            read_line=read_lines(["不可达"]), output=output,
+        )
+
+        self.assertEqual(2, code)
+        self.assertIn("DOJO_LLM_REASONING 只允许 low、medium 或 high", output.getvalue())
+        self.assertIn("未发送网络请求", output.getvalue())
+        self.assertEqual([], client.messages)
+        self.assertFalse((self.root / "sessions").exists())
+
+    def test_discuss_error_detail_uses_65536_character_safety_envelope(self):
+        error = LiveError("诊断", detail="d" * (MAX_DISCUSS_ERROR_DETAIL_CHARS + 1))
+        traced = _trace_error(error)
+        self.assertEqual(65_536, len(traced["detail"]))
+        self.assertEqual("d" * 65_536, traced["detail"])
+
+    def test_discuss_trace_keeps_full_answer_and_pending_candidate(self):
+        statement = "结" * 65_536
+        candidate = {
+            "statement": statement,
+            "kind": "abstract_idea",
+            "scope": ["当前经验范围"],
+            "premises": [],
+            "alternatives": [],
+            "contradictions": [],
+            "unknowns": [],
+        }
+        client = FakeClient([result("完整回答保存在轨迹中。", candidate)])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, environ={},
+            read_line=read_lines(["请保留长候选"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        _, records = self.trace_records()
+        row = records[0]
+        self.assertEqual("完整回答保存在轨迹中。", row["answer"])
+        self.assertEqual(statement, row["pending_after"])
+        self.assertEqual(statement, row["candidate"]["statement"])
+
+    def test_raw_response_trace_preserves_exactly_the_65536_character_boundary(self):
+        self.assertEqual(65_536, MAX_DISCUSS_RAW_RESPONSE_CHARS)
+        for raw, expected in (("x" * 65_536, "x" * 65_536), ("y" * 65_537, "y" * 65_536)):
+            with self.subTest(source_length=len(raw)):
+                client = FakeClient([{
+                    **result("有效回答。"),
+                    "raw_response": raw,
+                }])
+                output = io.StringIO()
+                code = run_discuss(
+                    self.store, client=client, environ={},
+                    read_line=read_lines(["记录长响应"]), output=output,
+                )
+                self.assertEqual(0, code)
+                trace_path = Path([
+                    line.split("：", 1)[1].strip()
+                    for line in output.getvalue().splitlines()
+                    if line.startswith("本场会话轨迹：")
+                ][0])
+                row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
+                self.assertEqual(expected, row["raw_response"])
+                self.assertEqual(expected, row["attempts"][0]["raw_response"])
 
     def test_unset_endpoint_fails_before_trace_or_database_changes(self):
         output = io.StringIO()

@@ -15,12 +15,17 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from .live import (
+    DEFAULT_DISCUSS_REASONING_EFFORT,
     MAX_DISCUSS_ANSWER_CHARS,
     MAX_DISCUSS_COMPLETION_CHARS,
+    MAX_DISCUSS_ERROR_DETAIL_CHARS,
+    MAX_DISCUSS_FIELD_CHARS,
+    MAX_DISCUSS_FIELDS_PER_LIST,
+    MAX_DISCUSS_RAW_RESPONSE_CHARS,
     MAX_DISCUSS_RESPONSE_BYTES,
+    MAX_DISCUSS_STATEMENT_CHARS,
     MAX_HISTORY_MESSAGES,
     MAX_MODEL_REQUESTS,
-    MAX_RAW_RESPONSE_CHARS,
     MAX_TOKENS,
     MAX_USER_TURN_CHARS,
     LiveConfig,
@@ -55,6 +60,10 @@ def validate_conclusion(
         validated = _validate_model_content(
             json.dumps(value, ensure_ascii=False),
             allowed_extra_keys=frozenset({"user_stance"}), max_answer_chars=max_answer_chars,
+            max_statement_chars=MAX_DISCUSS_STATEMENT_CHARS,
+            max_field_chars=MAX_DISCUSS_FIELD_CHARS,
+            max_fields_per_list=MAX_DISCUSS_FIELDS_PER_LIST,
+            raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
         )
     except (LiveError, TypeError, ValueError) as exc:
         if isinstance(exc, LiveError):
@@ -142,8 +151,21 @@ def _trace_error(exc: LiveError) -> dict[str, Any]:
         "kind": _error_kind(exc),
         "http_status": exc.http_status,
         "finish_reason": exc.finish_reason,
-        "detail": exc.detail[:1_000],
+        "detail": exc.detail[:MAX_DISCUSS_ERROR_DETAIL_CHARS],
     }
+
+
+def _is_reasoning_effort_rejection(exc: LiveError) -> bool:
+    message = " ".join((str(exc), exc.detail, exc.raw_response)).lower()
+    return exc.http_status == 400 and "reasoning" in message
+
+
+def _reasoning_effort_from_environment(environ: dict[str, str] | None) -> str:
+    values = os.environ if environ is None else environ
+    effort = values.get("DOJO_LLM_REASONING", DEFAULT_DISCUSS_REASONING_EFFORT).strip()
+    if effort not in {"low", "medium", "high"}:
+        raise ValueError("DOJO_LLM_REASONING 只允许 low、medium 或 high")
+    return effort
 
 
 def _user_error_message(error: dict[str, Any]) -> str:
@@ -166,13 +188,21 @@ def _user_error_message(error: dict[str, Any]) -> str:
     return "模型这次返回的内容无法识别，自动重试仍未成功；这轮没有形成结论，你可以继续。"
 
 
-def _attempt_record(raw_response: str, finish_reason: str | None, error: dict[str, Any] | None) -> dict[str, Any]:
+def _attempt_record(
+    raw_response: str,
+    finish_reason: str | None,
+    error: dict[str, Any] | None,
+    *,
+    reasoning_effort_fallback: bool = False,
+) -> dict[str, Any]:
     record: dict[str, Any] = {
-        "raw_response": raw_response[:MAX_RAW_RESPONSE_CHARS],
+        "raw_response": raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS],
         "finish_reason": finish_reason,
     }
     if error is not None:
         record["error"] = error
+    if reasoning_effort_fallback:
+        record["reasoning_effort_fallback"] = True
     return record
 
 
@@ -319,9 +349,13 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     raise ValueError("错误诊断记录无效")
                 if value.get("raw_response") is not None and (
                     not isinstance(value.get("raw_response"), str)
-                    or len(value["raw_response"]) > MAX_RAW_RESPONSE_CHARS
+                    or len(value["raw_response"]) > MAX_DISCUSS_RAW_RESPONSE_CHARS
                 ):
                     raise ValueError("原始响应记录无效")
+                if value.get("reasoning_effort") not in {None, "low", "medium", "high"}:
+                    raise ValueError("推理等级记录无效")
+                if "reasoning_effort_fallback" in value and not isinstance(value["reasoning_effort_fallback"], bool):
+                    raise ValueError("推理等级降级记录无效")
                 if value.get("finish_reason") is not None and not isinstance(value.get("finish_reason"), str):
                     raise ValueError("finish_reason 记录无效")
             records.append(value)
@@ -389,6 +423,12 @@ def run_discuss(
     if no_trace and resume is not None:
         print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=output)
         return 2
+    try:
+        active_reasoning_effort = _reasoning_effort_from_environment(environ)
+    except ValueError as exc:
+        print(f"无法启动讨论：{exc}；未发送网络请求。", file=output)
+        return 2
+    reasoning_fallback_applied = False
     resume_state = None
     if resume is not None:
         try:
@@ -412,7 +452,14 @@ def run_discuss(
             max_completion_chars=MAX_DISCUSS_COMPLETION_CHARS,
             max_response_bytes=MAX_DISCUSS_RESPONSE_BYTES,
             max_tokens=MAX_TOKENS,
+            max_raw_response_chars=MAX_DISCUSS_RAW_RESPONSE_CHARS,
+            max_statement_chars=MAX_DISCUSS_STATEMENT_CHARS,
+            max_field_chars=MAX_DISCUSS_FIELD_CHARS,
+            max_fields_per_list=MAX_DISCUSS_FIELDS_PER_LIST,
+            reasoning_effort=active_reasoning_effort,
         )
+    elif hasattr(client, "reasoning_effort"):
+        client.reasoning_effort = active_reasoning_effort
 
     if resume_state is None:
         session = "discuss-" + uuid.uuid4().hex
@@ -515,6 +562,8 @@ def run_discuss(
         attempts: list[dict[str, Any]] = []
         final_error: LiveError | None = None
         final_error_record: dict[str, Any] | None = None
+        round_reasoning_effort = active_reasoning_effort
+        round_reasoning_effort_fallback = False
         response: Any = None
         checked: dict[str, Any] | None = None
         candidate: dict[str, Any] | None = None
@@ -540,18 +589,23 @@ def run_discuss(
                     finish_reason = None
                     model_value = response
                     raw_response = json.dumps(response, ensure_ascii=False, default=str)
-                raw_response = raw_response[:MAX_RAW_RESPONSE_CHARS]
+                raw_response = raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS]
                 if finish_reason == "length":
                     raise LiveError(
                         "model response was truncated at the output token limit; no candidate was saved",
                         kind="truncated", finish_reason=finish_reason, raw_response=raw_response,
+                        raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
                     )
                 checked = _validate_model_content(
                     json.dumps(model_value, ensure_ascii=False),
                     allowed_extra_keys=frozenset({"user_stance"}),
                     max_answer_chars=MAX_DISCUSS_ANSWER_CHARS,
+                    max_statement_chars=MAX_DISCUSS_STATEMENT_CHARS,
+                    max_field_chars=MAX_DISCUSS_FIELD_CHARS,
+                    max_fields_per_list=MAX_DISCUSS_FIELDS_PER_LIST,
                     finish_reason=finish_reason,
                     raw_response=raw_response,
+                    raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
                 )
                 candidate = validate_conclusion(checked)
                 consecutive_connection_failures = 0
@@ -571,6 +625,8 @@ def run_discuss(
                     "decision": "none", "reason": "interrupted", "requests_sent": requests_sent,
                     "pending_after": pending["statement"] if pending is not None else None,
                     "raw_response": raw_response, "finish_reason": finish_reason, "error": None,
+                    "reasoning_effort": round_reasoning_effort,
+                    "reasoning_effort_fallback": round_reasoning_effort_fallback,
                     "attempts": attempts,
                 })
                 print("讨论已取消；本轮结论未写入。", file=output)
@@ -578,21 +634,40 @@ def run_discuss(
             except LiveError as exc:
                 final_error = exc
                 if exc.raw_response:
-                    raw_response = exc.raw_response[:MAX_RAW_RESPONSE_CHARS]
+                    raw_response = exc.raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS]
                 elif not raw_response:
-                    raw_response = json.dumps(response, ensure_ascii=False, default=str)[:MAX_RAW_RESPONSE_CHARS]
+                    raw_response = json.dumps(response, ensure_ascii=False, default=str)[:MAX_DISCUSS_RAW_RESPONSE_CHARS]
                 exc.raw_response = exc.raw_response or raw_response
                 exc.finish_reason = exc.finish_reason or finish_reason
                 finish_reason = exc.finish_reason
                 kind = _error_kind(exc)
-                if kind == "http_error" and exc.http_status is None and "HTTP " in str(exc):
+                status = exc.http_status
+                if kind == "http_error" and status is None and "HTTP " in str(exc):
                     try:
-                        exc.http_status = int(str(exc).split("HTTP ", 1)[1].split(";", 1)[0])
+                        status = int(str(exc).split("HTTP ", 1)[1].split(";", 1)[0])
+                        exc.http_status = status
                     except ValueError:
                         pass
                 final_error_record = _trace_error(exc)
+                if (
+                    _is_reasoning_effort_rejection(exc)
+                    and active_reasoning_effort is not None
+                    and not reasoning_fallback_applied
+                    and requests_sent < MAX_MODEL_REQUESTS
+                ):
+                    attempts.append(_attempt_record(
+                        raw_response, finish_reason, final_error_record,
+                        reasoning_effort_fallback=True,
+                    ))
+                    active_reasoning_effort = None
+                    round_reasoning_effort = None
+                    round_reasoning_effort_fallback = True
+                    reasoning_fallback_applied = True
+                    if hasattr(client, "reasoning_effort"):
+                        client.reasoning_effort = None
+                    print("模型端点不接受 reasoning_effort，已改为不带该字段重试，并在本场后续请求中保持降级。", file=output)
+                    continue
                 attempts.append(_attempt_record(raw_response, finish_reason, final_error_record))
-                status = exc.http_status
                 if kind == "http_error" and status is not None and status < 500:
                     terminal_failure = True
                     break
@@ -621,7 +696,10 @@ def run_discuss(
                 "decision": "none", "reason": "failure", "requests_sent": requests_sent,
                 "pending_after": pending["statement"] if pending is not None else None,
                 "raw_response": raw_response, "finish_reason": finish_reason,
-                "error": error, "attempts": attempts,
+                "error": error,
+                "reasoning_effort": round_reasoning_effort,
+                "reasoning_effort_fallback": round_reasoning_effort_fallback,
+                "attempts": attempts,
             })
             print(_user_error_message(error), file=output)
             return finish("failure", 2)
@@ -679,8 +757,10 @@ def run_discuss(
             "stance": stance, "decision": decision, "reason": reason,
             "requests_sent": requests_sent,
             "pending_after": pending["statement"] if pending is not None else None,
-            "raw_response": raw_response[:MAX_RAW_RESPONSE_CHARS],
+            "raw_response": raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS],
             "finish_reason": finish_reason, "error": error_record,
+            "reasoning_effort": round_reasoning_effort,
+            "reasoning_effort_fallback": round_reasoning_effort_fallback,
             "attempts": attempts,
         })
         history.extend([{"role": "user", "content": context}, {"role": "assistant", "content": answer}])

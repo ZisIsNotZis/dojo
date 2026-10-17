@@ -10,7 +10,21 @@ from unittest.mock import patch
 
 from dojo.demo import CHALLENGE, TARGET_FACTS, freeze_materials
 from dojo.discuss import run_discuss
-from dojo.live import LiveConfig, LiveError, MAX_HTTP_RESPONSE_BYTES, MAX_REQUEST_CHARS, run_chat, OpenAICompatibleClient, _validate_model_content
+from dojo.live import (
+    LiveConfig,
+    LiveError,
+    MAX_DISCUSS_ANSWER_CHARS,
+    MAX_DISCUSS_FIELD_CHARS,
+    MAX_DISCUSS_FIELDS_PER_LIST,
+    MAX_DISCUSS_RAW_RESPONSE_CHARS,
+    MAX_DISCUSS_RESPONSE_BYTES,
+    MAX_DISCUSS_STATEMENT_CHARS,
+    MAX_HTTP_RESPONSE_BYTES,
+    MAX_REQUEST_CHARS,
+    OpenAICompatibleClient,
+    _validate_model_content,
+    run_chat,
+)
 from dojo.storage import DojoError, Store, load_simulated_seeds
 
 
@@ -150,6 +164,7 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual("github-copilot/gpt-6-luna", payload["model"])
         self.assertEqual(900, payload["max_tokens"])
         self.assertEqual({"type": "json_object"}, payload["response_format"])
+        self.assertNotIn("reasoning_effort", payload)
         serialized_messages = json.dumps(payload["messages"], ensure_ascii=False)
         self.assertIn("降低摩擦让行为更容易持续", serialized_messages)
         self.assertIn("seed-m01", serialized_messages)
@@ -210,14 +225,14 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual("{not strict JSON", caught.exception.raw_response)
 
     def test_discuss_accepts_long_answers_without_loosening_chat_contract(self):
-        long_answer = "长" * 9_000
+        long_answer = "长" * 30_000
         discuss_result = {"answer": long_answer, "candidate": None, "user_stance": "neutral"}
         with LocalMockEndpoint([endpoint_response(discuss_result)]) as endpoint:
             output = io.StringIO()
             code = run_discuss(
                 self.store,
                 config=LiveConfig(endpoint.base_url, "github_copilot/gpt-6-luna", None),
-                read_line=lambda _prompt: "请继续讨论", output=output,
+                environ={}, read_line=lambda _prompt: "请继续讨论", output=output,
             )
         self.assertEqual(0, code, output.getvalue())
         self.assertIn(long_answer, output.getvalue())
@@ -227,7 +242,79 @@ class ConversationTests(unittest.TestCase):
             if line.startswith("本场会话轨迹：")
         ][0])
         row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
-        self.assertEqual(4_000, len(row["raw_response"]))
+        self.assertEqual(len(json.dumps(discuss_result, ensure_ascii=False)), len(row["raw_response"]))
+        self.assertEqual(long_answer, row["answer"])
+        self.assertEqual("low", row["reasoning_effort"])
+        self.assertFalse(row["reasoning_effort_fallback"])
+
+    def test_discuss_reasoning_effort_environment_override_is_sent_and_traced(self):
+        response = {"answer": "按中等级继续讨论。", "candidate": None, "user_stance": "neutral"}
+        with LocalMockEndpoint([endpoint_response(response)]) as endpoint:
+            output = io.StringIO()
+            answers = iter(["继续讨论"])
+
+            def read_line(_prompt):
+                try:
+                    return next(answers)
+                except StopIteration:
+                    raise EOFError
+
+            code = run_discuss(
+                self.store,
+                config=LiveConfig(endpoint.base_url, "github_copilot/gpt-6-luna", None),
+                environ={"DOJO_LLM_REASONING": "medium"},
+                read_line=read_line, output=output,
+            )
+        self.assertEqual(0, code, output.getvalue())
+        self.assertEqual("medium", endpoint.requests[0]["payload"]["reasoning_effort"])
+        trace_path = Path([
+            line.split("：", 1)[1].strip()
+            for line in output.getvalue().splitlines()
+            if line.startswith("本场会话轨迹：")
+        ][0])
+        row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual("medium", row["reasoning_effort"])
+        self.assertFalse(row["reasoning_effort_fallback"])
+
+    def test_discuss_response_body_uses_the_documented_safety_envelope(self):
+        oversized = {"status": 200, "body": b"x" * (MAX_DISCUSS_RESPONSE_BYTES + 1)}
+        with LocalMockEndpoint([oversized]) as endpoint:
+            client = OpenAICompatibleClient(
+                LiveConfig(endpoint.base_url, "test-model", None),
+                max_response_bytes=MAX_DISCUSS_RESPONSE_BYTES,
+                max_raw_response_chars=MAX_DISCUSS_RAW_RESPONSE_CHARS,
+                max_answer_chars=MAX_DISCUSS_ANSWER_CHARS,
+            )
+            with self.assertRaises(LiveError) as caught:
+                client.complete([{"role": "user", "content": "test"}])
+        self.assertIn("exceeded 1000000 bytes", str(caught.exception))
+
+    def test_discuss_accepts_documented_candidate_output_envelopes(self):
+        oversized = {
+            "answer": "答" * MAX_DISCUSS_ANSWER_CHARS,
+            "candidate": {
+                "statement": "结" * MAX_DISCUSS_STATEMENT_CHARS,
+                "kind": "abstract_idea",
+                "premises": ["前" * MAX_DISCUSS_FIELD_CHARS] * 9,
+                "scope": ["范"],
+                "alternatives": [],
+                "contradictions": [],
+                "unknowns": [],
+            },
+            "user_stance": "neutral",
+        }
+        validated = _validate_model_content(
+            json.dumps(oversized, ensure_ascii=False),
+            allowed_extra_keys=frozenset({"user_stance"}),
+            max_answer_chars=MAX_DISCUSS_ANSWER_CHARS,
+            max_statement_chars=MAX_DISCUSS_STATEMENT_CHARS,
+            max_field_chars=MAX_DISCUSS_FIELD_CHARS,
+            max_fields_per_list=MAX_DISCUSS_FIELDS_PER_LIST,
+        )
+        self.assertEqual(MAX_DISCUSS_ANSWER_CHARS, len(validated["answer"]))
+        self.assertEqual(MAX_DISCUSS_STATEMENT_CHARS, len(validated["candidate"]["statement"]))
+        self.assertEqual(9, len(validated["candidate"]["premises"]))
+        self.assertEqual(MAX_DISCUSS_RAW_RESPONSE_CHARS, 65_536)
 
     def test_discuss_http_contract_accepts_user_stance(self):
         empty_store = Store(self.root / "discuss-http.sqlite3")
@@ -247,12 +334,13 @@ class ConversationTests(unittest.TestCase):
             code = run_discuss(
                 empty_store,
                 config=LiveConfig(endpoint.base_url, "github-copilot/gpt-6-luna", None),
-                read_line=read_line, output=output,
+                environ={}, read_line=read_line, output=output,
             )
 
         self.assertEqual(0, code)
         self.assertEqual(2, len(endpoint.requests))
         self.assertTrue(all(item["payload"]["max_tokens"] == 65_536 for item in endpoint.requests))
+        self.assertTrue(all(item["payload"]["reasoning_effort"] == "low" for item in endpoint.requests))
         self.assertEqual(1, len(empty_store.list_candidates()))
 
     def test_model_candidate_reject_and_eof_leave_store_unchanged(self):
