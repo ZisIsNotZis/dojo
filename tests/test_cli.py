@@ -209,6 +209,27 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertFalse(db_path.exists())
         self.assertFalse((self.root / "sessions").exists())
 
+    def test_discuss_resume_invalid_trace_fails_in_chinese_without_creating_files(self):
+        path = self.root / ("discuss-" + "0" * 32 + ".jsonl")
+        for create_invalid in (False, True):
+            if create_invalid:
+                path.write_text("not json\n", encoding="utf-8")
+            db_path = self.root / f"resume-{create_invalid}.sqlite3"
+            result = self.run_text_cli("--db", str(db_path), "discuss", "--resume", str(path))
+            self.assertEqual(2, result.returncode)
+            self.assertIn("无法续跑轨迹", result.stderr)
+            self.assertFalse(db_path.exists())
+            if not create_invalid:
+                self.assertFalse(path.exists())
+
+        conflict = self.run_text_cli(
+            "--db", str(self.root / "conflict.sqlite3"), "discuss",
+            "--resume", str(path), "--no-trace",
+        )
+        self.assertEqual(2, conflict.returncode)
+        self.assertIn("不能同时使用", conflict.stderr)
+        self.assertFalse((self.root / "conflict.sqlite3").exists())
+
     def test_live_command_without_endpoint_fails_before_creating_default_database(self):
         env = {key: value for key, value in self.env.items() if key not in {"DOJO_LLM_BASE_URL", "DOJO_LLM_MODEL", "DOJO_LLM_API_KEY"}}
         db_path = self.root / "must-not-be-created.sqlite3"

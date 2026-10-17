@@ -13,7 +13,7 @@ from typing import Any
 
 from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
-from .discuss import run_discuss
+from .discuss import _load_resume_trace, run_discuss
 from .live import LiveConfig, LiveError, run_chat
 from .storage import DojoError, Store, load_simulated_seeds
 
@@ -137,6 +137,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
     discuss = sub.add_parser("discuss", help="自然语言对齐式讨论；结论会写入本地草稿并生成本地轨迹")
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
+    discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
 
     packets = sub.add_parser("freeze-materials", help="生成四份冻结模型输入；C 摘录来自真实本地 Store 检索")
     packets.add_argument("--outdir", default="docs/packets/frozen-conversation-v2", help="新输出目录；已有目录会拒绝覆盖")
@@ -297,6 +298,15 @@ def main(argv: list[str] | None = None) -> int:
                 pass
             return run_chat(store, config=config)
         if args.command == "discuss":
+            if args.no_trace and args.resume:
+                print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=sys.stderr)
+                return 2
+            if args.resume:
+                try:
+                    _load_resume_trace(Path(args.resume).expanduser())
+                except ValueError as exc:
+                    print(str(exc), file=sys.stderr)
+                    return 2
             try:
                 config = LiveConfig.from_environment()
             except LiveError as exc:
@@ -311,7 +321,10 @@ def main(argv: list[str] | None = None) -> int:
                 db_path.chmod(0o600)
             except OSError:
                 pass
-            return run_discuss(store, config=config, no_trace=args.no_trace)
+            return run_discuss(
+                store, config=config, no_trace=args.no_trace,
+                resume=Path(args.resume).expanduser() if args.resume else None,
+            )
         if args.command == "compare":
             run_compare(full=args.full, output=sys.stdout)
             return 0

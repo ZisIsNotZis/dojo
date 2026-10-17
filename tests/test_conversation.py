@@ -26,12 +26,12 @@ VALID_CANDIDATE = {
 VALID_MODEL_RESULT = {"answer": "先区分已知条件与缺失证据。", "candidate": VALID_CANDIDATE}
 
 
-def endpoint_response(content, *, status=200):
+def endpoint_response(content, *, status=200, finish_reason="stop"):
     if isinstance(content, str):
         message_content = content
     else:
         message_content = json.dumps(content, ensure_ascii=False)
-    body = json.dumps({"choices": [{"message": {"content": message_content}}]}, ensure_ascii=False).encode()
+    body = json.dumps({"choices": [{"message": {"content": message_content}, "finish_reason": finish_reason}]}, ensure_ascii=False).encode()
     return {"status": status, "body": body}
 
 
@@ -148,6 +148,7 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual("Bearer test-only-secret-token", request["headers"]["Authorization"])
         payload = request["payload"]
         self.assertEqual("github-copilot/gpt-6-luna", payload["model"])
+        self.assertEqual(900, payload["max_tokens"])
         self.assertEqual({"type": "json_object"}, payload["response_format"])
         serialized_messages = json.dumps(payload["messages"], ensure_ascii=False)
         self.assertIn("降低摩擦让行为更容易持续", serialized_messages)
@@ -185,6 +186,49 @@ class ConversationTests(unittest.TestCase):
             _validate_model_content(content, allowed_extra_keys=frozenset({"user_stance"})),
         )
 
+    def test_openai_client_exposes_finish_reason_and_raw_output_and_detects_truncation(self):
+        raw_content = json.dumps({"answer": "raw response", "candidate": None}, ensure_ascii=False)
+        with LocalMockEndpoint([endpoint_response(raw_content)]) as endpoint:
+            client = OpenAICompatibleClient(LiveConfig(endpoint.base_url, "test", None))
+            completed = client.complete([{"role": "user", "content": "test"}])
+        self.assertEqual("stop", completed["finish_reason"])
+        self.assertEqual(raw_content, completed["raw_response"])
+
+        with LocalMockEndpoint([endpoint_response('{"partial":', finish_reason="length")]) as endpoint:
+            client = OpenAICompatibleClient(LiveConfig(endpoint.base_url, "test", None))
+            with self.assertRaises(LiveError) as caught:
+                client.complete([{"role": "user", "content": "test"}])
+        self.assertEqual("truncated", caught.exception.kind)
+        self.assertEqual("length", caught.exception.finish_reason)
+        self.assertEqual('{"partial":', caught.exception.raw_response)
+
+        with LocalMockEndpoint([endpoint_response("{not strict JSON")]) as endpoint:
+            client = OpenAICompatibleClient(LiveConfig(endpoint.base_url, "test", None))
+            with self.assertRaises(LiveError) as caught:
+                client.complete([{"role": "user", "content": "test"}])
+        self.assertEqual("not_json", caught.exception.kind)
+        self.assertEqual("{not strict JSON", caught.exception.raw_response)
+
+    def test_discuss_accepts_long_answers_without_loosening_chat_contract(self):
+        long_answer = "长" * 9_000
+        discuss_result = {"answer": long_answer, "candidate": None, "user_stance": "neutral"}
+        with LocalMockEndpoint([endpoint_response(discuss_result)]) as endpoint:
+            output = io.StringIO()
+            code = run_discuss(
+                self.store,
+                config=LiveConfig(endpoint.base_url, "github_copilot/gpt-6-luna", None),
+                read_line=lambda _prompt: "请继续讨论", output=output,
+            )
+        self.assertEqual(0, code, output.getvalue())
+        self.assertIn(long_answer, output.getvalue())
+        trace_path = Path([
+            line.split("：", 1)[1].strip()
+            for line in output.getvalue().splitlines()
+            if line.startswith("本场会话轨迹：")
+        ][0])
+        row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
+        self.assertEqual(4_000, len(row["raw_response"]))
+
     def test_discuss_http_contract_accepts_user_stance(self):
         empty_store = Store(self.root / "discuss-http.sqlite3")
         self.addCleanup(empty_store.close)
@@ -208,6 +252,7 @@ class ConversationTests(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertEqual(2, len(endpoint.requests))
+        self.assertTrue(all(item["payload"]["max_tokens"] == 65_536 for item in endpoint.requests))
         self.assertEqual(1, len(empty_store.list_candidates()))
 
     def test_model_candidate_reject_and_eof_leave_store_unchanged(self):
