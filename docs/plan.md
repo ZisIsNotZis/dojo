@@ -83,9 +83,9 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 ## 当前基线
 
 - 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、M1 的 `discuss`。
-- 52 项标准库测试通过。
+- 51 项标准库测试通过。
 - M1 已交付，两轮独立评审通过（首轮 FAIL 于 EOF 未表态写入）。
 - 反奉承探针（M5 前置部分）已跑：A/B/C 三个对抗场景均未让步，均落库为带边界版本；但样本极小，不构成普遍可靠性证明。
-- `discuss` 保存门控已改为结构性异议门控（`user_stance` + 代码 `objection_gate`），经三轮独立评审（FAIL → FAIL → PASS-WITH-RISK）。残余风险：模型可能误报 `user_stance`，已记入 `product.md` 的“已知的条件保证”。
+- `discuss` 写入条件为已有 pending、当轮候选与其完全相同且 `user_stance=accept`；`objection_gate` 已删除。经三轮独立评审（FAIL → FAIL → PASS-WITH-RISK）。残余风险：模型可能误报 `user_stance`，已记入 `product.md` 的“已知的条件保证”。
 - 已知缺口：管线（M2）、广播转述（M3）、manifest（M4）未实现；M5 尚未正式交付，其“模型误报 accept”负控制未做。
 - 见 `../.scratch/active-work.md` 获取恢复入口。

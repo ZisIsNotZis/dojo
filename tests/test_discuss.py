@@ -24,6 +24,7 @@ CONCLUSION = {
 
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
+    "pending_after",
 }
 
 
@@ -123,9 +124,11 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual("  我总在开始动手前就拖延。  ", first["user"])
         self.assertEqual(CONCLUSION, first["candidate"])
         self.assertEqual("none", first["decision"])
-        self.assertEqual("no_pending", first["reason"])
+        self.assertEqual("proposed_new_pending", first["reason"])
+        self.assertEqual(CONCLUSION["statement"], first["pending_after"])
         self.assertEqual("written", second["decision"])
         self.assertEqual("accepted_and_written", second["reason"])
+        self.assertIsNone(second["pending_after"])
         self.assertEqual(2, second["requests_sent"])
         self.assertEqual({"event", "reason", "saved", "requests_sent"}, set(end))
         self.assertEqual("session_end", end["event"])
@@ -249,7 +252,8 @@ class DiscussTests(unittest.TestCase):
         _, records = self.trace_records()
         self.assertEqual("eof", records[-1]["reason"])
         self.assertEqual([], records[-1]["saved"])
-        self.assertEqual("no_pending", records[0]["reason"])
+        self.assertEqual("proposed_new_pending", records[0]["reason"])
+        self.assertEqual(CONCLUSION["statement"], records[0]["pending_after"])
 
     def test_request_limit_does_not_write_pending_candidate(self):
         client = FakeClient([result("先形成一条待复核结论。", CONCLUSION)])
@@ -282,7 +286,8 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertEqual([], self.store.list_candidates())
         _, records = self.trace_records()
-        self.assertEqual("no_pending", records[0]["reason"])
+        self.assertEqual("proposed_new_pending", records[0]["reason"])
+        self.assertEqual(CONCLUSION["statement"], records[0]["pending_after"])
         self.assertEqual("awaiting_accept", records[1]["reason"])
         self.assertEqual("stance_not_accept", records[2]["reason"])
 
@@ -303,6 +308,31 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual([], self.store.list_candidates())
         _, records = self.trace_records()
         self.assertEqual("cancel", records[-1]["reason"])
+
+    def test_keyboard_interrupt_during_request_records_interrupted_round(self):
+        client = FakeClient(error=KeyboardInterrupt())
+        original_text = "  请求发出后被中断。  "
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines([original_text]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual([], self.store.list_candidates())
+        _, records = self.trace_records()
+        self.assertEqual(2, len(records))
+        round_record, end = records
+        self.assertEqual(original_text, round_record["user"])
+        self.assertEqual(1, round_record["seq"])
+        self.assertEqual(1, round_record["requests_sent"])
+        self.assertIsNone(round_record["candidate"])
+        self.assertEqual("none", round_record["decision"])
+        self.assertEqual("interrupted", round_record["reason"])
+        self.assertIsNone(round_record["pending_after"])
+        self.assertEqual("session_end", end["event"])
+        self.assertEqual("cancel", end["reason"])
+        self.assertEqual(1, end["requests_sent"])
 
     def test_http_and_timeout_failure_after_pending_never_write(self):
         for message in (

@@ -1,5 +1,9 @@
 """Natural-language alignment discussion that stores only agreed draft conclusions."""
 
+# Round-trace reason values: no_pending, proposed_new_pending, candidate_changed,
+# accepted_and_written, stance_not_accept, awaiting_accept, write_failed, failure,
+# interrupted. Session-end reason values: cancel, eof, limit, failure.
+
 from __future__ import annotations
 
 import json
@@ -285,6 +289,12 @@ def run_discuss(
         try:
             response = client.complete(messages)
         except KeyboardInterrupt:
+            record_round({
+                "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
+                "user": original_text, "answer": None, "candidate": None, "stance": None,
+                "decision": "none", "reason": "interrupted", "requests_sent": requests_sent,
+                "pending_after": pending["statement"] if pending is not None else None,
+            })
             print("讨论已取消；本轮结论未写入。", file=output)
             return finish("cancel")
         except LiveError as exc:
@@ -293,6 +303,7 @@ def run_discuss(
                     "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
                     "user": original_text, "answer": None, "candidate": None, "stance": None,
                     "decision": "none", "reason": "failure", "requests_sent": requests_sent,
+                    "pending_after": pending["statement"] if pending is not None else None,
                 })
                 print(f"实时讨论失败：{_failure_message(exc)}", file=output)
                 return finish("failure", 2)
@@ -311,6 +322,7 @@ def run_discuss(
                         "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
                         "user": original_text, "answer": None, "candidate": None, "stance": None,
                         "decision": "none", "reason": "failure", "requests_sent": requests_sent,
+                        "pending_after": pending["statement"] if pending is not None else None,
                     })
                     print(f"实时讨论失败：{_failure_message(exc)}", file=output)
                     return finish("failure", 2)
@@ -330,7 +342,7 @@ def run_discuss(
         stance = checked.get("user_stance", "neutral")
         previous_pending = pending
         should_save = previous_pending is not None and candidate == previous_pending and stance == "accept"
-        reason = "no_pending"
+        reason = "proposed_new_pending" if previous_pending is None and candidate is not None else "no_pending"
         if previous_pending is not None:
             if candidate != previous_pending:
                 reason = "candidate_changed"
@@ -370,6 +382,7 @@ def run_discuss(
             "user": original_text, "answer": answer, "candidate": candidate,
             "stance": stance, "decision": decision,
             "reason": reason, "requests_sent": requests_sent,
+            "pending_after": pending["statement"] if pending is not None else None,
         })
         history.extend([{"role": "user", "content": context}, {"role": "assistant", "content": answer}])
         if len(history) > MAX_HISTORY_MESSAGES:
