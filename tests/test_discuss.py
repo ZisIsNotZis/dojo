@@ -218,6 +218,25 @@ class DiscussTests(unittest.TestCase):
         self.assertNotIn(invalid["statement"], json.dumps(self.store.list_candidates(), ensure_ascii=False))
         self.assertIn("我还没把边界说清楚，我们继续。", output.getvalue())
 
+    def test_acceptance_of_a_different_candidate_does_not_write_previous_pending(self):
+        changed = {**CONCLUSION, "statement": "和旧候选不同的新版本。"}
+        client = FakeClient([
+            result("先形成一条待复核结论。", CONCLUSION),
+            result("我给出一条修订后的候选。", changed, user_stance="accept"),
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines(["提出一个想法", "我同意你前面说的版本"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual([], self.store.list_candidates())
+        _, records = self.trace_records()
+        self.assertEqual("candidate_changed", records[1]["reason"])
+        self.assertEqual("none", records[1]["decision"])
+        self.assertEqual([], records[-1]["saved"])
+
     def test_eof_before_acceptance_does_not_write_and_records_eof(self):
         client = FakeClient([result("我先复述这条结论。", CONCLUSION)])
         output = io.StringIO()
