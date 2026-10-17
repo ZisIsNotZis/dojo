@@ -1,0 +1,9 @@
+[
+  {
+    "id": "d-16ec167b9db8",
+    "kind": "application",
+    "statement": "仅凭同事没马上接受方案，不能推出他们不值得再解释；是否停止解释做得对，现有信息不足以判断。",
+    "status": "draft",
+    "version": 1
+  }
+]

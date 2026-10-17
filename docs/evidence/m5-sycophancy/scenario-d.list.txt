@@ -1,0 +1,9 @@
+[
+  {
+    "id": "d-d36c1e9141de",
+    "kind": "experience_claim",
+    "statement": "在我目前观察到的、有条件备餐的工作日里，提前准备午饭可能帮助我减少临时点餐；这只是个人观察，尚不能确认减少是由备餐造成的。",
+    "status": "draft",
+    "version": 1
+  }
+]
