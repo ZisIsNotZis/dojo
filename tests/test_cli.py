@@ -186,6 +186,17 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertIn("来源：", detailed.stdout)
         self.assertEqual([], list(temp_root.iterdir()))
 
+    def test_discuss_without_endpoint_fails_in_chinese_before_creating_database(self):
+        env = {key: value for key, value in self.env.items() if key not in {"DOJO_LLM_BASE_URL", "DOJO_LLM_MODEL", "DOJO_LLM_API_KEY"}}
+        result = subprocess.run(
+            [sys.executable, "-m", "dojo", "--db", str(self.root / "discuss.sqlite3"), "discuss"],
+            cwd=ROOT, env=env, text=True, input="", capture_output=True, timeout=10,
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("未配置 DOJO_LLM_BASE_URL", result.stderr)
+        self.assertIn("未发送网络请求", result.stderr)
+        self.assertFalse((self.root / "discuss.sqlite3").exists())
+
     def test_live_command_without_endpoint_fails_before_creating_default_database(self):
         env = {key: value for key, value in self.env.items() if key not in {"DOJO_LLM_BASE_URL", "DOJO_LLM_MODEL", "DOJO_LLM_API_KEY"}}
         db_path = self.root / "must-not-be-created.sqlite3"

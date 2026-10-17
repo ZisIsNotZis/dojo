@@ -13,7 +13,8 @@ from typing import Any
 
 from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
-from .live import LiveConfig, run_chat
+from .discuss import run_discuss
+from .live import LiveConfig, LiveError, run_chat
 from .storage import DojoError, Store, load_simulated_seeds
 
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
@@ -33,7 +34,7 @@ def _json_argument(value: str, label: str) -> Any:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m dojo",
-        description="Local no-UI dojo POC; network access is possible only in explicitly selected live chat.",
+        description="Local no-UI dojo POC; network access is possible only in explicitly selected live chat or discussion.",
     )
     parser.add_argument("--db", default=os.environ.get("DOJO_DB", str(DEFAULT_DB)), help=f"SQLite file (default: {DEFAULT_DB}; DOJO_DB overrides)")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -134,6 +135,7 @@ def _parser() -> argparse.ArgumentParser:
     demo.add_argument("--workdir", help="保存到一个新建/空目录；不覆盖已有数据库或总结")
 
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
+    sub.add_parser("discuss", help="自然语言对齐式讨论；结论会写入本地草稿")
 
     packets = sub.add_parser("freeze-materials", help="生成四份冻结模型输入；C 摘录来自真实本地 Store 检索")
     packets.add_argument("--outdir", default="docs/packets/frozen-conversation-v2", help="新输出目录；已有目录会拒绝覆盖")
@@ -293,6 +295,22 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
             return run_chat(store, config=config)
+        if args.command == "discuss":
+            try:
+                config = LiveConfig.from_environment()
+            except LiveError as exc:
+                if "needs DOJO_LLM_BASE_URL" in str(exc):
+                    print("无法启动讨论：未配置 DOJO_LLM_BASE_URL，未发送网络请求。", file=sys.stderr)
+                else:
+                    print(f"无法启动讨论：模型端点配置无效（{exc}），未发送网络请求。", file=sys.stderr)
+                return 2
+            _secure_default_paths(db_path, export_dir)
+            store = Store(db_path)
+            try:
+                db_path.chmod(0o600)
+            except OSError:
+                pass
+            return run_discuss(store, config=config)
         if args.command == "compare":
             run_compare(full=args.full, output=sys.stdout)
             return 0
