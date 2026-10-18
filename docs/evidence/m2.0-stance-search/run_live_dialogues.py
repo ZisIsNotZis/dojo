@@ -13,11 +13,10 @@ ROOT = Path(__file__).resolve().parents[3]
 EVIDENCE = Path(__file__).resolve().parent
 TRACES = EVIDENCE / "traces"
 MODEL = "github_copilot/gpt-6-luna"
-REQUEST_BUDGET = 9
+REQUEST_BUDGET = {"search": 3, "stance": 4}
 SCENARIOS = {
     "search": [
-        "自行车联动刹车有没有量产方案？我想了解真实产品的现状和厂商资料，最好区分传统机械前后联动与电子制动控制；不是问设计理论。",
-        "这个问题需要外部事实，请查公开的产品或厂商来源；给出具体 URL，不确定就说证据不足，不要把摘要当成已证实事实。",
+        "自行车联动刹车有没有量产方案？我想了解真实产品的现状和厂商资料，最好区分传统机械前后联动与电子制动控制；请查公开产品或厂商来源、给出具体 URL；不是问设计理论。",
     ],
     "stance": [
         "我每次开始一个新项目，都想先把计划和任务列表做完整；没列清就不踏实。我现在有个简单的内部整理工具点子，但还没开始。",
@@ -33,7 +32,7 @@ def run_scenario(name: str, turns: list[str]) -> dict[str, object]:
     env = dict(os.environ)
     env["DOJO_LLM_MODEL"] = MODEL
     env["DOJO_SESSIONS"] = str(TRACES)
-    env["DOJO_M2_REQUEST_BUDGET"] = str(REQUEST_BUDGET)
+    env["DOJO_M2_REQUEST_BUDGET"] = str(REQUEST_BUDGET[name])
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONUNBUFFERED"] = "1"
     bootstrap = (

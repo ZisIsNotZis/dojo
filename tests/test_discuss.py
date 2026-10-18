@@ -35,7 +35,10 @@ CONCLUSION = {
     "unknowns": ["这种做法对该用户是否有效尚未验证"],
 }
 
-FORBIDDEN_HOST_LANGUAGE = ("记下来", "记录", "草稿", "保存", "写入", "入库", "留痕", "存储", "确认")
+FORBIDDEN_HOST_LANGUAGE = (
+    "我会记下来", "我会记录", "我会保存", "我会写入", "我会入库", "我会留痕",
+    "我会存储", "保存这份草稿", "请确认这条候选",
+)
 
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
@@ -321,6 +324,20 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertEqual(3, len(client.messages))
         self.assertEqual([], self.store.list_candidates())
+        self.assert_clean_discuss_output(output.getvalue())
+
+    def test_factual_confirmation_language_is_not_mistaken_for_backend_recording(self):
+        client = FakeClient([result("现有资料尚不能确认该方案是否量产；也应区分厂商展示和实际装车。")])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines(["这项产品是否量产？"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(1, len(client.messages))
+        self.assertIn("尚不能确认该方案是否量产", output.getvalue())
         self.assert_clean_discuss_output(output.getvalue())
 
     def test_invalid_candidate_is_discarded_before_a_later_valid_acceptance(self):

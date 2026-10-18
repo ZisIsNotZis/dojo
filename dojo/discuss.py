@@ -148,7 +148,16 @@ def _ask(read_line: Callable[[str], str]) -> str | None:
         raise
 
 
-_RECORD_LANGUAGE = ("记下来", "记录", "草稿", "保存", "写入", "入库", "留痕", "存储", "确认")
+_RECORD_LANGUAGE_PATTERNS = (
+    re.compile(r"(?:我会|我将|我来|我先|我已|我已经|帮你|替你).{0,8}(?:记下来|记录|保存|写入|入库|留痕|存储)"),
+    re.compile(r"(?:候选|草稿|结论卡).{0,8}(?:已|已经)(?:保存|写入|入库|存储|记录)"),
+    re.compile(r"(?:保存|写入|入库|存储).{0,8}(?:候选|草稿|结论卡|账本|数据库)"),
+    re.compile(r"(?:请|请你|你来).{0,8}(?:确认|审核|批准).{0,8}(?:候选|结论|草稿)"),
+)
+
+
+def _uses_recording_language(answer: str) -> bool:
+    return any(pattern.search(answer) for pattern in _RECORD_LANGUAGE_PATTERNS)
 
 
 def _normalize_wording(value: str) -> str:
@@ -776,7 +785,7 @@ def run_discuss(
                     raw_response=raw_response,
                     raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
                 )
-                if any(phrase in checked["answer"] for phrase in _RECORD_LANGUAGE):
+                if _uses_recording_language(checked["answer"]):
                     raise LiveError(
                         "model answer used prohibited recording language",
                         kind="schema_violation", finish_reason=finish_reason,
