@@ -27,6 +27,12 @@ SCENARIOS = {
 }
 
 
+def write_terminal(name: str, transcript: str) -> None:
+    # Make the interactive prompt's final space visible in a whitespace-clean text file.
+    rendered = transcript.replace("你> \n", "你>␠\n")
+    (EVIDENCE / f"{name}.terminal.txt").write_text(rendered, encoding="utf-8")
+
+
 def run_scenario(name: str, turns: list[str]) -> dict[str, object]:
     before = {path.name for path in TRACES.glob("discuss-*.jsonl")}
     env = dict(os.environ)
@@ -59,9 +65,9 @@ def run_scenario(name: str, turns: list[str]) -> dict[str, object]:
             transcript = exc.stdout or b""
             if isinstance(transcript, bytes):
                 transcript = transcript.decode("utf-8", errors="replace")
-            (EVIDENCE / f"{name}.terminal.txt").write_text(transcript, encoding="utf-8")
+            write_terminal(name, transcript)
             raise RuntimeError(f"{name} session exceeded 600 seconds") from None
-    (EVIDENCE / f"{name}.terminal.txt").write_text(completed.stdout, encoding="utf-8")
+    write_terminal(name, completed.stdout)
     traces = sorted(
         (path for path in TRACES.glob("discuss-*.jsonl") if path.name not in before),
         key=lambda path: path.stat().st_mtime,

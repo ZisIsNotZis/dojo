@@ -9,6 +9,7 @@
 - 最终两场真实运行命令：`DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 python3 docs/evidence/m2.0-stance-search/run_live_dialogues.py`；代码修订为 `444ef91`。
 - 最终搜索场景：`search.terminal.txt` 与 `traces/discuss-cc48c1d5459b4330a75bf3a00d1da2c5.jsonl`；主持人执行一次搜索、两次模型请求，并在答案中给出产品页、展会产品页和行业报道的 URL；轨迹的 `saved` 是空数组，搜索结果没有自动入库。
 - 最终观点场景：`stance.terminal.txt` 与 `traces/discuss-228093912da84ae480257ec338755aff.jsonl`；主持人四轮回答、四次模型请求、不调用搜索；为遵守总请求预算，该场景运行时将模型请求上限设为四次，轨迹结束原因为 `limit`，并非主持人自然判断已无话可谈。
+- 终端文本把 CLI 提示符末尾原有的不可见空格替换成可见标记 `␠`；对话文本、模型回答与运行顺序未改动。
 - 轨迹目录还保留此前接口调试尝试。五份轨迹合计 23 次模型请求、两次真实搜索调用，低于 25 次模型与 6 次搜索上限；`discuss-0a8f7dae006d4a74b2cc8d8a3263df4a.jsonl` 是首轮搜索响应格式失败（6 次模型请求、0 次搜索），`discuss-61dbf60134a044eabbadb1a2a271d1a8.jsonl` 是搜索调用成功但旧措辞过滤器拒绝了回答（7 次模型请求、1 次搜索），`discuss-1c4c315d413c4d85b983b9cf09c019c4.jsonl` 是此前的观点场景（4 次模型请求、EOF 结束）。最终场景为 `discuss-cc48c1d5459b4330a75bf3a00d1da2c5.jsonl`（2 次模型请求、1 次搜索）与 `discuss-228093912da84ae480257ec338755aff.jsonl`（4 次模型请求、请求上限结束）。`search-initial-schema-failure.terminal.txt` 是首轮格式失败的终端文本。所有失败尝试被保留并计入预算，不作为成功场景证据。
 - 搜索场景的问题是“自行车联动刹车有没有量产方案”，主持人区分机械／液压 CBS、电子 ABS 与电子式前后制动力分配；它将展会资料、媒体报道与商业化线索区分陈述，提供 URL，并明确当前供货、销量与具体车型配置仍未由这些材料证实。运行只证明本场完成了检索与有来源的讨论，不证明来源内容已独立核验。
 
