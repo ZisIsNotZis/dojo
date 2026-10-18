@@ -35,14 +35,23 @@ SCENARIOS = {
 }
 
 
-def run_scenario(name: str, turns: list[str], db_path: str) -> dict[str, object]:
+def run_scenario(name: str, turns: list[str], db_path: str, request_budget: int) -> dict[str, object]:
     trace_names_before = {path.name for path in TRACES.glob("discuss-*.jsonl")}
     env = dict(os.environ)
     env["DOJO_LLM_MODEL"] = MODEL
     env["DOJO_SESSIONS"] = str(TRACES)
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONUNBUFFERED"] = "1"
-    command = [*COMMAND, db_path, "discuss"]
+    if request_budget == 12:
+        command = [*COMMAND, db_path, "discuss"]
+    else:
+        env["DOJO_M1_REQUEST_BUDGET"] = str(request_budget)
+        bootstrap = (
+            "import os; import dojo.discuss as discuss; "
+            "discuss.MAX_MODEL_REQUESTS = int(os.environ['DOJO_M1_REQUEST_BUDGET']); "
+            "from dojo.cli import main; raise SystemExit(main())"
+        )
+        command = [sys.executable, "-c", bootstrap, "--db", db_path, "discuss"]
     pid, master = pty.fork()
     if pid == 0:
         os.chdir(ROOT)
@@ -134,8 +143,11 @@ def run_scenario(name: str, turns: list[str], db_path: str) -> dict[str, object]
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=SCENARIOS, action="append", help="run only the selected scenario; repeat to select both")
+    parser.add_argument("--request-budget", type=int, default=12, help="per-scenario maximum model requests, from 1 through 12")
     args = parser.parse_args()
     selected = args.scenario or list(SCENARIOS)
+    if not 1 <= args.request_budget <= 12:
+        parser.error("--request-budget must be between 1 and 12")
     if not os.environ.get("DOJO_LLM_BASE_URL", "").strip():
         print("blocked: DOJO_LLM_BASE_URL is not configured; no real model request was sent", file=sys.stderr)
         return 2
@@ -145,7 +157,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="dojo-m1.9-dialogue-") as temporary:
         db_path = str(Path(temporary) / "dojo.sqlite3")
         for name in selected:
-            outcome = run_scenario(name, SCENARIOS[name], db_path)
+            outcome = run_scenario(name, SCENARIOS[name], db_path, args.request_budget)
             total_requests += int(outcome["requests_sent"])
             if total_requests > 25:
                 raise RuntimeError("model request limit exceeded 25")
