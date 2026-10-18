@@ -203,6 +203,38 @@ class ConversationTests(unittest.TestCase):
             _validate_model_content(content, allowed_extra_keys=frozenset({"user_stance"})),
         )
 
+    def test_discuss_search_response_is_opt_in_and_query_is_validated(self):
+        query = "site:example.test lang:zh after:2025-01-01 bicycle"
+        content = json.dumps({
+            "answer": "我需要查一下。",
+            "search": {"query": query},
+            "user_stance": "neutral",
+        }, ensure_ascii=False)
+        with self.assertRaises(LiveError):
+            _validate_model_content(content, allowed_extra_keys=frozenset({"user_stance"}))
+        checked = _validate_model_content(
+            content, allowed_extra_keys=frozenset({"user_stance"}), allow_search=True,
+        )
+        self.assertEqual(query, checked["search"]["query"])
+        self.assertIsNone(checked["candidate"])
+        with LocalMockEndpoint([endpoint_response(content)]) as endpoint:
+            client = OpenAICompatibleClient(
+                LiveConfig(endpoint.base_url, "test-model", None),
+                allowed_extra_keys=frozenset({"user_stance"}), allow_search=True,
+            )
+            completed = client.complete([{"role": "user", "content": "test"}])
+        self.assertEqual(query, completed["search"]["query"])
+        for invalid in (
+            {"answer": "查询", "search": {"query": " "}, "user_stance": "neutral"},
+            {"answer": "查询", "search": {"query": "x" * 129}, "user_stance": "neutral"},
+            {"answer": "查询", "search": {"query": "valid"}, "candidate": None, "user_stance": "neutral"},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(LiveError):
+                _validate_model_content(
+                    json.dumps(invalid, ensure_ascii=False),
+                    allowed_extra_keys=frozenset({"user_stance"}), allow_search=True,
+                )
+
     def test_openai_client_exposes_finish_reason_and_raw_output_and_detects_truncation(self):
         raw_content = json.dumps({"answer": "raw response", "candidate": None}, ensure_ascii=False)
         with LocalMockEndpoint([endpoint_response(raw_content)]) as endpoint:

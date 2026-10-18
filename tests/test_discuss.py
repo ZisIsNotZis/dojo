@@ -40,7 +40,7 @@ FORBIDDEN_HOST_LANGUAGE = ("记下来", "记录", "草稿", "保存", "写入", 
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
     "pending_after", "raw_response", "finish_reason", "error", "reasoning_effort",
-    "reasoning_effort_fallback", "attempts",
+    "reasoning_effort_fallback", "attempts", "search",
 }
 
 
@@ -730,6 +730,105 @@ class DiscussTests(unittest.TestCase):
                 self.assertNotIn(mechanical_rule, SYSTEM_PROMPT)
                 self.assertNotIn(mechanical_rule, inspect.getsource(run_discuss))
 
+    def test_search_results_are_dated_context_and_never_written_to_store(self):
+        request = {
+            "answer": "我需要核对外部资料。",
+            "search": {"query": "site:example.test lang:zh 联动刹车"},
+            "user_stance": "neutral",
+        }
+        client = FakeClient([request, result("找到的资料说明存在一个方案。来源：https://example.test/article。")])
+        search_results = [{
+            "title": "Example braking system",
+            "url": "https://example.test/article",
+            "snippet": "A short excerpt",
+            "summary": "A source summary",
+            "content": "Full page text",
+            "rerank_score": 0.91,
+        }]
+        queries = []
+
+        def searcher(query):
+            queries.append(query)
+            return search_results
+
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, searcher=searcher,
+            read_line=read_lines(["自行车联动刹车有没有量产方案？"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual([request["search"]["query"]], queries)
+        self.assertEqual([], self.store.list_candidates(), "search results must not be stored automatically")
+        self.assertIn("来源：https://example.test/article", output.getvalue())
+        self.assertNotIn("我需要核对外部资料", output.getvalue())
+        followup = client.messages[1]
+        tool_result = followup[-1]["content"]
+        self.assertRegex(tool_result, r"检索日期：\d{4}-\d{2}-\d{2}")
+        self.assertIn("Example braking system", tool_result)
+        self.assertIn("https://example.test/article", tool_result)
+        self.assertIn("A source summary", tool_result)
+        self.assertIn("不是用户的经验或主张", tool_result)
+        self.assertIn("未经独立核实", tool_result)
+        _, records = self.trace_records()
+        row = records[0]
+        self.assertEqual(["https://example.test/article"], row["search"][0]["urls"])
+        self.assertEqual(request["search"]["query"], row["search"][0]["query"])
+        datetime.fromisoformat(row["search"][0]["at"])
+        self.assertIn("来源：https://example.test/article", row["answer"])
+
+    def test_unavailable_search_without_key_is_explained_and_discussion_continues(self):
+        request = {
+            "answer": "需要查一下。",
+            "search": {"query": "external fact"},
+            "user_stance": "neutral",
+        }
+        client = FakeClient([request, result("当前搜索不可用，外部事实仍然未知。")])
+        output = io.StringIO()
+
+        code = run_discuss(
+            self.store, client=client, environ={},
+            read_line=read_lines(["我想核实一个外部事实"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, len(client.messages))
+        self.assertIn("搜索不可用", client.messages[1][-1]["content"])
+        self.assertIn("当前搜索不可用", output.getvalue())
+        self.assertEqual([], self.store.list_candidates())
+        _, records = self.trace_records()
+        self.assertEqual("external fact", records[0]["search"][0]["query"])
+        self.assertEqual([], records[0]["search"][0]["urls"])
+
+    def test_search_is_limited_to_three_per_session_and_model_is_told(self):
+        requests = [
+            {"answer": "search", "search": {"query": f"query {index}"}, "user_stance": "neutral"}
+            for index in range(1, 5)
+        ]
+        client = FakeClient([*requests, result("我不能再搜索，因此外部事实仍未知。")])
+        search_calls = []
+
+        def searcher(query):
+            search_calls.append(query)
+            return [{
+                "title": query, "url": f"https://example.test/{len(search_calls)}",
+                "snippet": "excerpt", "summary": "summary", "content": "", "rerank_score": 0.5,
+            }]
+
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, searcher=searcher,
+            read_line=read_lines(["请查证这个外部问题"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(["query 1", "query 2", "query 3"], search_calls)
+        self.assertEqual(5, len(client.messages))
+        self.assertIn("搜索次数已达上限", client.messages[4][-1]["content"])
+        _, records = self.trace_records()
+        self.assertEqual(3, len(records[0]["search"]))
+        self.assertEqual([], self.store.list_candidates())
+
     def test_injected_reader_and_non_tty_keep_the_existing_line_reader(self):
         injected = lambda prompt: prompt
         with patch("dojo.discuss._load_readline", side_effect=AssertionError("readline must not be loaded")):
@@ -914,7 +1013,7 @@ class DiscussTests(unittest.TestCase):
         self.assertIn(CONCLUSION["statement"], json.dumps(messages, ensure_ascii=False))
         self.assertIn("正在续跑会话", output.getvalue())
 
-    def test_round_context_advances_only_for_nonempty_model_requests(self):
+    def test_discuss_context_has_user_input_without_model_pacing_counts(self):
         client = FakeClient([result("继续了解。"), result("继续了解。")])
         output = io.StringIO()
         code = run_discuss(
@@ -925,8 +1024,10 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertEqual(2, len(client.messages))
         contexts = [turn[-1]["content"] for turn in client.messages]
-        self.assertIn("讨论第 1 轮", contexts[0])
-        self.assertIn("讨论第 2 轮", contexts[1])
+        self.assertIn("用户本轮自然语言输入：\n第一轮", contexts[0])
+        self.assertIn("用户本轮自然语言输入：\n第三个输入", contexts[1])
+        self.assertNotIn("第 1 轮", contexts[0])
+        self.assertNotIn("最多 12 次模型请求", contexts[1])
         self.assertNotIn("用户这一轮没有输入内容", contexts[1])
 
 

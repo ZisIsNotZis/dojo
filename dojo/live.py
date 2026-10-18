@@ -129,6 +129,7 @@ class OpenAICompatibleClient:
         config: LiveConfig,
         *,
         allowed_extra_keys: frozenset[str] = frozenset(),
+        allow_search: bool = False,
         max_answer_chars: int = MAX_ANSWER_CHARS,
         max_completion_chars: int = 8_000,
         max_response_bytes: int = MAX_HTTP_RESPONSE_BYTES,
@@ -142,6 +143,7 @@ class OpenAICompatibleClient:
     ):
         self.config = config
         self.allowed_extra_keys = allowed_extra_keys
+        self.allow_search = allow_search
         self.max_answer_chars = max_answer_chars
         self.max_completion_chars = max_completion_chars
         self.max_response_bytes = max_response_bytes
@@ -257,6 +259,7 @@ class OpenAICompatibleClient:
             )
         validated = _validate_model_content(
             content, allowed_extra_keys=self.allowed_extra_keys,
+            allow_search=self.allow_search,
             max_answer_chars=self.max_answer_chars,
             max_statement_chars=self.max_statement_chars,
             max_field_chars=self.max_field_chars,
@@ -308,6 +311,7 @@ def _validate_model_content(
     content: str,
     *,
     allowed_extra_keys: frozenset[str] = frozenset(),
+    allow_search: bool = False,
     max_answer_chars: int = MAX_ANSWER_CHARS,
     max_statement_chars: int = MAX_CANDIDATE_STATEMENT_CHARS,
     max_field_chars: int = MAX_FIELD_CHARS,
@@ -324,12 +328,17 @@ def _validate_model_content(
             kind="not_json", finish_reason=finish_reason, raw_response=raw_response or content,
             raw_response_limit=raw_response_limit,
         ) from None
-    required_keys = {"answer", "candidate"}
-    if (
-        not isinstance(value, dict)
-        or not required_keys.issubset(value)
-        or not set(value).issubset(required_keys | allowed_extra_keys)
-    ):
+    if not isinstance(value, dict):
+        raise LiveError(
+            "model completion did not match the required response schema; no candidate was saved",
+            kind="schema_violation", finish_reason=finish_reason, raw_response=raw_response or content,
+            raw_response_limit=raw_response_limit,
+        )
+    search_only = allow_search and "search" in value and "candidate" not in value
+    required_keys = {"answer", "search"} if search_only else {"answer", "candidate"}
+    allowed_keys = required_keys | allowed_extra_keys
+    if (not required_keys.issubset(value) or not set(value).issubset(allowed_keys)
+            or ("search" in value and not search_only)):
         raise LiveError(
             "model completion did not match the required response schema; no candidate was saved",
             kind="schema_violation", finish_reason=finish_reason, raw_response=raw_response or content,
@@ -342,6 +351,19 @@ def _validate_model_content(
             kind="schema_violation", finish_reason=finish_reason, raw_response=raw_response or content,
             raw_response_limit=raw_response_limit,
         )
+    if search_only:
+        search_value = value["search"]
+        query = search_value.get("query") if isinstance(search_value, dict) and set(search_value) == {"query"} else None
+        if not isinstance(query, str) or not 1 <= len(query) <= 128 or not query.strip():
+            raise LiveError(
+                "model search query was invalid; no candidate was saved",
+                kind="schema_violation", finish_reason=finish_reason, raw_response=raw_response or content,
+                raw_response_limit=raw_response_limit,
+            )
+        return {
+            **{key: value[key] for key in value if key in allowed_extra_keys},
+            "answer": answer.strip(), "candidate": None, "search": {"query": query},
+        }
     candidate = value["candidate"]
     if candidate is None:
         return {**{key: value[key] for key in value if key in allowed_extra_keys}, "answer": answer.strip(), "candidate": None}
