@@ -137,6 +137,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
     discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
+    discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
 
     packets = sub.add_parser("freeze-materials", help="生成四份冻结模型输入；C 摘录来自真实本地 Store 检索")
@@ -322,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
             return run_discuss(
-                store, config=config, no_trace=args.no_trace,
+                store, config=config, no_trace=args.no_trace, no_profile=args.no_profile,
                 resume=Path(args.resume).expanduser() if args.resume else None,
             )
         if args.command == "compare":

@@ -166,7 +166,10 @@ class OpenAICompatibleClient:
             payload["reasoning_effort"] = self.reasoning_effort
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if len(data) > self.max_request_chars:
-            raise LiveError("chat context exceeds the request budget; no request was sent")
+            raise LiveError(
+                "chat context exceeds the request budget; no request was sent",
+                kind="request_too_large",
+            )
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.config.api_key:
             headers["Authorization"] = "Bearer " + self.config.api_key

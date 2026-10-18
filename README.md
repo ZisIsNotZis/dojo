@@ -24,7 +24,7 @@ python3 -m dojo compare
 
 四条 `seed-m01`–`seed-m04` 是 [`docs/packets/seed-pack-v2.md`](docs/packets/seed-pack-v2.md) 中的模拟材料；`seed` 可重复执行，已有 ID 不覆盖。
 
-默认 SQLite 数据库是 `~/.local/share/dojo/dojo.sqlite3`，程序创建的应用目录为仅当前用户访问（权限 `0700`），数据库文件为 `0600`。可在仓库副本间设置 `DOJO_DB=/private/path/dojo.sqlite3` 或 `--db /private/path/dojo.sqlite3`。数据库只保存用户明确录入的候选、结构化来源摘要、匿名 session ID、版本和事件；**不会录制原始聊天**。导出目录与数据库分离，默认 `~/.local/share/dojo/exports`；可用 `DOJO_EXPORTS` 或 `export --outdir` 调整。导出使用唯一文件名，不覆盖既有文件。
+默认 SQLite 数据库是 `~/.local/share/dojo/dojo.sqlite3`，程序创建的应用目录为仅当前用户访问（权限 `0700`），数据库文件为 `0600`。可在仓库副本间设置 `DOJO_DB=/private/path/dojo.sqlite3` 或 `--db /private/path/dojo.sqlite3`。`discuss` 的可见、可编辑人物档案固定命名为数据库同目录的 `person.md`，首次创建后程序只在末尾追加日期与会话标记的条目，不覆盖用户编辑，文件权限为 `0600`；设置 `DOJO_PERSON=/private/path/person.md` 可改用其他路径。每场默认读取全文并作为上下文发送给模型，也允许模型追加稳定、可复用、非敏感的信息；开场会披露发送行为，`discuss --no-profile` 可让本场既不读取也不写入档案。模型的隐私与敏感信息约束是提示级，不是强制拦截。数据库只保存用户明确录入的候选、结构化来源摘要、匿名 session ID、版本和事件；**不会录制原始聊天**。导出目录与数据库分离，默认 `~/.local/share/dojo/exports`；可用 `DOJO_EXPORTS` 或 `export --outdir` 调整。导出使用唯一文件名，不覆盖既有文件。
 
 用 `python3 -m dojo --help` 查看操作与参数。核心流程示例：
 
