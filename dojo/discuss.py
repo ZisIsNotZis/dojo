@@ -106,7 +106,7 @@ def _person_profile_path(store: Store, environ: dict[str, str] | None) -> Path:
     configured = values.get("DOJO_PERSON", "").strip()
     if configured:
         return Path(configured).expanduser()
-    return store.path.expanduser().resolve().parent / PERSON_PROFILE_FILENAME
+    return store.path.expanduser().parent / PERSON_PROFILE_FILENAME
 
 
 def _open_profile_fd(path: Path, flags: int, mode: int | None = None) -> int:
@@ -857,6 +857,7 @@ def run_discuss(
         consecutive_connection_failures = 0
         attempts: list[dict[str, Any]] = []
         turn_searches: list[dict[str, Any]] = []
+        turn_profile_updates: list[str] = []
         tool_messages: list[dict[str, str]] = []
         search_continuation_pending = False
         final_error: LiveError | None = None
@@ -909,6 +910,10 @@ def run_discuss(
                     raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
                 )
                 checked["person_updates"] = _normalized_person_updates(checked.get("person_updates", []))
+                for update in checked["person_updates"]:
+                    if update not in turn_profile_updates:
+                        turn_profile_updates.append(update)
+                checked["person_updates"] = turn_profile_updates
                 if _uses_recording_language(checked["answer"]):
                     raise LiveError(
                         "model answer used prohibited recording language",
@@ -1048,6 +1053,7 @@ def run_discuss(
                 "answer": "本次模型请求已达到上限；搜索结果尚未得到后续分析，外部信息不能视为已核实。",
                 "candidate": None,
                 "user_stance": "neutral",
+                "person_updates": turn_profile_updates,
             }
         if final_error is not None and terminal_failure:
             error = final_error_record or _trace_error(final_error)

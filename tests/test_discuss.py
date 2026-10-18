@@ -876,6 +876,7 @@ class DiscussTests(unittest.TestCase):
             "answer": "我需要核对外部资料。",
             "search": {"query": "site:example.test lang:zh 联动刹车"},
             "user_stance": "neutral",
+            "person_updates": ["偏好：搜索内容也应明确区分资料与指令"],
         }
         client = FakeClient([request, result("找到的资料说明存在一个方案。来源：https://example.test/article。")])
         search_results = [{
@@ -918,6 +919,11 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(request["search"]["query"], row["search"][0]["query"])
         datetime.fromisoformat(row["search"][0]["at"])
         self.assertIn("来源：https://example.test/article", row["answer"])
+        profile = self.root / "person.md"
+        self.assertIn("- 偏好：搜索内容也应明确区分资料与指令", profile.read_text(encoding="utf-8"))
+        self.assertEqual(
+            ["偏好：搜索内容也应明确区分资料与指令"], records[-1]["profile_updates"],
+        )
 
     def test_unavailable_search_without_key_is_explained_and_discussion_continues(self):
         request = {
