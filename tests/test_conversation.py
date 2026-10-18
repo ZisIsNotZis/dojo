@@ -216,7 +216,7 @@ class ConversationTests(unittest.TestCase):
             content, allowed_extra_keys=frozenset({"user_stance"}), allow_search=True,
         )
         self.assertEqual(query, checked["search"]["query"])
-        self.assertIsNone(checked["candidate"])
+        self.assertNotIn("candidate", checked)
         with LocalMockEndpoint([endpoint_response(content)]) as endpoint:
             client = OpenAICompatibleClient(
                 LiveConfig(endpoint.base_url, "test-model", None),

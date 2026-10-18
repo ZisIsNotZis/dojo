@@ -362,7 +362,7 @@ def _validate_model_content(
             )
         return {
             **{key: value[key] for key in value if key in allowed_extra_keys},
-            "answer": answer.strip(), "candidate": None, "search": {"query": query},
+            "answer": answer.strip(), "search": {"query": query},
         }
     candidate = value["candidate"]
     if candidate is None:
