@@ -1,11 +1,10 @@
 # 当前工作入口
 
-- **M1 `discuss` 已交付待验收**；M5 的反奉承探针已提前跑完（里程碑重排，已在 plan.md 报备）。
-- HEAD：`master` @ `1702bbd`，未 push。
-- 52 项标准库测试通过。
-- 评审历史：M1 两轮（FAIL→PASS）；consent 门控三轮（FAIL→FAIL→PASS-WITH-RISK）。
-- 残余风险已记入 `docs/product.md` 的“已知的条件保证”：门控依赖模型正确报告 `user_stance`。
-- 玩家入口：`DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_LLM_MODEL=github_copilot/gpt-6-luna python3 -m dojo --db /tmp/play.sqlite3 discuss`
-- 证据：`docs/evidence/m1-discuss/`、`docs/evidence/m5-sycophancy/`（含失败重放记录，勿删）。
-- 下一步（需用户验收）：M2（会话末提炼管线）、M3（广播转述）、M4（manifest）；M5 正式交付需补“模型误报 accept”负控制。
+- `discuss` 已可日常使用：行编辑、隐形记录、失败重试、续跑、搜索、人物档案。
+- HEAD：`master` @ `628e9ff`（另有未合并前的分支记录在 git 中）；未 push。
+- 93 项标准库测试通过。
+- 用户可玩：`python3 -m dojo --db /tmp/play.sqlite3 discuss`；续跑加 `--resume <轨迹>`；关档案加 `--no-profile`。
+- 证据目录：`docs/evidence/m1*`、`m2.0-stance-search`、`m2.1-person-profile`（含失败记录，勿删）。
+- 已确认但仍未实现：M2 会话末提炼管线、M3 广播转述、M4 manifest、实验 harness（障碍清单→批量验证）、M5「模型误报 accept」负控制。
+- 提示级（非强制）约束：人物档案敏感信息、搜索 query 隐私。
 - 新会话先刷新适用 `AGENTS.md`，按当前 Eager／自动执行模式边界恢复，保留全部未跟踪工作。

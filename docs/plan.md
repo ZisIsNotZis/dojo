@@ -84,11 +84,11 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 ## 当前基线
 
-- 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、M1 的 `discuss`。
-- 51 项标准库测试通过。
-- M1 已交付，两轮独立评审通过（首轮 FAIL 于 EOF 未表态写入）。
-- 反奉承探针（M5 前置部分）已跑：A/B/C 三个对抗场景均未让步，均落库为带边界版本；但样本极小，不构成普遍可靠性证明。
-- `discuss` 写入条件为已有 pending、当轮候选与其完全相同且 `user_stance=accept`；`objection_gate` 已删除。经三轮独立评审（FAIL → FAIL → PASS-WITH-RISK）。残余风险：模型可能误报 `user_stance`，已记入 `product.md` 的“已知的条件保证”。
-- 本轮为 `discuss` 放宽输入侧安全包络：单轮用户输入至 65,536 字、历史保留至 256 条消息、序列化请求体至 1,000,000 字节，避免短阈值拒绝长表达或裁掉早期异议；`chat` 的既有 1,600 字、8 条历史与 26,000 字节请求限制不变。每场 12 次模型请求仍是会话长度预算，到上限时未获明确认可的结论不写入。
-- 已知缺口：管线（M2）、广播转述（M3）、manifest（M4）未实现；M5 尚未正式交付，其“模型误报 accept”负控制未做。
+- 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、`discuss`（含搜索工具与人物档案）。
+- 93 项标准库测试通过。
+- `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `low`。
+- 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
+- 写入条件：模型判定双方已收敛时静默写入；空行与 EOF 不写入。
+- 已知缺口：会话末提炼管线（M2）、广播转述（M3）、manifest（M4）未实现；实验 harness（障碍清单 → 批量验证）仅完成设计讨论，未实现；人物档案与搜索 query 的敏感信息约束是**提示级**，无强制执行。
 - 见 `../.scratch/active-work.md` 获取恢复入口。
+
