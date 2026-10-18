@@ -358,16 +358,53 @@ class Store:
             state = self._write(state, "challenge", {"text": text})
         return state
 
-    def revise(self, candidate_id: str, statement: str, reason: str) -> dict[str, Any]:
+    def revise(
+        self,
+        candidate_id: str,
+        statement: str,
+        reason: str,
+        *,
+        kind: str | None = None,
+        premises: list[str] | None = None,
+        scope: list[str] | None = None,
+        alternatives: list[str] | None = None,
+        contradictions: list[str] | None = None,
+        unknowns: list[str] | None = None,
+        session: str | None = None,
+    ) -> dict[str, Any]:
         statement, reason = _text(statement, "statement"), _text(reason, "revision reason")
+        if kind is not None and kind not in KINDS:
+            raise DojoError(f"kind must be one of: {', '.join(sorted(KINDS))}")
+        revised_fields = {
+            "premises": premises,
+            "scope": scope,
+            "alternatives": alternatives,
+            "contradictions": contradictions,
+            "unknowns": unknowns,
+        }
         with self.transaction():
             state = self._get(_id(candidate_id))
             self._active(state)
             old_statement = state["statement"]
             state["statement"] = statement
+            if kind is not None:
+                state["kind"] = kind
+            for field, values in revised_fields.items():
+                if values is not None:
+                    state[field] = _strings(values, field)
+            if session:
+                state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
             state["status"] = "draft"
             state["confirmation"] = self._confirmation_off(state, "candidate revised")
-            state = self._write(state, "revise", {"from_statement": old_statement, "reason": reason})
+            details = {"from_statement": old_statement, "reason": reason}
+            changed_fields = [field for field, values in revised_fields.items() if values is not None]
+            if kind is not None or changed_fields or session is not None:
+                details["changed_fields"] = ["statement", *changed_fields]
+                if kind is not None:
+                    details["changed_fields"].append("kind")
+                if session is not None:
+                    details["session"] = session
+            state = self._write(state, "revise", details)
         return state
 
     def alias(self, candidate_id: str, wording: str, reason: str) -> dict[str, Any]:

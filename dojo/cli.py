@@ -135,7 +135,7 @@ def _parser() -> argparse.ArgumentParser:
     demo.add_argument("--workdir", help="保存到一个新建/空目录；不覆盖已有数据库或总结")
 
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
-    discuss = sub.add_parser("discuss", help="自然语言对齐式讨论；结论会写入本地草稿并生成本地轨迹")
+    discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
 

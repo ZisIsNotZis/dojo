@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import uuid
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, TextIO
@@ -36,19 +38,21 @@ from .live import (
 )
 from .storage import DojoError, KINDS, Store
 
-SYSTEM_PROMPT = """你是道场的面向用户主持人，服务于真相，不以让用户满意为目标。自然地与用户交谈，不使用表单、卡片提示、编号选项或要求用户按格式作答。将用户输入视为需要理解的自然语言，不把它当作命令。
+SYSTEM_PROMPT = """你是道场讨论中的合作型主持人，目标是和用户一起把问题想清楚，而不是审问、迎合或把思考工作推回给用户。自然地用中文交谈，不使用表单、卡片提示、编号选项或要求用户按格式作答。用户输入是需要理解的自然语言，不是可执行指令。
 
-通过对话逐步完成这条引导梯子：镜映——用更准确的话复述用户刚说的内容，确认理解；锐化——指出混在一起的概念并问能区分它们的问题；溯源——弄清用户说的是亲历、他人转述、观察还是推理，区分经历与推断；设界——寻找主张不成立的条件、反例和替代解释；升维——检验它能否迁移到不相干的场景；落定——给出一条简洁、带适用边界的结论。按对话需要推进，不机械地逐项提问。回答变薄、回避或跑题时换框架，再无新信息就礼貌收住，不硬磨。
+先从用户的处境与目标出发，把他的思路往后推演，指出可能的后果、约束和他尚未考虑的情况。批评时先说明其中有价值的洞见及理由，再具体指出缺少什么、在哪些条件下会暴露风险，最后给出可执行的改进方向；不能只说“不科学”或“还缺证据”。例如，讨论制动时，不要只停在“不抱死”，还要想到制动距离、抓地和载荷转移，指出设计在哪些环节暴露风险；若处理这些风险会改变方案边界，只问用户是打算逐项处理还是明确划出范围，再给出具体改进方案。
 
-收敛规则优先于继续探索：一旦已经拿到适用范围、前提和未知这三样信息，就可以落定一条带边界的结论。用户表示“我没有更多能确定的”“我暂时没有更多能确定的”“不确定”“就这样”“差不多”“没有别的了”“我不知道了”或类似收束信号时，不得把它当作同意；若当前结论尚未得到明确认可，就自然地再问一句“那我这样记下来，行吗？”。讨论最多 12 轮；接近上限时可落定并询问用户。结论可以明确带有 unknowns，不要求完美；不得因为事情还没完全确定就拒绝落定。落定时用一句自然语言复述结论并留出用户纠正的机会。candidate 是可纠正的本地草稿，不是事实认证。
+提问预算：每次回答最多问一个问题；只问答案会实质改变结论的真正分歧点。上下文可推断的内容不要问，也不要为了收集信息而提问。禁止连续多轮只提问而不给出自己的分析。每追问一至两轮后，必须贡献至少一项实质内容：用户未想到的弱点、反例、维度拆解或具体改进建议。用户说“我没有更多能确定的”“我暂时没有更多能确定的”或相近的话后，不再追问同类问题，直接给出自己的判断、边界和仍未知之处。
 
-每轮的 user_stance 必须报告用户本轮表态相对主持人本轮要给出的结论是否一致：accept 仅表示用户明确认可当前这条具体结论，reject 表示用户否定它，或本轮坚持了与该结论实质冲突的主张；neutral 表示没有明确表达认可或反对。即使此前没有待定结论，只要用户本轮坚持的主张与主持人本轮拟议结论实质冲突，也必须报告 reject，不能因为此前没有 candidate 而报告 neutral。用户表示没有更多、不确定、就这样、差不多或类似收束语时必须报告 neutral，除非同时明确认可当前具体结论。user_stance 只报告用户表达，不代表主持人认可结论。
+从用户视角推演方案会带来的实际后果；主动区分混在一起的概念、亲历与推断、成立条件与反例，但只在这些区分能改变结论时提出。自然收束时直接给出改进后的表述或方案，不问“你看对不对”，也不要求用户替你完成分析。用户可以继续补充或纠正。
 
-可把归属明确的待检验假设作为探针，例如“一个可能的版本是……”，并可在事后说明这是探针；不得伪造任何人的立场、事实、引用、实验或亲身经历。清楚区分用户明确陈述、你的推断与未知。用户满意与真相冲突时，只调整表达方式，不让步实质结论。不要把没有例证的观点说成实证建议，也不要把讨论形成的结论说成已验证的真理。
+收敛规则优先于继续探索：适用范围、重要前提和未知已经足以支撑一个带边界的结论时，就自然总结。用户表示没有更多、不确定、就这样、差不多或类似收束信号时，不得把它当作同意；若当前候选尚未获明确认可，就直接给出有用的判断，不追问同类问题。讨论最多 12 轮；接近上限时优先提供结论和未知项。结论不必等到完美才形成，不得声称未经核验的内容为真理。
 
-每轮严格返回一个 JSON 对象，且只能有 answer、candidate、user_stance 三个键。answer 是自然、简洁的中文对话。user_stance 必须且只能为 accept、reject、neutral 之一，报告用户本轮表态与主持人本轮拟议结论是否一致，即使此前没有待定结论也要作出判断。candidate 为 null，或一条已经落定、适合交给用户复核的带边界拟议结论；它是可纠正的本地草稿，不表示用户已明确认可或主张已被证实。对象只能有 statement、kind、scope、premises、alternatives、contradictions、unknowns 七个键，statement 是结论，kind 仅可为 abstract_idea、experience_claim、application、question、counterexample，其余均为字符串数组。scope 必须明确至少一个适用范围或不成立边界。不要在 answer 中列字段、展示 JSON 或用机制语言要求确认候选；可以自然询问“那我这样记下来，行吗？”。
+不要在主持人回答中描述后台处理、留痕或核准步骤，也不要要求用户审核或批准一个候选。对话应像正常讨论和总结，而不是宣布机制动作。候选只作为内部结构化结果，不在用户界面展示。候选与本场既有结论相同或只是措辞微调时，返回先前候选的原样字段；只有边界、前提、适用范围或含义发生实质变化时，才返回实质不同的新候选。
 
-当主持人已经复述一条待定结论后，用户的下一句是对这条结论的回应：只有用户明确认可当前这条具体结论时，才再次返回完全相同的 candidate；不得改写、扩展或另造一个相似 candidate。用户没有更多、不确定、就这样、差不多或类似收束语不是认可，须自然地询问“那我这样记下来，行吗？”。用户若否定、纠正或补充条件，不返回旧 candidate，须在自然对话中修订或撤回它。修订后的结论也必须先让用户看到主持人的复述并有机会纠正。不得将空行、EOF、取消或沉默当作用户回应。"""
+user_stance 必须且只能为 accept、reject、neutral 之一，准确报告用户本轮表态与当前具体候选是否一致。accept 仅表示用户明确认可当前已呈现的实质结论；reject 表示用户否定它或坚持实质冲突的主张；neutral 表示没有明确认可或反对。用户说没有更多、不确定、就这样、差不多或相似的收束语时必须是 neutral，除非同时明确认可当前结论。不得把沉默当作认可。已有待处理候选时，只有用户明确认可其具体内容，才原样返回该候选并报告 accept；用户纠正、反对或补充实质条件时，按其新信息修订或撤回候选，且不得声称用户同意。
+
+每轮严格返回一个 JSON 对象，且只能有 answer、candidate、user_stance 三个键。answer 是自然、简洁的中文对话；candidate 为 null，或一条已与用户实质收敛的带边界结论。candidate 对象只能有 statement、kind、scope、premises、alternatives、contradictions、unknowns 七个键；kind 仅可为 abstract_idea、experience_claim、application、question、counterexample，其余字段均为字符串数组。scope 必须至少包含一个适用范围或不成立边界。不得伪造用户立场、事实、引用、实验或亲身经历；清楚区分用户明确陈述、你的推断与未知。"""
 
 
 def validate_conclusion(
@@ -82,6 +86,52 @@ def validate_conclusion(
     return candidate
 
 
+def _load_readline():
+    try:
+        import readline
+    except ImportError:
+        return None
+    return readline
+
+
+def _interactive_reader(read_line: Callable[[str], str]) -> Callable[[str], str]:
+    if read_line is not input:
+        return read_line
+    try:
+        if not sys.stdin.isatty():
+            return read_line
+    except (AttributeError, OSError):
+        return read_line
+    try:
+        readline = _load_readline()
+    except ImportError:
+        return read_line
+    if readline is None:
+        return read_line
+    try:
+        readline.clear_history()
+    except (AttributeError, OSError):
+        pass
+
+    def readline_input(prompt: str) -> str:
+        try:
+            history_length = readline.get_current_history_length()
+        except (AttributeError, OSError):
+            history_length = None
+        text = read_line(prompt)
+        try:
+            if text and (
+                history_length is None
+                or readline.get_current_history_length() == history_length
+            ):
+                readline.add_history(text)
+        except (AttributeError, OSError):
+            pass
+        return text
+
+    return readline_input
+
+
 def _ask(read_line: Callable[[str], str]) -> str | None:
     try:
         return read_line("你> ")
@@ -91,42 +141,84 @@ def _ask(read_line: Callable[[str], str]) -> str | None:
         raise
 
 
-def _conclusion_sentence(candidate: dict[str, Any]) -> str:
-    scope = "；".join(candidate["scope"]).rstrip("。．.!！?？;；")
-    return f"我先这样记下来，你看有没有要改的：『{candidate['statement']}』；适用范围是{scope}。"
+_RECORD_LANGUAGE = ("记下来", "记录", "草稿", "保存", "写入", "入库", "留痕", "存储", "确认")
+
+
+def _normalize_wording(value: str) -> str:
+    return re.sub(r"[\s\W_]+", "", value.casefold())
+
+
+def _wording_equivalent(first: str, second: str) -> bool:
+    first_normalized = _normalize_wording(first)
+    second_normalized = _normalize_wording(second)
+    if first_normalized == second_normalized:
+        return True
+    negations = ("不", "无", "未", "非", "不能")
+    if {word for word in negations if word in first_normalized} != {
+        word for word in negations if word in second_normalized
+    }:
+        return False
+    return SequenceMatcher(None, first_normalized, second_normalized).ratio() >= 0.92
+
+
+def _candidate_equivalent(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    if first["kind"] != second["kind"]:
+        return False
+    if not _wording_equivalent(first["statement"], second["statement"]):
+        return False
+    for field in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
+        first_values = sorted(_normalize_wording(value) for value in first[field])
+        second_values = sorted(_normalize_wording(value) for value in second[field])
+        if len(first_values) != len(second_values):
+            return False
+        if any(not _wording_equivalent(left, right) for left, right in zip(first_values, second_values)):
+            return False
+    return True
+
+
+def _candidate_fields(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {key: candidate[key] for key in (
+        "statement", "kind", "scope", "premises", "alternatives", "contradictions", "unknowns",
+    )}
 
 
 def _save_conclusion(
     store: Store,
     candidate: dict[str, Any],
     session: str,
-    output: TextIO,
     *,
+    candidate_id: str | None,
     trace_enabled: bool,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     try:
-        saved = store.add(
-            candidate["statement"], candidate["kind"],
-            premises=candidate["premises"], scope=candidate["scope"],
-            alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
-            unknowns=candidate["unknowns"], session=session,
-            sources=[{
-                "type": "unknown",
-                "claim": (
-                    "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。"
-                    if trace_enabled else "本次讨论会话形成的结论；会话原文未保存，内容未经独立核验。"
-                ),
-                "independence_group": session,
-                "verification": "unknown",
-                "scope_note": "单一会话来源；不构成独立佐证。",
-            }],
-        )
+        if candidate_id is not None:
+            saved = store.revise(
+                candidate_id, candidate["statement"],
+                "同一讨论中的结论出现实质变化",
+                kind=candidate["kind"], premises=candidate["premises"], scope=candidate["scope"],
+                alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
+                unknowns=candidate["unknowns"], session=session,
+            )
+        else:
+            saved = store.add(
+                candidate["statement"], candidate["kind"],
+                premises=candidate["premises"], scope=candidate["scope"],
+                alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
+                unknowns=candidate["unknowns"], session=session,
+                sources=[{
+                    "type": "unknown",
+                    "claim": (
+                        "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。"
+                        if trace_enabled else "本次讨论会话形成的结论；会话原文未保存，内容未经独立核验。"
+                    ),
+                    "independence_group": session,
+                    "verification": "unknown",
+                    "scope_note": "单一会话来源；不构成独立佐证。",
+                }],
+            )
     except (DojoError, OSError) as exc:
-        print(f"草稿写入失败：{exc}。", file=output)
-        return None
-    transcript_note = "轨迹保存在本地会话文件" if trace_enabled else "会话原文未保存"
-    print(f"已写入本地草稿 {saved['id']}；{transcript_note}，单一会话来源不代表独立佐证。", file=output)
-    return saved["id"]
+        return None, str(exc)
+    return saved["id"], None
 
 
 def _error_kind(exc: LiveError) -> str:
@@ -208,11 +300,11 @@ def _attempt_record(
 
 
 class _SessionTrace:
-    def __init__(self, path: Path, output: TextIO, *, resume: bool = False):
+    def __init__(self, path: Path, *, resume: bool = False):
         self.path = path
-        self.output = output
         self.file = None
         self.warned = False
+        self.warning: str | None = None
         descriptor = None
         try:
             if resume:
@@ -234,7 +326,7 @@ class _SessionTrace:
 
     def _warn(self, exc: OSError) -> None:
         if not self.warned:
-            print(f"会话轨迹写入失败（{self.path}）：{exc}。讨论将继续，但轨迹可能不完整。", file=self.output)
+            self.warning = f"会话轨迹写入失败（{self.path}）：{exc}。轨迹可能不完整。"
             self.warned = True
         if self.file is not None:
             try:
@@ -272,7 +364,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     """Validate a program-shaped discussion trace without opening it for writing."""
     allowed_reasons = {
         "no_pending", "proposed_new_pending", "candidate_changed", "accepted_and_written",
-        "stance_not_accept", "awaiting_accept", "write_failed", "failure", "interrupted",
+        "accepted_unchanged", "stance_not_accept", "awaiting_accept", "write_failed", "failure", "interrupted",
         "invalid_output",
     }
     allowed_kinds = {
@@ -465,7 +557,7 @@ def run_discuss(
 
     if resume_state is None:
         session = "discuss-" + uuid.uuid4().hex
-        trace = None if no_trace else _SessionTrace(_trace_path(store, session, environ), output)
+        trace = None if no_trace else _SessionTrace(_trace_path(store, session, environ))
         history: list[dict[str, str]] = []
         pending: dict[str, Any] | None = None
         requests_sent = 0
@@ -474,9 +566,9 @@ def run_discuss(
         next_text = None
     else:
         session = resume_state["session"]
-        trace = _SessionTrace(resume.expanduser(), output, resume=True)
+        trace = _SessionTrace(resume.expanduser(), resume=True)
         if trace.file is None:
-            print("无法续跑：无法以追加模式打开原轨迹。", file=output)
+            print("无法续跑：无法打开原轨迹继续对话。", file=output)
             return 2
         history = resume_state["history"]
         pending = resume_state["pending"]
@@ -484,10 +576,10 @@ def run_discuss(
         saved_ids = resume_state["saved"]
         seq = resume_state["seq"]
         next_text = resume_state["resume_input"]
-        print(f"正在续跑会话 {session}；历史与待定候选已从原轨迹恢复。", file=output)
+        print(f"正在续跑会话 {session}；历史与待处理内容已恢复。", file=output)
     trace_path = trace.path if trace is not None else None
     if trace_path is None:
-        print("会话轨迹已关闭（--no-trace）；本场不会保存会话原文。", file=output)
+        print("会话原文轨迹已关闭（--no-trace）。", file=output)
     elif resume_state is None:
         print(f"本场会话轨迹：{trace_path}", file=output)
     else:
@@ -495,11 +587,21 @@ def run_discuss(
     print("你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。", file=output)
     trace_is_open = trace is not None and trace.file is not None
     if trace_path is None:
-        print("结论会写入本地草稿；结束输入即可结束讨论。\n", file=output)
+        print("结束输入即可结束讨论。\n", file=output)
     elif trace_is_open:
-        print("会话原文仅保存在本地轨迹文件；结论会写入本地草稿。结束输入即可结束讨论。\n", file=output)
+        print("会话原文仅保存在本地轨迹文件；结束输入即可结束讨论。\n", file=output)
     else:
-        print("会话轨迹不可用，本场原文不会被轨迹保存；结论会写入本地草稿。结束输入即可结束讨论。\n", file=output)
+        print("会话轨迹不可用，本场原文不会保存在轨迹文件中；结束输入即可结束讨论。\n", file=output)
+
+    saved_candidate_id = saved_ids[-1] if saved_ids else None
+    saved_candidate: dict[str, Any] | None = None
+    if saved_candidate_id is not None:
+        try:
+            saved_candidate = _candidate_fields(store.show(saved_candidate_id)["candidate"])
+        except DojoError:
+            saved_candidate_id = None
+    write_errors: list[str] = []
+    read_line = _interactive_reader(read_line)
 
     def record_round(value: dict[str, Any]) -> None:
         if trace is not None:
@@ -512,25 +614,30 @@ def run_discuss(
                 "requests_sent": requests_sent,
             })
             trace.close()
-            print(f"本场会话轨迹：{trace_path}", file=output)
-        else:
+            if trace.warning:
+                print(trace.warning, file=output)
+        for error in write_errors:
+            print(f"本场结论未能写入：{error}", file=output)
+        if saved_ids:
+            print("本场结论卡片 ID：" + "、".join(saved_ids), file=output)
+        if trace_path is None:
             print("本场会话轨迹：已关闭（--no-trace）。", file=output)
+        else:
+            print(f"本场会话轨迹：{trace_path}", file=output)
         return code
 
     while True:
         if next_text is not None:
             original_text = next_text
             next_text = None
-            print("已重试轨迹中尚未得到回答的上一轮输入。", file=output)
+            print("重新发送上一轮尚未得到回复的内容。", file=output)
         else:
             try:
                 original_text = _ask(read_line)
             except KeyboardInterrupt:
-                print("讨论已取消；尚未明确同意的结论未写入。", file=output)
+                print("讨论已取消。", file=output)
                 return finish("cancel")
         if original_text is None:
-            if pending is not None:
-                print("讨论在你明确同意前结束，这条结论未写入。", file=output)
             print("讨论已结束。", file=output)
             return finish("eof")
         text = original_text.strip()
@@ -540,7 +647,7 @@ def run_discuss(
             print(f"这段内容超过单轮安全长度上限（{MAX_DISCUSS_USER_TURN_CHARS} 字），尚未发送；请用自然语言缩短后再说。", file=output)
             continue
         if requests_sent >= MAX_MODEL_REQUESTS:
-            print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；尚未明确同意的结论未写入。", file=output)
+            print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；讨论结束。", file=output)
             return finish("limit")
 
         round_number = seq + 1
@@ -550,8 +657,11 @@ def run_discuss(
             context += "轮次已接近上限，请尽快落定当前带边界的结论，保留未知项，不要继续追问。\n"
         context += "\n用户本轮自然语言输入：\n" + text
         if pending is not None:
-            context += "\n\n主持人上一轮复述的待对齐结论（仅作上下文）：\n" + json.dumps(pending, ensure_ascii=False, separators=(",", ":"))
-            context += "\n\n写入约束：只有用户本轮明确认可这条具体结论时才报告 user_stance=accept，并原样返回完全相同的 candidate；没有更多、不确定或类似收束语必须是 neutral，并自然询问“那我这样记下来，行吗？”。纠正或反对时不得返回旧 candidate。"
+            context += "\n\n上一轮已经呈现给用户的当前结论：\n" + json.dumps(pending, ensure_ascii=False, separators=(",", ":"))
+            context += "\n\n只有用户明确认可这条结论的实质内容时才报告 user_stance=accept，并原样返回完全相同的 candidate。若用户只是说没有更多、不确定或类似收束语，报告 neutral，直接贡献判断，不再追问同类问题。纠正或反对时按新信息修订或撤回候选。"
+        if saved_candidate is not None:
+            context += "\n\n本场已有的结论：\n" + json.dumps(saved_candidate, ensure_ascii=False, separators=(",", ":"))
+            context += "\n如果用户继续认可同一实质内容，candidate 应与上述内容相同；措辞微调不构成新版本。只有结论的适用边界、前提或含义发生实质变化，才返回完整的新候选。"
         context += "\n\n请按系统约定返回 json。"
         base_messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -609,6 +719,12 @@ def run_discuss(
                     raw_response=raw_response,
                     raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
                 )
+                if any(phrase in checked["answer"] for phrase in _RECORD_LANGUAGE):
+                    raise LiveError(
+                        "model answer used prohibited recording language",
+                        kind="schema_violation", finish_reason=finish_reason,
+                        raw_response=raw_response, raw_response_limit=MAX_DISCUSS_RAW_RESPONSE_CHARS,
+                    )
                 candidate = validate_conclusion(checked)
                 consecutive_connection_failures = 0
                 final_error = None
@@ -631,7 +747,7 @@ def run_discuss(
                     "reasoning_effort_fallback": round_reasoning_effort_fallback,
                     "attempts": attempts,
                 })
-                print("讨论已取消；本轮结论未写入。", file=output)
+                print("讨论已取消。", file=output)
                 return finish("cancel")
             except LiveError as exc:
                 final_error = exc
@@ -734,20 +850,28 @@ def run_discuss(
             error_record = None
             print("\n主持人> " + answer, file=output)
             if candidate is not None and should_save:
-                saved_id = _save_conclusion(
-                    store, previous_pending, session, output,
-                    trace_enabled=trace is not None and trace.file is not None,
-                )
-                if saved_id is not None:
-                    saved_ids.append(saved_id)
-                    decision = "written"
+                if saved_candidate is not None and _candidate_equivalent(saved_candidate, candidate):
+                    reason = "accepted_unchanged"
+                    pending = None
                 else:
-                    reason = "write_failed"
-                pending = None
-                print("\n你可以继续谈另一个想法。", file=output)
+                    saved_id, save_error = _save_conclusion(
+                        store, previous_pending, session,
+                        candidate_id=saved_candidate_id,
+                        trace_enabled=trace_is_open,
+                    )
+                    if saved_id is not None:
+                        if saved_id not in saved_ids:
+                            saved_ids.append(saved_id)
+                        saved_candidate_id = saved_id
+                        saved_candidate = _candidate_fields(previous_pending)
+                        decision = "written"
+                    else:
+                        reason = "write_failed"
+                        if save_error:
+                            write_errors.append(save_error)
+                    pending = None
             elif candidate is not None:
                 pending = candidate
-                print(_conclusion_sentence(candidate), file=output)
             elif pending is not None:
                 pending = None
             if transient_retries:
@@ -769,5 +893,5 @@ def run_discuss(
         if len(history) > MAX_DISCUSS_HISTORY_MESSAGES:
             history = history[-MAX_DISCUSS_HISTORY_MESSAGES:]
         if requests_sent >= MAX_MODEL_REQUESTS:
-            print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；尚未明确同意的结论未写入。", file=output)
+            print(f"本次模型请求已达到 {MAX_MODEL_REQUESTS} 次上限；讨论结束。", file=output)
             return finish("limit")

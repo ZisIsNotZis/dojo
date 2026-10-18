@@ -1,13 +1,25 @@
+import fcntl
 import io
 import json
+import os
+import pty
+import select
 import stat
+import struct
+import sys
 import tempfile
+import termios
+import time
+import tty
 import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from dojo.discuss import SYSTEM_PROMPT, _conclusion_sentence, _trace_error, run_discuss, validate_conclusion
+from dojo.discuss import (
+    SYSTEM_PROMPT, _candidate_equivalent, _interactive_reader, _load_readline, _trace_error,
+    run_discuss, validate_conclusion,
+)
 from dojo.live import MAX_DISCUSS_ERROR_DETAIL_CHARS, MAX_DISCUSS_RAW_RESPONSE_CHARS, LiveConfig, LiveError
 from dojo.storage import Store
 
@@ -21,6 +33,8 @@ CONCLUSION = {
     "contradictions": ["第一步仍不清楚时，缩小任务未必有帮助"],
     "unknowns": ["这种做法对该用户是否有效尚未验证"],
 }
+
+FORBIDDEN_HOST_LANGUAGE = ("记下来", "记录", "草稿", "保存", "写入", "入库", "留痕", "存储", "确认")
 
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
@@ -72,6 +86,12 @@ class DiscussTests(unittest.TestCase):
         path = next((self.root / "sessions").glob("*.jsonl"))
         return path, [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
+    def assert_clean_discuss_output(self, output: str):
+        cleaned = output.replace("会话原文仅保存在本地轨迹文件", "")
+        for term in FORBIDDEN_HOST_LANGUAGE:
+            with self.subTest(term=term):
+                self.assertNotIn(term, cleaned)
+
     def test_conclusion_validation_requires_storage_fields_kind_and_scope(self):
         self.assertEqual(CONCLUSION, validate_conclusion(result("对话", CONCLUSION)))
         self.assertIsNone(validate_conclusion(result("继续了解")))
@@ -90,7 +110,7 @@ class DiscussTests(unittest.TestCase):
     def test_explicit_acceptance_writes_immediately_and_trace_has_complete_rounds(self):
         client = FakeClient([
             result("我听到你开始时常被任务太大卡住。", CONCLUSION),
-            result("好，我会按这条具体表述记下来。", CONCLUSION, user_stance="accept"),
+            result("这准确表达了你想解决的困难。", CONCLUSION, user_stance="accept"),
         ])
         answers = iter(["  我总在开始动手前就拖延。  ", "是的，这准确表达了我的意思。"])
         prompt_calls = 0
@@ -100,6 +120,8 @@ class DiscussTests(unittest.TestCase):
             prompt_calls += 1
             if prompt_calls == 3:
                 self.assertEqual(1, len(self.store.list_candidates()), "acceptance must save before the next prompt")
+                self.assertNotIn("本场结论卡片 ID", output.getvalue())
+                self.assert_clean_discuss_output(output.getvalue())
                 raise EOFError
             return next(answers)
 
@@ -137,11 +159,13 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual([saved[0]["id"]], end["saved"])
         self.assertEqual(2, end["requests_sent"])
         self.assertIn(str(path), output.getvalue())
+        self.assertIn(saved[0]["id"], output.getvalue())
+        self.assert_clean_discuss_output(output.getvalue())
 
     def test_empty_line_skips_model_and_trace_then_explicit_acceptance_saves(self):
         client = FakeClient([
             result("先形成一条待复核结论。", CONCLUSION),
-            result("你明确认可这条结论，我会记下来。", CONCLUSION, user_stance="accept"),
+            result("这条表述与你刚才说的意思一致。", CONCLUSION, user_stance="accept"),
         ])
         output = io.StringIO()
         code = run_discuss(
@@ -177,8 +201,8 @@ class DiscussTests(unittest.TestCase):
 
     def test_closure_or_uncertainty_is_not_acceptance(self):
         client = FakeClient([
-            result("先形成一条待复核结论。", CONCLUSION),
-            result("那我这样记下来，行吗？", CONCLUSION, user_stance="neutral"),
+            result("先形成一条结论并说明它的边界。", CONCLUSION),
+            result("关键判断是，启动困难不一定来自任务规模；疲劳与目标认同仍是未知原因。", CONCLUSION, user_stance="neutral"),
         ])
         output = io.StringIO()
 
@@ -189,7 +213,8 @@ class DiscussTests(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertEqual([], self.store.list_candidates())
-        self.assertIn("那我这样记下来，行吗？", output.getvalue())
+        self.assertIn("关键判断是，启动困难不一定来自任务规模", output.getvalue())
+        self.assert_clean_discuss_output(output.getvalue())
         _, records = self.trace_records()
         self.assertEqual("awaiting_accept", records[1]["reason"])
         self.assertEqual("none", records[1]["decision"])
@@ -203,7 +228,7 @@ class DiscussTests(unittest.TestCase):
         client = FakeClient([
             result("先形成一条待复核结论。", CONCLUSION),
             result("你指出了重要边界，我调整结论。", revised, user_stance="reject"),
-            result("这样我就按这个带边界的版本记录。", revised, user_stance="accept"),
+            result("你补充的疲劳边界已经包含在这版判断里。", revised, user_stance="accept"),
         ])
         output = io.StringIO()
         code = run_discuss(
@@ -220,12 +245,89 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual("candidate_changed", records[1]["reason"])
         self.assertEqual("written", records[2]["decision"])
 
+    def test_material_change_revises_the_session_card_instead_of_adding_another(self):
+        revised = {
+            **CONCLUSION,
+            "statement": "若拖延并非主要来自疲劳或目标不认同，把任务缩成第一步可能降低启动阻力。",
+            "scope": ["目标明确且疲劳或目标不认同不是主要原因时"],
+            "unknowns": ["这种做法对该用户是否有效尚未验证", "主要拖延原因尚未独立核实"],
+        }
+        client = FakeClient([
+            result("任务过大是一个可能原因，疲劳仍需区分。", CONCLUSION),
+            result("你的回应支持先尝试这条边界清楚的判断。", CONCLUSION, user_stance="accept"),
+            result("疲劳因素改变了适用边界，这里应把它写进判断。", revised),
+            result("这版把疲劳作为边界，与你补充的情况一致。", revised, user_stance="accept"),
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines(["提出一个想法", "这正是我的意思", "补充疲劳不是主因", "对，这个边界准确"]),
+            output=output,
+        )
+
+        self.assertEqual(0, code)
+        listed = self.store.list_candidates()
+        self.assertEqual(1, len(listed))
+        state = self.store.show(listed[0]["id"])["candidate"]
+        self.assertEqual(2, state["version"])
+        self.assertEqual(revised["statement"], state["statement"])
+        self.assertEqual(revised["scope"], state["scope"])
+        self.assertEqual(revised["unknowns"], state["unknowns"])
+        self.assertEqual(1, len(state["sessions"]))
+        versions = self.store.history(state["id"])["versions"]
+        self.assertEqual([1, 2], [item["version"] for item in versions])
+        _, records = self.trace_records()
+        self.assertEqual([state["id"]], records[-1]["saved"])
+        self.assertEqual("written", records[3]["decision"])
+        self.assertIn(state["id"], output.getvalue())
+
+    def test_minor_wording_change_does_not_create_another_session_version(self):
+        wording = {**CONCLUSION, "statement": "开始前把任务缩成可执行的第一步，可能降低启动阻力。"}
+        client = FakeClient([
+            result("你描述的是启动时被任务规模卡住。", CONCLUSION),
+            result("这条表述与你的意思一致。", CONCLUSION, user_stance="accept"),
+            result("我调整了句子，但适用条件没有变化。", wording),
+            result("这还是同一条判断。", wording, user_stance="accept"),
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines(["提出一个想法", "是的", "微调措辞", "仍是同一意思"]),
+            output=output,
+        )
+
+        self.assertEqual(0, code)
+        listed = self.store.list_candidates()
+        self.assertEqual(1, len(listed))
+        self.assertEqual(1, listed[0]["version"])
+        _, records = self.trace_records()
+        self.assertEqual("accepted_unchanged", records[3]["reason"])
+        self.assertEqual("none", records[3]["decision"])
+        self.assertEqual([listed[0]["id"]], records[-1]["saved"])
+        self.assertEqual(1, output.getvalue().count("本场结论卡片 ID"))
+
+    def test_model_record_language_is_retried_and_never_reaches_discuss_output(self):
+        client = FakeClient([
+            result("我会记下来。", CONCLUSION),
+            result("我会保存这份草稿。", CONCLUSION),
+            result("我会这样概括。", CONCLUSION),
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["提出一个想法"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(3, len(client.messages))
+        self.assertEqual([], self.store.list_candidates())
+        self.assert_clean_discuss_output(output.getvalue())
+
     def test_invalid_candidate_is_discarded_before_a_later_valid_acceptance(self):
         invalid = {**CONCLUSION, "statement": "缺少边界的候选。", "scope": []}
         client = FakeClient([
             result("我还没把边界说清楚，我们继续。", invalid),
             result("可以暂定这条带范围的结论。", CONCLUSION),
-            result("我明确认可这条结论。", CONCLUSION, user_stance="accept"),
+            result("这条结论与你的意思一致。", CONCLUSION, user_stance="accept"),
         ])
         output = io.StringIO()
         code = run_discuss(
@@ -291,9 +393,9 @@ class DiscussTests(unittest.TestCase):
 
     def test_accept_without_previous_pending_and_reject_do_not_write(self):
         client = FakeClient([
-            result("我先给出这条候选，你可以再看。", CONCLUSION, user_stance="accept"),
-            result("这条仍然等待明确认可。", CONCLUSION, user_stance="neutral"),
-            result("你目前没有同意这条说法。", CONCLUSION, user_stance="reject"),
+            result("目前还需要你补充一项会改变结论的条件。", CONCLUSION, user_stance="accept"),
+            result("目前这条判断仍有一个未解决的条件。", CONCLUSION, user_stance="neutral"),
+            result("你刚才的说法与这条判断相冲突。", CONCLUSION, user_stance="reject"),
         ])
         output = io.StringIO()
         code = run_discuss(
@@ -434,7 +536,7 @@ class DiscussTests(unittest.TestCase):
         trace_dir = self.root / "custom-sessions"
         client = FakeClient([
             result("先形成一条待复核结论。", CONCLUSION),
-            result("明确认可。", CONCLUSION, user_stance="accept"),
+            result("这条说法符合你刚才表达的内容。", CONCLUSION, user_stance="accept"),
         ])
         output = io.StringIO()
         code = run_discuss(
@@ -551,7 +653,7 @@ class DiscussTests(unittest.TestCase):
             "contradictions": [],
             "unknowns": [],
         }
-        client = FakeClient([result("完整回答保存在轨迹中。", candidate)])
+        client = FakeClient([result("主持人的完整回答保留在本场对话中。", candidate)])
         output = io.StringIO()
         code = run_discuss(
             self.store, client=client, environ={},
@@ -561,7 +663,7 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(0, code)
         _, records = self.trace_records()
         row = records[0]
-        self.assertEqual("完整回答保存在轨迹中。", row["answer"])
+        self.assertEqual("主持人的完整回答保留在本场对话中。", row["answer"])
         self.assertEqual(statement, row["pending_after"])
         self.assertEqual(statement, row["candidate"]["statement"])
 
@@ -597,25 +699,121 @@ class DiscussTests(unittest.TestCase):
         self.assertFalse((self.root / "sessions").exists())
         self.assertEqual([], self.store.list_candidates())
 
-    def test_system_prompt_requires_explicit_acceptance_and_neutral_closure(self):
+    def test_system_prompt_requires_collaborative_questions_contribution_and_closure(self):
         for instruction in (
-            "accept 仅表示用户明确认可当前这条具体结论",
-            "用户表示没有更多、不确定、就这样、差不多或类似收束语时必须报告 neutral",
-            "自然地询问“那我这样记下来，行吗？”",
-            "只有用户明确认可当前这条具体结论时",
-            "不得将空行、EOF、取消或沉默当作用户回应",
+            "每次回答最多问一个问题",
+            "每追问一至两轮后，必须贡献至少一项实质内容",
+            "先说明其中有价值的洞见及理由",
+            "从用户的处境与目标出发",
+            "只问用户是打算逐项处理还是明确划出范围",
+            "不再追问同类问题，直接给出自己的判断、边界和仍未知之处",
+            "自然收束时直接给出改进后的表述或方案，不问“你看对不对”",
+            "候选只作为内部结构化结果，不在用户界面展示",
+            "候选与本场既有结论相同或只是措辞微调时",
         ):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, SYSTEM_PROMPT)
 
-    def test_conclusion_sentence_invites_correction_without_presuming_agreement(self):
-        sentence = _conclusion_sentence({**CONCLUSION, "scope": ["适用范围。"]})
-        self.assertIn("我先这样记下来，你看有没有要改的", sentence)
-        self.assertIn(CONCLUSION["statement"], sentence)
-        self.assertNotIn("。。", sentence)
-        self.assertEqual("。", sentence[-1])
-        self.assertNotIn("一致的结论", sentence)
-        self.assertNotIn("双方认同", sentence)
+    def test_injected_reader_and_non_tty_keep_the_existing_line_reader(self):
+        injected = lambda prompt: prompt
+        with patch("dojo.discuss._load_readline", side_effect=AssertionError("readline must not be loaded")):
+            self.assertIs(injected, _interactive_reader(injected))
+            with patch("dojo.discuss.sys.stdin") as stdin:
+                stdin.isatty.return_value = False
+                self.assertIs(input, _interactive_reader(input))
+
+    def test_readline_import_failure_falls_back_to_builtin_input(self):
+        with patch("dojo.discuss.sys.stdin") as stdin:
+            stdin.isatty.return_value = True
+            with patch("dojo.discuss._load_readline", side_effect=ImportError("not installed")):
+                self.assertIs(input, _interactive_reader(input))
+
+    def test_tty_readline_edits_wrapped_lines_and_traverses_in_memory_history(self):
+        if os.name != "posix" or _load_readline() is None:
+            self.skipTest("POSIX pseudo-terminals and readline are required")
+        script = (
+            "import json; from dojo.discuss import _interactive_reader; "
+            "read = _interactive_reader(input); "
+            "values = [read('1> '), read('2> '), read('3> ')]; "
+            "print('RESULT=' + json.dumps(values))"
+        )
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1]) + os.pathsep + environment.get("PYTHONPATH", "")
+        environment["HOME"] = str(self.root)
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execve(sys.executable, [sys.executable, "-c", script], environment)
+        captured = bytearray()
+        pending = bytearray()
+        prompts = [b"1> ", b"2> ", b"3> "]
+        sequences = [
+            b"abcdefghi\x1b[D\x7f\x01\x1b[CX\x05\x1b[H\x1b[FY\n",
+            b"second\n",
+            b"\x1b[A\x1b[B\x1b[A\n",
+        ]
+        turn = 0
+        status = None
+        deadline = time.monotonic() + 10
+        try:
+            fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 8, 0, 0))
+            tty.setraw(master)
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.2)
+                if ready:
+                    try:
+                        chunk = os.read(master, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    pending.extend(chunk)
+                    while turn < len(prompts) and prompts[turn] in pending:
+                        index = pending.index(prompts[turn])
+                        captured.extend(pending[:index + len(prompts[turn])])
+                        del pending[:index + len(prompts[turn])]
+                        os.write(master, sequences[turn])
+                        turn += 1
+                waited, child_status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    status = child_status
+                    break
+            if status is None and b"RESULT=" in captured + pending:
+                _, status = os.waitpid(pid, 0)
+            if status is None:
+                detail = (captured + pending).decode("utf-8", errors="replace")
+                raise TimeoutError(f"readline pseudo-terminal did not finish: {detail}")
+        finally:
+            try:
+                os.close(master)
+            except OSError:
+                pass
+            if status is None:
+                os.kill(pid, 9)
+                os.waitpid(pid, 0)
+        result_output = (captured + pending).decode("utf-8", errors="replace")
+        self.assertEqual(3, turn, result_output)
+        self.assertIn('RESULT=["aXbcdefgiY", "second", "second"]', result_output)
+        self.assertEqual(0, os.waitstatus_to_exitcode(status))
+        self.assertFalse((self.root / ".history").exists())
+        self.assertFalse((self.root / ".python_history").exists())
+
+    def test_readline_input_uses_memory_history_and_never_persists_it(self):
+        history = []
+        fake_readline = type("Readline", (), {
+            "clear_history": lambda self: history.clear(),
+            "add_history": lambda self, text: history.append(text),
+        })()
+        values = iter(["first", "second"])
+        builtin_reader = lambda _prompt: next(values)
+        with patch("dojo.discuss.sys.stdin") as stdin:
+            stdin.isatty.return_value = True
+            with patch("dojo.discuss.input", builtin_reader, create=True):
+                with patch("dojo.discuss._load_readline", return_value=fake_readline):
+                    reader = _interactive_reader(builtin_reader)
+                    self.assertNotEqual(builtin_reader, reader)
+                    self.assertEqual("first", reader("you> "))
+                    self.assertEqual("second", reader("you> "))
+        self.assertEqual(["first", "second"], history)
 
     def test_invalid_output_retries_with_correction_and_records_raw_diagnostics(self):
         invalid = {**result("格式错误", CONCLUSION), "extra": True}
