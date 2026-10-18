@@ -1,5 +1,6 @@
 import fcntl
 import io
+import inspect
 import json
 import os
 import pty
@@ -699,21 +700,35 @@ class DiscussTests(unittest.TestCase):
         self.assertFalse((self.root / "sessions").exists())
         self.assertEqual([], self.store.list_candidates())
 
-    def test_system_prompt_requires_collaborative_questions_contribution_and_closure(self):
+    def test_system_prompt_uses_judgement_instead_of_mechanical_pacing(self):
         for instruction in (
-            "每次回答最多问一个问题",
-            "每追问一至两轮后，必须贡献至少一项实质内容",
-            "先说明其中有价值的洞见及理由",
-            "从用户的处境与目标出发",
-            "只问用户是打算逐项处理还是明确划出范围",
-            "不再追问同类问题，直接给出自己的判断、边界和仍未知之处",
-            "自然收束时直接给出改进后的表述或方案，不问“你看对不对”",
+            "和一个具体的人一起思考",
+            "用已有理解去贡献",
+            "讨论不是问卷",
+            "提问只是手段之一",
+            "从一个想法里读出这个人的背景、目标",
+            "先弄清它对应的现状",
+            "不要要求新设计承担现状从未解决的问题",
+            "与现状相当的水平上修好了什么",
+            "如果并没有，就不要把它当成新设计的缺陷",
+            "再具体指出缺少什么",
+            "自然收束时直接给出改进后的表述或方案",
             "候选只作为内部结构化结果，不在用户界面展示",
             "用“测量、比较、观察变化、跟踪结果”等表达",
             "候选与本场既有结论相同或只是措辞微调时",
         ):
             with self.subTest(instruction=instruction):
                 self.assertIn(instruction, SYSTEM_PROMPT)
+        for mechanical_rule in (
+            "每次回答最多问一个问题",
+            "每追问一至两轮后，必须贡献",
+            "讨论最多 12 轮",
+            "接近上限时优先提供结论",
+            "本次讨论第 {round_number} 轮 / 最多",
+        ):
+            with self.subTest(mechanical_rule=mechanical_rule):
+                self.assertNotIn(mechanical_rule, SYSTEM_PROMPT)
+                self.assertNotIn(mechanical_rule, inspect.getsource(run_discuss))
 
     def test_injected_reader_and_non_tty_keep_the_existing_line_reader(self):
         injected = lambda prompt: prompt
