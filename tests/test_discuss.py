@@ -709,6 +709,7 @@ class DiscussTests(unittest.TestCase):
             "不再追问同类问题，直接给出自己的判断、边界和仍未知之处",
             "自然收束时直接给出改进后的表述或方案，不问“你看对不对”",
             "候选只作为内部结构化结果，不在用户界面展示",
+            "用“测量、比较、观察变化、跟踪结果”等表达",
             "候选与本场既有结论相同或只是措辞微调时",
         ):
             with self.subTest(instruction=instruction):

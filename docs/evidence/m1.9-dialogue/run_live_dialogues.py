@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import pty
@@ -25,6 +26,7 @@ SCENARIOS = {
         "我能做的是测制动距离，同时检查轮胎抓地和前后载荷变化；雨天和满载测试暂时不在这次范围内。",
         "我想到如果把每个车轮的抱死判断分开，载荷转移可能让同一套阈值不够用；我没有实测数据支持具体阈值。",
         "是的，就当前干燥平路的设计目标而言，我同意把制动距离、轮胎抓地和载荷转移一起纳入评估；雨天和不同载荷暂时明确不作保证。",
+        "你刚才总结的表述准确：在干燥平路、单人骑行、中低速这一限定场景内，不抱死是约束之一而非完整安全标准；还要评估制动距离、轮胎抓地和载荷转移，分别观察各轮抱死风险，阈值待测试校准；雨天和不同载荷暂不作保证。我同意这条具体结论。",
     ],
     "closure": [
         "我想提高写作效率，直觉是每天强制写两小时。",
@@ -130,6 +132,10 @@ def run_scenario(name: str, turns: list[str], db_path: str) -> dict[str, object]
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scenario", choices=SCENARIOS, action="append", help="run only the selected scenario; repeat to select both")
+    args = parser.parse_args()
+    selected = args.scenario or list(SCENARIOS)
     if not os.environ.get("DOJO_LLM_BASE_URL", "").strip():
         print("blocked: DOJO_LLM_BASE_URL is not configured; no real model request was sent", file=sys.stderr)
         return 2
@@ -138,8 +144,8 @@ def main() -> int:
     total_requests = 0
     with tempfile.TemporaryDirectory(prefix="dojo-m1.9-dialogue-") as temporary:
         db_path = str(Path(temporary) / "dojo.sqlite3")
-        for name, turns in SCENARIOS.items():
-            outcome = run_scenario(name, turns, db_path)
+        for name in selected:
+            outcome = run_scenario(name, SCENARIOS[name], db_path)
             total_requests += int(outcome["requests_sent"])
             if total_requests > 25:
                 raise RuntimeError("model request limit exceeded 25")
