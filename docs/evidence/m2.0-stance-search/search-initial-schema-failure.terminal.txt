@@ -1,0 +1,10 @@
+本场会话轨迹：/home/z/vibe/dojo/docs/evidence/m2.0-stance-search/traces/discuss-0a8f7dae006d4a74b2cc8d8a3263df4a.jsonl
+你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。
+会话原文仅保存在本地轨迹文件；结束输入即可结束讨论。
+
+你> 
+主持人> 模型这次返回的格式不合法，自动重试仍未成功；这轮没有形成结论，你可以继续。
+你> 
+主持人> 模型这次返回的格式不合法，自动重试仍未成功；这轮没有形成结论，你可以继续。
+你> 讨论已结束。
+本场会话轨迹：/home/z/vibe/dojo/docs/evidence/m2.0-stance-search/traces/discuss-0a8f7dae006d4a74b2cc8d8a3263df4a.jsonl
