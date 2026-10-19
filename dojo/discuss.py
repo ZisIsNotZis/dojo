@@ -11,11 +11,13 @@ import os
 import re
 import stat
 import sys
+import time
 import uuid
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, TextIO
+from urllib.parse import urlparse
 
 from .live import (
     DEFAULT_DISCUSS_REASONING_EFFORT,
@@ -363,7 +365,9 @@ def _reasoning_effort_from_environment(environ: dict[str, str] | None) -> str:
     return effort
 
 
-def _user_error_message(error: dict[str, Any], *, profile_used: bool = False) -> str:
+def _user_error_message(
+    error: dict[str, Any], *, profile_used: bool = False, model: str | None = None,
+) -> str:
     kind = error["kind"]
     if kind == "request_too_large":
         if profile_used:
@@ -377,8 +381,14 @@ def _user_error_message(error: dict[str, Any], *, profile_used: bool = False) ->
         return "模型这次返回的格式不合法，自动重试仍未成功；这轮没有形成结论，你可以继续。"
     if kind == "http_error":
         status = error["http_status"]
+        model_name = f"（模型 {model}）" if model else ""
         if status is not None and status < 500:
-            return f"模型服务返回 HTTP {status}；端点配置或请求契约有误，讨论已结束。"
+            if status in {400, 401, 403, 404}:
+                return (
+                    f"模型服务返回 HTTP {status}{model_name}；端点不认识这个模型名或拒绝了请求，"
+                    "讨论已结束；用 --verbose 可看到本场实际使用的模型名与端点。"
+                )
+            return f"模型服务返回 HTTP {status}{model_name}；端点配置或请求契约有误，讨论已结束。"
         return f"模型服务连续返回 HTTP {status or '5xx'}，暂时不可用；讨论已结束。"
     if kind == "timeout":
         return "模型请求连续超时，讨论已结束；请检查模型服务后重新运行。"
@@ -658,6 +668,21 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     }
 
 
+class _DebugProgress:
+    """Opt-in stderr log of what the discussion is waiting on; product output stays on stdout."""
+
+    def __init__(self, stream: TextIO, enabled: bool) -> None:
+        self.stream = stream
+        self.enabled = enabled
+        self.started = time.monotonic()
+
+    def __call__(self, message: str) -> None:
+        if not self.enabled:
+            return
+        elapsed = time.monotonic() - self.started
+        print(f"[{elapsed:6.1f}s] {message}", file=self.stream, flush=True)
+
+
 def run_discuss(
     store: Store,
     *,
@@ -670,6 +695,8 @@ def run_discuss(
     no_trace: bool = False,
     no_profile: bool = False,
     resume: Path | None = None,
+    verbose: bool = False,
+    progress_stream: TextIO | None = None,
 ) -> int:
     """Run or resume a natural-language discussion with an append-only local trace."""
     if no_trace and resume is not None:
@@ -781,6 +808,14 @@ def run_discuss(
     profile_entries: list[str] = []
     profile_context_pending = profile_used
     read_line = _interactive_reader(read_line)
+    note = _DebugProgress(progress_stream or sys.stderr, verbose)
+    note(
+        "讨论已启动：模型 "
+        + (getattr(config, "model", None) or "由外部客户端提供")
+        + "，推理 "
+        + (active_reasoning_effort or "不带字段")
+        + (f"，续跑 {resume}" if resume is not None else "")
+    )
 
     def record_round(value: dict[str, Any]) -> None:
         value.setdefault("search", [])
@@ -832,6 +867,8 @@ def run_discuss(
             return finish("limit")
 
         seq += 1
+        turn_started = time.monotonic()
+        note(f"第 {seq} 轮：收到输入 {len(text)} 字，开始请求模型")
         context = ""
         if profile_context_pending:
             context += (
@@ -878,6 +915,11 @@ def run_discuss(
                     "\n\n纠正指令：上一次返回未通过约定的 JSON 契约；请只返回一个合法 JSON 对象，不要代码块围栏。"
                 )
             requests_sent += 1
+            request_started = time.monotonic()
+            note(
+                f"模型请求 #{requests_sent}：发送 {len(messages)} 条消息"
+                f"，推理 {round_reasoning_effort or '不带字段'}"
+            )
             try:
                 response = client.complete(messages)
                 if isinstance(response, dict):
@@ -891,6 +933,10 @@ def run_discuss(
                     model_value = response
                     raw_response = json.dumps(response, ensure_ascii=False, default=str)
                 raw_response = raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS]
+                note(
+                    f"模型请求 #{requests_sent}：返回 finish={finish_reason}，"
+                    f"{len(raw_response)} 字符，用时 {time.monotonic() - request_started:.1f}s"
+                )
                 if finish_reason == "length":
                     raise LiveError(
                         "model response was truncated at the output token limit; no candidate was saved",
@@ -944,13 +990,17 @@ def run_discuss(
                         break
                     searches_used += 1
                     retrieved_at = datetime.now(timezone.utc)
+                    note(f"检索 #{searches_used}：{query}")
                     try:
                         results = searcher(query) if searcher is not None else deepseek_search(query, environ=environ)
                         tool_message = _search_results_message(query, retrieved_at, results)
                         urls = [item["url"] for item in results]
+                        hosts = ", ".join(sorted({urlparse(url).netloc for url in urls if urlparse(url).netloc}))
+                        note(f"检索 #{searches_used}：返回 {len(urls)} 条（{hosts or '无域名'}）")
                     except SearchError as exc:
                         tool_message = _search_failure_message(query, retrieved_at, exc.user_message)
                         urls = []
+                        note(f"检索 #{searches_used}：失败 — {exc.user_message}")
                     turn_searches.append({
                         "query": query,
                         "urls": urls,
@@ -1044,6 +1094,7 @@ def run_discuss(
                 consecutive_connection_failures = 0
                 if kind in {"empty_content", "not_json", "schema_violation", "truncated", "unknown"} and invalid_retries < 2:
                     invalid_retries += 1
+                    note(f"输出不合格（{kind}），第 {invalid_retries} 次重试")
                     if requests_sent < MAX_MODEL_REQUESTS:
                         continue
                 break
@@ -1068,17 +1119,26 @@ def run_discuss(
                 "reasoning_effort_fallback": round_reasoning_effort_fallback,
                 "attempts": attempts,
             })
-            print(_user_error_message(error, profile_used=profile_used), file=output)
+            print(
+                _user_error_message(error, profile_used=profile_used, model=getattr(config, "model", None)),
+                file=output,
+            )
             return finish("failure", 2)
 
         if final_error is not None:
             error = final_error_record or _trace_error(final_error)
-            answer = _user_error_message(error, profile_used=profile_used)
+            answer = _user_error_message(
+                error, profile_used=profile_used, model=getattr(config, "model", None),
+            )
             stance = "neutral"
             candidate = None
             reason = "invalid_output"
             decision = "none"
             print("\n主持人> " + answer, file=output)
+            note(
+                f"第 {seq} 轮：以错误提示结束，用时 {time.monotonic() - turn_started:.1f}s"
+                f"，本场请求 {requests_sent}"
+            )
             error_record = error
         else:
             answer = checked["answer"]
@@ -1105,6 +1165,10 @@ def run_discuss(
             decision = "none"
             error_record = None
             print("\n主持人> " + answer, file=output)
+            note(
+                f"第 {seq} 轮：回答已呈现，用时 {time.monotonic() - turn_started:.1f}s"
+                f"，本场请求 {requests_sent}，判定 {reason}"
+            )
             if candidate is not None and should_save:
                 if saved_candidate is not None and _candidate_equivalent(saved_candidate, candidate):
                     reason = "accepted_unchanged"
@@ -1116,6 +1180,7 @@ def run_discuss(
                         trace_enabled=trace_is_open,
                     )
                     if saved_id is not None:
+                        note(f"结论已在同意这一轮静默写入：{saved_id}")
                         if saved_id not in saved_ids:
                             saved_ids.append(saved_id)
                         saved_candidate_id = saved_id

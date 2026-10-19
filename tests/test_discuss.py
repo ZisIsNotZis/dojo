@@ -431,6 +431,33 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual([listed[0]["id"]], records[-1]["saved"])
         self.assertEqual(1, output.getvalue().count("本场结论卡片 ID"))
 
+    def test_verbose_progress_goes_to_stderr_stream_only(self):
+        client = FakeClient([result("先把这件事说清楚。", CONCLUSION)])
+        output = io.StringIO()
+        progress = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["我有个想法"]),
+            output=output, verbose=True, progress_stream=progress,
+        )
+
+        self.assertEqual(0, code)
+        self.assertIn("模型请求 #1", progress.getvalue())
+        self.assertIn("第 1 轮：回答已呈现", progress.getvalue())
+        self.assertNotIn("模型请求", output.getvalue())
+        self.assert_clean_discuss_output(output.getvalue())
+
+    def test_verbose_progress_is_silent_by_default(self):
+        client = FakeClient([result("先把这件事说清楚。", CONCLUSION)])
+        output = io.StringIO()
+        progress = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["我有个想法"]),
+            output=output, progress_stream=progress,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual("", progress.getvalue())
+
     def test_model_record_language_is_retried_and_never_reaches_discuss_output(self):
         client = FakeClient([
             result("我会记下来。", CONCLUSION),
@@ -615,7 +642,7 @@ class DiscussTests(unittest.TestCase):
             read_line=read_lines(["请求不会自动重复"]), output=output,
         )
         self.assertEqual(2, code)
-        self.assertIn("端点配置或请求契约有误", output.getvalue())
+        self.assertIn("端点不认识这个模型名或拒绝了请求", output.getvalue())
         trace_path = Path([
             line.split("：", 1)[1].strip()
             for line in output.getvalue().splitlines()

@@ -139,6 +139,10 @@ def _parser() -> argparse.ArgumentParser:
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
     discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
+    discuss.add_argument(
+        "--verbose", action="store_true",
+        help="在 stderr 打印模型请求、检索与写卡的实时进度（不影响主持人输出与轨迹）",
+    )
 
     packets = sub.add_parser("freeze-materials", help="生成四份冻结模型输入；C 摘录来自真实本地 Store 检索")
     packets.add_argument("--outdir", default="docs/packets/frozen-conversation-v2", help="新输出目录；已有目录会拒绝覆盖")
@@ -325,6 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             return run_discuss(
                 store, config=config, no_trace=args.no_trace, no_profile=args.no_profile,
                 resume=Path(args.resume).expanduser() if args.resume else None,
+                verbose=args.verbose,
             )
         if args.command == "compare":
             run_compare(full=args.full, output=sys.stdout)
