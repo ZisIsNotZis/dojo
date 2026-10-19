@@ -487,8 +487,10 @@ class ConversationTests(unittest.TestCase):
             self.assertEqual(4, len(self.store.list_candidates()))
 
             output = io.StringIO()
-            with patch("dojo.live.REQUEST_TIMEOUT_SECONDS", 0.05):
-                code = run_chat(self.store, config=LiveConfig(endpoint.base_url, "test-model", None), read_line=lambda _prompt: "用户输入", output=output)
+            code = run_chat(
+                self.store, config=LiveConfig(endpoint.base_url, "test-model", None, 0.05),
+                read_line=lambda _prompt: "用户输入", output=output,
+            )
             self.assertEqual(2, code)
             self.assertIn("timed out", output.getvalue())
             self.assertEqual(4, len(self.store.list_candidates()))
@@ -535,6 +537,24 @@ class ConversationTests(unittest.TestCase):
         config = LiveConfig.from_environment({"DOJO_LLM_BASE_URL": "http://127.0.0.1:1234/v1"})
         self.assertEqual("github-copilot/gpt-6-luna", config.model)
         self.assertIsNone(config.api_key)
+
+    def test_model_timeout_is_configurable_with_a_bounded_default(self):
+        config = LiveConfig.from_environment({"DOJO_LLM_BASE_URL": "http://127.0.0.1:1234/v1"})
+        self.assertEqual(60, config.timeout)
+        slow = LiveConfig.from_environment({
+            "DOJO_LLM_BASE_URL": "http://127.0.0.1:1234/v1", "DOJO_LLM_TIMEOUT": "120",
+        })
+        self.assertEqual(120, slow.timeout)
+        for invalid in ("0", "4", "601", "60s"):
+            with self.subTest(invalid=invalid), self.assertRaises(LiveError):
+                LiveConfig.from_environment({
+                    "DOJO_LLM_BASE_URL": "http://127.0.0.1:1234/v1", "DOJO_LLM_TIMEOUT": invalid,
+                })
+        with LocalMockEndpoint([]) as endpoint:
+            client = OpenAICompatibleClient(LiveConfig.from_environment({
+                "DOJO_LLM_BASE_URL": endpoint.base_url, "DOJO_LLM_TIMEOUT": "90",
+            }))
+            self.assertEqual(90, client.timeout)
 
     def test_frozen_c_packet_uses_actual_retrieval_and_matches_b_target(self):
         outdir = self.root / "packets"

@@ -17,6 +17,8 @@ from .storage import DojoError, Store
 
 DEFAULT_MODEL = "github-copilot/gpt-6-luna"
 REQUEST_TIMEOUT_SECONDS = 20
+DEFAULT_TIMEOUT_SECONDS = 60
+MAX_TIMEOUT_SECONDS = 600
 MAX_HTTP_RESPONSE_BYTES = 24_000
 MAX_REQUEST_CHARS = 26_000
 MAX_DISCUSS_REQUEST_CHARS = 1_000_000  # UTF-8 请求体安全包络；实际会话上下文不得靠小数字裁掉。
@@ -74,6 +76,7 @@ class LiveConfig:
     endpoint: str
     model: str
     api_key: str | None
+    timeout: int = DEFAULT_TIMEOUT_SECONDS
 
     @classmethod
     def from_environment(cls, environ: dict[str, str] | None = None) -> "LiveConfig":
@@ -81,6 +84,15 @@ class LiveConfig:
         base_url = values.get("DOJO_LLM_BASE_URL", "").strip()
         model = values.get("DOJO_LLM_MODEL", DEFAULT_MODEL).strip()
         api_key = values.get("DOJO_LLM_API_KEY") or None
+        timeout_value = values.get("DOJO_LLM_TIMEOUT", "").strip()
+        timeout = DEFAULT_TIMEOUT_SECONDS
+        if timeout_value:
+            try:
+                timeout = int(timeout_value)
+            except ValueError:
+                raise LiveError("DOJO_LLM_TIMEOUT must be an integer number of seconds") from None
+            if not 5 <= timeout <= MAX_TIMEOUT_SECONDS:
+                raise LiveError(f"DOJO_LLM_TIMEOUT must be between 5 and {MAX_TIMEOUT_SECONDS} seconds")
         if not base_url:
             raise LiveError("live mode needs DOJO_LLM_BASE_URL; no network request was made")
         if not model or len(model) > 160:
@@ -111,7 +123,7 @@ class LiveConfig:
         else:
             endpoint_path = path + "/v1/chat/completions"
         endpoint = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, endpoint_path, "", ""))
-        return cls(endpoint, model, api_key)
+        return cls(endpoint, model, api_key, timeout)
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -142,6 +154,8 @@ class OpenAICompatibleClient:
         max_request_chars: int = MAX_REQUEST_CHARS,
     ):
         self.config = config
+        configured_timeout = getattr(config, "timeout", DEFAULT_TIMEOUT_SECONDS)
+        self.timeout = configured_timeout if configured_timeout and configured_timeout > 0 else DEFAULT_TIMEOUT_SECONDS
         self.allowed_extra_keys = allowed_extra_keys
         self.allow_search = allow_search
         self.max_answer_chars = max_answer_chars
@@ -176,7 +190,7 @@ class OpenAICompatibleClient:
         request = urllib.request.Request(self.config.endpoint, data=data, headers=headers, method="POST")
         try:
             opener = urllib.request.build_opener(_RejectRedirects())
-            with opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            with opener.open(request, timeout=self.timeout) as response:
                 raw = response.read(self.max_response_bytes + 1)
         except urllib.error.HTTPError as exc:
             status = exc.code
@@ -192,14 +206,14 @@ class OpenAICompatibleClient:
             ) from None
         except (TimeoutError, socket.timeout):
             raise LiveError(
-                f"model request timed out after {REQUEST_TIMEOUT_SECONDS} seconds; no candidate was saved",
+                f"model request timed out after {self.timeout} seconds; no candidate was saved",
                 kind="timeout",
             ) from None
         except urllib.error.URLError as exc:
             reason = exc.reason
             if isinstance(reason, (TimeoutError, socket.timeout)):
                 raise LiveError(
-                    f"model request timed out after {REQUEST_TIMEOUT_SECONDS} seconds; no candidate was saved",
+                    f"model request timed out after {self.timeout} seconds; no candidate was saved",
                     kind="timeout",
                 ) from None
             raise LiveError(
