@@ -24,7 +24,7 @@
 | `max_tokens` 请求参数 | 65,536（上游契约上限，不作成本控制） |
 | 单个里程碑模型调用总量 | ≤ 40 次 |
 
-`discuss` 使用 `DOJO_LLM_REASONING` 控制推理等级，默认 `low`，允许 `low`、`medium`、`high`；模型调用成本由推理等级控制，不通过降低 `max_tokens` 控成本。若端点以 HTTP 400 明确拒绝该字段，本场改为不带字段重试一次并记录降级。
+`discuss` 使用 `DOJO_LLM_REASONING` 控制推理等级，默认 `medium`，允许 `low`、`medium`、`high`；模型调用成本由推理等级控制，不通过降低 `max_tokens` 控成本。若端点以 HTTP 400 明确拒绝该字段，本场改为不带字段重试一次并记录降级。
 
 ## M1 `discuss`：零结构负担的对齐式对话
 
