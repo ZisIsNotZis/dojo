@@ -53,6 +53,7 @@ python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 ## 真实模型与 CLI/SQLite 操作
 
 - `python3 -m dojo chat` 或 `python3 -m dojo demo --live`：只有显式选择这些模式且配置端点后才会发 HTTP 请求。详见 [`docs/demo-guide.md`](docs/demo-guide.md)；无端点配置时不联网、不回退到预设。
+- `python3 -m dojo discuss` 的主持人先推断再回答：用户没说的参数由它假设并写明条件，能推的公式当场推、能给数字就给数字，只在真存在活分歧时才不给单一结论；默认推理等级为 `medium`。检索带回页面正文（每条摘录上限 1200 字，每场 6000 字），并在对话里显示 `[检索 N] 查询 → 命中数：域名`。当结论依赖真实数值计算时，主持人会在回答里写一节 `## 计算交接单`，程序把它落盘为 `<会话目录>/compute-<id>-<轮>.md`，交给外部执行器运行后把结果说回对话；主持人自己没有代码执行能力，也不会声称跑过计算。
 - `python3 -m dojo discuss --verbose`：把模型请求、检索 query 与命中域名、每轮耗时实时打到 stderr，stdout 与轨迹不变。一轮讨论会等待多次模型请求和检索（实测单轮 5–30 秒），没有这个通道就只能看到空提示符。`DOJO_LLM_MODEL` 必须与端点注册的模型名一字不差：本机端点是 `github_copilot/gpt-6-luna`（下划线），连字符版本会被端点以 HTTP 400 拒绝。单次模型请求超时默认 60 秒，可用 `DOJO_LLM_TIMEOUT`（5–600 秒整数）调整；默认值偏长的原因见 [`docs/plan.md`](docs/plan.md) 的已知缺陷。
 - `python3 -m dojo demo --auto`：无 stdin 的 CI 预设故事；`python3 -m dojo demo --details` 展开每条检索卡；`python3 -m dojo demo --workdir ./my-dojo-run` 可保存数据库和简短总结，目录必须为空且不会覆盖已有数据。
 - `python3 -m dojo compare --full`：显示两份归档原文（旧 editor-bridge 评价，非当前故事）；默认 `compare` 提供短摘要、run ID 和输入文件路径，不联网。

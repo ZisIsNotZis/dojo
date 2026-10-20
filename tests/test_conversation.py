@@ -286,7 +286,7 @@ class ConversationTests(unittest.TestCase):
         row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[0])
         self.assertEqual(len(json.dumps(discuss_result, ensure_ascii=False)), len(row["raw_response"]))
         self.assertEqual(long_answer, row["answer"])
-        self.assertEqual("low", row["reasoning_effort"])
+        self.assertEqual("medium", row["reasoning_effort"])
         self.assertFalse(row["reasoning_effort_fallback"])
 
     def test_discuss_sends_long_user_input_with_the_larger_request_envelope(self):
@@ -411,7 +411,7 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertEqual(2, len(endpoint.requests))
         self.assertTrue(all(item["payload"]["max_tokens"] == 65_536 for item in endpoint.requests))
-        self.assertTrue(all(item["payload"]["reasoning_effort"] == "low" for item in endpoint.requests))
+        self.assertTrue(all(item["payload"]["reasoning_effort"] == "medium" for item in endpoint.requests))
         self.assertEqual(1, len(empty_store.list_candidates()))
 
     def test_model_candidate_reject_and_eof_leave_store_unchanged(self):

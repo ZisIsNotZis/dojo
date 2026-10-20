@@ -91,8 +91,8 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 ## 当前基线
 
 - 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、`discuss`（含搜索工具与人物档案）。
-- 96 项标准库测试通过。
-- `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `low`、`--verbose` 把请求与检索进度写到 stderr（产品输出与轨迹不变）。
+- 98 项标准库测试通过。
+- `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行。
 - 已知缺陷（未修）：`dojo/live.py` 的 `DEFAULT_MODEL` 是 `github-copilot/gpt-6-luna`（连字符），而本机端点注册名为 `github_copilot/gpt-6-luna`（下划线）；不设 `DOJO_LLM_MODEL` 时会得到 HTTP 400。当前用文档 + 更明确的 4xx 提示绕过，未改默认值，因为端点是外部配置。
 - 已修缺陷：模型请求超时原为硬编码 20 秒，实测一次包含 8 条检索结果的续轮请求在 low 推理下超过 20 秒，连续两次超时就会把可用的回答判成"端点故障"并终止会话。现在默认 60 秒并可用 `DOJO_LLM_TIMEOUT` 覆盖；`--verbose` 暴露每次请求耗时，供判断该值是否仍偏短。
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。

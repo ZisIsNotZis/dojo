@@ -1004,6 +1004,49 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(3, len(records[0]["search"]))
         self.assertEqual([], self.store.list_candidates())
 
+    def test_search_passes_page_text_to_the_model_and_shows_the_search(self):
+        request = {"answer": "我先查一下。", "search": {"query": "parking aisle width geometry"}, "user_stance": "neutral", "person_updates": []}
+        client = FakeClient([request, result("来源页面说通道宽度由轨迹决定。来源：https://example.test/page")])
+        results = [{
+            "title": "Aisle width study", "url": "https://example.test/page",
+            "snippet": "short", "summary": "summary",
+            "content": "PAGE-BODY-SENTENCE the minimum aisle width follows from the swept path.",
+        }]
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, searcher=lambda query: results,
+            read_line=read_lines(["停车场通道宽度怎么定"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        tool_message = client.messages[1][-1]["content"]
+        self.assertIn("PAGE-BODY-SENTENCE", tool_message, "page text must reach the model, not only the snippet")
+        self.assertIn("页面正文摘录", tool_message)
+        self.assertIn("[检索 1] parking aisle width geometry", output.getvalue())
+        self.assertIn("其中 1 条带页面正文", output.getvalue())
+
+    def test_compute_handoff_is_written_beside_the_trace(self):
+        answer = (
+            "先用默认值估算：约 75 度。\n\n## 计算交接单\n"
+            "命题：在车位宽 2.5 m、车宽 1.85 m 下求最小通道宽。\n"
+            "方法：对角度做网格扫描，逐角度解轨迹可行性。\n"
+            "验收：若 60 度在窄车位下反超，则假设被证伪。\n## 仍未知\n离地边界未计入。"
+        )
+        client = FakeClient([result(answer)])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["帮我算出最优角度"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        handoffs = list((self.root / "sessions").glob("compute-*.md"))
+        self.assertEqual(1, len(handoffs))
+        written = handoffs[0].read_text(encoding="utf-8")
+        self.assertIn("求最小通道宽", written)
+        self.assertIn("则假设被证伪", written)
+        self.assertNotIn("离地边界未计入", written, "the handoff stops at the next heading")
+        self.assertIn("[计算交接单] 已写下", output.getvalue())
+
     def test_injected_reader_and_non_tty_keep_the_existing_line_reader(self):
         injected = lambda prompt: prompt
         with patch("dojo.discuss._load_readline", side_effect=AssertionError("readline must not be loaded")):
