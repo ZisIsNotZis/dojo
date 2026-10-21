@@ -1,8 +1,8 @@
-# 当前 Demo 产品方向（SSOT）
+# 已实现的三幕 Demo：说明与验收边界
 
 ## 来源与确认状态
 
-本页记录用户在当前对话中明确确认的产品方向；角色台词与具体交互仍是待实现、待检验的设计，不是用户研究或已观测效果。用户要求按此方向重新制作 Demo，并在聊天中展示完整体验。
+本页记录 `python3 -m dojo demo` 已实现的三幕陌生人故事的方向、台词与验收边界；角色台词与具体交互仍是待实现、待检验的设计，不是用户研究或已观测效果。**产品方向以 [product.md](product.md) 为准**，本页不是产品方向入口。
 
 ## 产品目标
 
@@ -42,11 +42,11 @@
 
 - 甲/乙/丙都是写死的预设台词，不解自由输入，也不代表真实用户。
 - 检索是透明词汇重合，不是语义检索，也不证明两个问题同源。
-- 全部 27 项标准库测试在本次实现后通过；测试覆盖流程与存储，不等于产品效果。
+- 三幕 Demo 落地当时有 27 项标准库测试通过；测试覆盖流程与存储，不等于产品效果。当前测试面看 `python3 -m unittest discover -s tests`，不引用这个旧数字。
 - 真实 Pi Luna B/C 输出是旧 editor-bridge 评价的归档，仅供 `compare` 回放，不证明道场胜过普通 AI，也不属于本页新故事；HTTP adapter 仅经 loopback mock 测试，真实远端服务仍未验收。
 
 材料：[seed-pack-v2.md](packets/seed-pack-v2.md) 是本页 seed 的唯一说明；[demo-guide.md](demo-guide.md) 是运行说明；旧评价材料与归档见 [evidence/conversation-demo-luna-v1/provenance.md](evidence/conversation-demo-luna-v1/provenance.md)。
 
 ## 工作入口
 
-待办与恢复步骤见 [当前工作入口](../.scratch/active-work.md)。本页只描述已实现的三幕 Demo，不再是产品方向的唯一入口；当前产品方向见 [product.md](product.md)。过程、授权与基础设施问题记在工作记录，不放进产品事实。
+待办、门与恢复步骤见 [plan.md](plan.md) 的 `## 当前推进状态` 与 `## 恢复入口`；`plan.md` 是计划层的唯一入口。本页只描述已实现的三幕 Demo，不是产品方向入口；当前产品方向见 [product.md](product.md)。过程、授权与基础设施问题记在工作记录，不放进产品事实。

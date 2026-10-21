@@ -2,6 +2,14 @@
 
 本文是计划层的事实入口。里程碑是用户同步点，每个交付一个垂直切片。**本清单须经用户确认后，才可进入自动执行**（依据治理规则 @milestone_list）。
 
+## 当前推进状态
+
+- **下一个里程碑是 M2**，由 root 于 2026-10-21 判定并接受；assent：agreed。依据：commit `7753d73` 里的 `mail/2026-10-21-answers.md`（该文件按 `mail/README.md` 的读后即删约定已删除，git 历史里仍在）。M2 的边界与验收以本页 `## M2` 五条为准，不另立编号。
+- **M2 尚未派发。** 入口条件是用户对 M1 / M1.5 用户检查点的确认，即上方"须经用户确认"那一句；该问题在用户手里，仓库内没有可复核的落盘记录，只能等，不能代替他答。门未过，依赖 M2 的工作一律不开始。
+- `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
+- **已落地、不受该门限制的工作包：`plan-truthtelling`** —— 本页、`README.md` 与恢复入口的一致性修复。它不改设计、不改范围、不调模型，因此不等门。见 `## 文档一致性`。
+- 派发状态一句话：M2 待门；M2 之外无在跑工作包。
+
 ## 执行契约（每个里程碑统一适用）
 
 每个里程碑完成后，向用户交付三样东西，缺一不可：
@@ -82,21 +90,58 @@
 
 M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时按治理规则处理里程碑内的自主变更并为每个工作包安排独立评审。阿里云部署与 token 商业模式不在本清单内，待价值环被证明后另行决策。
 
-## 文档一致性待修复
-- **已确认的问题**：README.md 的“当前产品方向与恢复入口”仍把 docs/current-demo-direction.md 标作当前方向，而 docs/product.md 明确取代它、把旧文件限定为已实现 Demo 的说明；产品方向、现有 CLI/Store 能力与固定故事演示必须分别标明，不能让读者把愿景或模拟当成已实现的用户效果。
-- **相邻隐私冲突**：README.md 的“不会录制原始聊天”与本计划 M1.5 的默认本地逐轮轨迹承诺不一致；须按实际 discuss 行为说明记录内容、存放边界和 --no-trace，而不是恢复已经被用户取代的旧承诺。这里记录文档冲突，不宣称代码的隐私保证已验证。
-- **待执行工作**：把 README 当前方向链接指向 docs/product.md，把旧故事链接标为已实现 Demo；核对实时 discuss、固定演示、未实现的后台管线及隐私描述，删除相互冲突的当前承诺，不改已确认产品方向或扩充范围。
-- **完成证据**：逐项解析 README 的本地链接，对照产品文档与当前 CLI/轨迹开关检查事实；文档命令若有改变，只在隔离的非敏感 fixture 上验证，不调用在线模型、不读取真实会话或人物档案，不把既有测试数量当成本次运行结果。
-- **本次范围**：只登记问题；未改 README、实现或演示，也未执行测试或模型请求。
+## M2 的工作包与依赖（门过后直接派发，此处只定拆分，不写契约）
+
+拆分按一个字段：每个 pass 一个包，因为 pass 是 manifest 里可插拔、可单独验收的单位。依赖只有一条：先有 pass 契约，才谈三个 pass。
+
+边表示先行，无边表示可以并行：
+
+```
+ m2a pipe-core → m2b classify
+ m2a pipe-core → m2c locate
+ m2a pipe-core → m2d challenge
+ m2b classify  → m2e integrate
+ m2c locate    → m2e integrate
+ m2d challenge → m2e integrate
+```
+
+即：`m2a` 单独先行，`m2b`/`m2c`/`m2d` 三者并行，`m2e` 收口。
+
+| 包 | 结果 | 验收（对应 M2 五条） |
+|---|---|---|
+| `m2a pipe-core` | 会话结束触发一次有序 pass 运行；每个 pass 见到"已处理到版本 N"；同一会话重跑不产生第二份事件 | ④ |
+| `m2b classify` | 每条 draft 卡带上 `kind` | ① |
+| `m2c locate` | 透明检索给出 新 / 变体 / 重复 三分类，重复不改版本 | ③ |
+| `m2d challenge` | 成立的挑战把卡置为 `challenged` 并保留旧版本 | ⑤ |
+| `m2e integrate` | 整场会话跑完的结论清单，用户过目；单会话来源不入广播 | ①②，并汇总 ③④⑤ |
+
+`generalize` 与 `condition` 不在 M2 内（`design.md` 第 5 节把它们划归 M4）。每包的六行契约（目标、范围、验收命令、路径、预算与墙钟、停止条件）在门过后派发时才写；此刻写了就是要改的错。
+
+## 文档一致性（已修复，工作包 `plan-truthtelling`）
+
+- **读者曾会被误导的两处**：`README.md` 把 `docs/current-demo-direction.md` 标作当前产品方向，而 `docs/product.md` 已取代它、把旧文件收窄为已实现 Demo 的说明；`README.md` 写"不会录制原始聊天"，而 `discuss` 默认逐轮写 JSONL 轨迹。两处都已按实际行为改写，旧句不再复述。
+- **改后的当前事实**：产品方向入口是 `docs/product.md`，`docs/current-demo-direction.md` 是三幕 Demo 的说明；隐私描述按实际行为写成"数据库不存原始聊天，默认轨迹存"，含路径、`0700`/`0600`、`--no-trace`。
+- **恢复入口**：旧的 `.scratch/active-work.md` 已撤销，内容并入本页 `## 恢复入口`；它的 HEAD 与测试数已过期两个月，改由命令给出而不是存数。
+- **验证方式**：解析 `README.md` 的本地链接（无断链），核对隐私描述与 `dojo/discuss.py` 的 `_SessionTrace` 和 `--no-trace` 分支一致，跑一次标准库测试。未调用在线模型、未读取真实会话或人物档案，因此本次**不**声称隐私保证已被运行时验证。
+
 ## 当前基线
 
 - 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、`discuss`（含搜索工具与人物档案）。
-- 98 项标准库测试通过。
+- 标准库测试：`python3 -m unittest discover -s tests` —— 通过与否看这条命令，不在这里存数字（会过期）。最近一次：2026-10-21，`master` @ 7753d73，`Ran 98 tests … OK`。
+- 反奉承已有部分证据：`docs/evidence/m5-sycophancy`（四场对抗场景 A–D，结论"在四场捕获的序列里不让步"，代码 `b78c41a`）。它**不覆盖** M5 验收 ④ 那条"用户用真实文本反对而模型误报 `user_stance=accept`"，且跑在搜索、人物档案、推理等级变更之前（仍是 20 秒超时时代），因此按过期证据读，不能当 M5 的验收通过。`docs/product.md` 的"未做的负控制"一句仍成立。
 - `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行。
 - 已知缺陷（未修）：`dojo/live.py` 的 `DEFAULT_MODEL` 是 `github-copilot/gpt-6-luna`（连字符），而本机端点注册名为 `github_copilot/gpt-6-luna`（下划线）；不设 `DOJO_LLM_MODEL` 时会得到 HTTP 400。当前用文档 + 更明确的 4xx 提示绕过，未改默认值，因为端点是外部配置。
 - 已修缺陷：模型请求超时原为硬编码 20 秒，实测一次包含 8 条检索结果的续轮请求在 low 推理下超过 20 秒，连续两次超时就会把可用的回答判成"端点故障"并终止会话。现在默认 60 秒并可用 `DOJO_LLM_TIMEOUT` 覆盖；`--verbose` 暴露每次请求耗时，供判断该值是否仍偏短。
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
 - 写入条件：模型判定双方已收敛时静默写入；空行与 EOF 不写入。
 - 已知缺口：会话末提炼管线（M2）、广播转述（M3）、manifest（M4）未实现；实验 harness（障碍清单 → 批量验证）仅完成设计讨论，未实现；人物档案与搜索 query 的敏感信息约束是**提示级**，无强制执行。
-- 见 `../.scratch/active-work.md` 获取恢复入口。
+- 未清的历史工作笔记：`.scratch/` 下仍有四份旧笔记（`conversation-demo-work.md`、`implementation-work.md`、`solo-poc-docs-work.md`、`stranger-methodology-demo-work.md`）。本次只迁移了被点名的 `active-work.md`；其余四份按"触碰到才迁移"留下，下次有人读其中一份时一并处理。
+
+## 恢复入口
+
+- **怎么开始**：`python3 -m dojo --db /tmp/play.sqlite3 discuss`。续跑加 `--resume <轨迹>`，关人物档案加 `--no-profile`，看请求进度加 `--verbose`。端点须显式配置（见 `README.md`），不配置就不联网。
+- **怎么继续规划**：先看本页 `## 当前推进状态`；门未过时不要开 M2 的包。
+- **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
+- **证据在哪**：`docs/evidence/m1*`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。
+- **写给谁**：给 root 的报告进 `mail/`，形状见 `mail/README.md`。
 

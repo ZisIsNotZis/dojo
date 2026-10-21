@@ -2,9 +2,13 @@
 
 这是一个**本地 CLI 与 SQLite POC**，用于演练编程/agent 项目中的想法、经验主张、反例和未知如何成为可追溯的讨论候选。它记录讨论状态，不认证真假，也不自动把相似主张合并。没有 UI、服务器、登录或自动 agent；默认体验完全离线。显式选择 `chat` 或 `demo --live` 才会联网，并且必须先配置兼容端点。
 
-## 当前产品方向与恢复入口
+## 产品方向、已实现 Demo 与计划入口
 
-主体验是**陌生人分别讨论方法论，通过道藏连接理由、条件与异议**，见 [`docs/current-demo-direction.md`](docs/current-demo-direction.md)。`python3 -m dojo demo` 已按此方向实现三位陌生人的故事。
+三者分开读：
+
+- **产品方向**（愿景与质量维度，不是已实现行为）见 [`docs/product.md`](docs/product.md)。它是当前产品方向的唯一入口。
+- **已实现的演示**见 [`docs/current-demo-direction.md`](docs/current-demo-direction.md)：`python3 -m dojo demo` 按三位陌生人的故事做了出来。该页已收窄为这份 Demo 的说明，不再是产品方向入口；照它读出的东西是模拟，不是用户效果。
+- **里程碑、验收与下一步**见 [`docs/plan.md`](docs/plan.md)，其 `## 当前推进状态` 一节写明现在卡在哪。
 
 ## 现有演示（约 2–5 分钟）
 
@@ -24,7 +28,7 @@ python3 -m dojo compare
 
 四条 `seed-m01`–`seed-m04` 是 [`docs/packets/seed-pack-v2.md`](docs/packets/seed-pack-v2.md) 中的模拟材料；`seed` 可重复执行，已有 ID 不覆盖。
 
-默认 SQLite 数据库是 `~/.local/share/dojo/dojo.sqlite3`，程序创建的应用目录为仅当前用户访问（权限 `0700`），数据库文件为 `0600`。可在仓库副本间设置 `DOJO_DB=/private/path/dojo.sqlite3` 或 `--db /private/path/dojo.sqlite3`。`discuss` 的可见、可编辑人物档案固定命名为数据库同目录的 `person.md`，首次创建后程序只在末尾追加日期与会话标记的条目，不覆盖用户编辑，文件权限为 `0600`；设置 `DOJO_PERSON=/private/path/person.md` 可改用其他路径。每场默认读取全文并作为上下文发送给模型，也允许模型追加稳定、可复用、非敏感的信息；开场会披露发送行为，`discuss --no-profile` 可让本场既不读取也不写入档案。模型的隐私与敏感信息约束是提示级，不是强制拦截。数据库只保存用户明确录入的候选、结构化来源摘要、匿名 session ID、版本和事件；**不会录制原始聊天**。导出目录与数据库分离，默认 `~/.local/share/dojo/exports`；可用 `DOJO_EXPORTS` 或 `export --outdir` 调整。导出使用唯一文件名，不覆盖既有文件。
+默认 SQLite 数据库是 `~/.local/share/dojo/dojo.sqlite3`，程序创建的应用目录为仅当前用户访问（权限 `0700`），数据库文件为 `0600`。可在仓库副本间设置 `DOJO_DB=/private/path/dojo.sqlite3` 或 `--db /private/path/dojo.sqlite3`。`discuss` 的可见、可编辑人物档案固定命名为数据库同目录的 `person.md`，首次创建后程序只在末尾追加日期与会话标记的条目，不覆盖用户编辑，文件权限为 `0600`；设置 `DOJO_PERSON=/private/path/person.md` 可改用其他路径。每场默认读取全文并作为上下文发送给模型，也允许模型追加稳定、可复用、非敏感的信息；开场会披露发送行为，`discuss --no-profile` 可让本场既不读取也不写入档案。模型的隐私与敏感信息约束是提示级，不是强制拦截。数据库只保存用户明确录入的候选、结构化来源摘要、匿名 session ID、版本和事件，不存原始聊天；但 `discuss` **默认写逐轮会话轨迹**，轨迹里就是你的原话与模型原文：默认路径 `<数据库目录>/sessions/<session>.jsonl`，目录 `0700`、文件 `0600`，仅存本地、不上传，开场会告诉你本场路径，`--no-trace` 可让整场不产生任何轨迹文件。导出目录与数据库分离，默认 `~/.local/share/dojo/exports`；可用 `DOJO_EXPORTS` 或 `export --outdir` 调整。导出使用唯一文件名，不覆盖既有文件。
 
 用 `python3 -m dojo --help` 查看操作与参数。核心流程示例：
 

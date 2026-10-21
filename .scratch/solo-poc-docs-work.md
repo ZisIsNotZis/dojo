@@ -2,7 +2,7 @@
 
 - **Objective:** Deliver Chinese documentation for the manual, single-person, no-UI dojo business-logic POC, preserving `idea.md` verbatim and all unrelated files.
 - **Owner/status:** Luna implementation writer; **completed and accepted by parent as a runnable documentation POC**. Acceptance covers the documented/manual exercise package only; it does not validate roleplay fidelity, efficacy, product demand, or claims in the simulated examples.
-- **Work item:** This record; active entry: `.scratch/active-work.md`.
+- **Work item:** This record; the live plan entry is `docs/plan.md` (`## 当前推进状态`, `## 恢复入口`). The `.scratch/active-work.md` this record used to name was retired on 2026-10-21.
 - **Branch/revision:** `master`, repository has no commits yet; working-tree state is the review artifact.
 - **Scope/constraints:** Documentation only; no code, UI, external API calls, installs, commits, or subagents. Preserve pre-existing `.pi/` runtime files and `idea.md`.
 - **Authority:** Explicit task authorization; no additional user decision is pending.
