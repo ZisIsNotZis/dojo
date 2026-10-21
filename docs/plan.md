@@ -9,6 +9,7 @@
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
 - **已落地、不受该门限制的工作包：`plan-truthtelling`** —— 本页、`README.md` 与恢复入口的一致性修复。它不改设计、不改范围、不调模型，因此不等门。见 `## 文档一致性`。
 - 派发状态一句话：M2 待门；M2 之外无在跑工作包。
+- **本轮推进做了什么**：`plan-truthtelling`（文档与实际行为对齐）、`scratch-retire`（`.scratch/` 退休）、`m2-prep`（把 M2 五条拆成包并标出哪些已存在）。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 
 ## 执行契约（每个里程碑统一适用）
 
@@ -123,7 +124,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 - **读者曾会被误导的两处**：`README.md` 把 `docs/current-demo-direction.md` 标作当前产品方向，而 `docs/product.md` 已取代它、把旧文件收窄为已实现 Demo 的说明；`README.md` 写"不会录制原始聊天"，而 `discuss` 默认逐轮写 JSONL 轨迹。两处都已按实际行为改写，旧句不再复述。
 - **改后的当前事实**：产品方向入口是 `docs/product.md`，`docs/current-demo-direction.md` 是三幕 Demo 的说明；隐私描述按实际行为写成"数据库不存原始聊天，默认轨迹存"，含路径、`0700`/`0600`、`--no-trace`。
-- **恢复入口**：旧的 `.scratch/active-work.md` 已撤销，内容并入本页 `## 恢复入口`；它的 HEAD 与测试数已过期两个月，改由命令给出而不是存数。
+- **恢复入口**：旧的 `.scratch/active-work.md` 已撤销，内容并入本页 `## 恢复入口`。它写于 `628e9ff`（2026-10-18），在被读到（`621bf26`）时已过期：记的 HEAD 是 `628e9ff` 且称未推送，实际 HEAD 是 `621bf26` 并已推送；记的测试数是 93，实际 98。这两类值随每次提交失效，因此改由命令给出，不再存数。
 - **验证方式**：解析 `README.md` 的本地链接（无断链），核对隐私描述与 `dojo/discuss.py` 的 `_SessionTrace` 和 `--no-trace` 分支一致，跑一次标准库测试。未调用在线模型、未读取真实会话或人物档案，因此本次**不**声称隐私保证已被运行时验证。
 
 ## 当前基线
