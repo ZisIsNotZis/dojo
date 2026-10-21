@@ -135,7 +135,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
 - 写入条件：模型判定双方已收敛时静默写入；空行与 EOF 不写入。
 - 已知缺口：会话末提炼管线（M2）、广播转述（M3）、manifest（M4）未实现；实验 harness（障碍清单 → 批量验证）仅完成设计讨论，未实现；人物档案与搜索 query 的敏感信息约束是**提示级**，无强制执行。
-- 未清的历史工作笔记：`.scratch/` 下仍有四份旧笔记（`conversation-demo-work.md`、`implementation-work.md`、`solo-poc-docs-work.md`、`stranger-methodology-demo-work.md`）。本次只迁移了被点名的 `active-work.md`；其余四份按"触碰到才迁移"留下，下次有人读其中一份时一并处理。
+- 历史工作笔记：四份旧工作记录已从 `.scratch/`（已撤销的目录，不复存在）移到 `docs/evidence/work-records/`，原文保真并加历史标记；仓库根下不再有 `.scratch/`。
 
 ## 恢复入口
 

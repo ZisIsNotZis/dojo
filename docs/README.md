@@ -17,6 +17,6 @@
 | `roleplay-guide.md`、`facilitator-notes.md` | 角色扮演演练指南 |
 | `packets/` | 冻结的 seed 与角色材料 |
 | `templates/` | 会话与评价记录模板 |
-| `evidence/` | 归档证据，非当前事实 |
+| `evidence/` | 归档证据，非当前事实；`work-records/` 下是已退休的工作记录 |
 
 用户原稿是仓库根的 `../idea.md`，保留不改写。

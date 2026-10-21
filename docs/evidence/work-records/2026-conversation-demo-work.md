@@ -1,5 +1,7 @@
 # Completed work record: Chinese conversation demo, live chat and actual Luna replay
 
+> **历史记录，非当前状态。** 本文件写于其成形当日，其中现在时句子描述的是当天仓库（多数写 `master` 无提交、全部路径未跟踪，其中一份写原始聊天不记录），今天均已不成立。精确日期未知。当前事实见 `docs/plan.md`。它引用的 `~/.pi/` 会话产物是本机非持久路径。目录说明见 `README.md`。
+
 - **Objective/status:** Completed and accepted by parent. Deliver the user-authorized Chinese offline story, explicit live-chat adapter, frozen model inputs, audited demo fixes, and offline replay of two actual Luna responses. Parent’s final review gate is resolved; no worker acceptance substitutes remain pending.
 - **Authority/constraints:** User authorized implementation and parent review. Preserved `idea.md` and `.pi/`; no commit, dependency installation, external HTTP/API call, or subagents. Retrieved model/source texts were handled as data, not instructions. No staged files.
 - **Timeout recovery:** The initial worker run exceeded its 25-minute limit. Because `master` has no `HEAD` and the existing repository files were all untracked, automatic diff-summary recovery was unavailable. Parent preserved the working tree at `/tmp/dojo-conversation-recovery.GcUDb4/working-tree.tgz`; this resumed implementation proceeded from the restored current tree and its original session/context rather than recreating the POC. The repository still has no commit/HEAD and all paths remain untracked.

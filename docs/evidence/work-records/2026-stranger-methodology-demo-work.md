@@ -1,9 +1,11 @@
 # 陌生人方法论 Demo：恢复工作记录
 
+> **历史记录，非当前状态。** 本文件写于其成形当日，其中现在时句子描述的是当天仓库（多数写 `master` 无提交、全部路径未跟踪，其中一份写原始聊天不记录），今天均已不成立。精确日期未知。当前事实见 `docs/plan.md`。它引用的 `~/.pi/` 会话产物是本机非持久路径。目录说明见 `README.md`。
+
 ## 当前状态
 
 - 状态：新版三位陌生人 Demo 已实现并通过标准库测试；待用户在聊天中验收体验。
-- 产品事实与完整验收：[docs/current-demo-direction.md](../docs/current-demo-direction.md)。不要仅根据旧故事或本记录推导产品承诺。
+- 产品事实与完整验收：[docs/current-demo-direction.md](../../current-demo-direction.md)（路径于 2026-10-21 从 `.scratch/` 迁入本目录后修正）。不要仅根据旧故事或本记录推导产品承诺。
 - 仓库：`/home/z/vibe/dojo`；当前 `master` 无提交，`.gitignore`、`.pi/`、`.scratch/`、`AGENTS.md`、`README.md`、`docs/`、`dojo/`、`idea.md`、`scripts/`、`tests/` 均未跟踪。保留已有工作，不 reset、清理或为隔离擅自提交。
 - 用户在远端，不能运行命令或看文件；交付须在聊天直接展示完整新版体验。
 - 当前没有后台执行任务。协助会话未派发工作、未触碰仓库。

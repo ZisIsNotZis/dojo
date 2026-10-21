@@ -1,5 +1,7 @@
 # Work record: single-person dojo POC documentation
 
+> **历史记录，非当前状态。** 本文件写于其成形当日，其中现在时句子描述的是当天仓库（多数写 `master` 无提交、全部路径未跟踪，其中一份写原始聊天不记录），今天均已不成立。精确日期未知。当前事实见 `docs/plan.md`。它引用的 `~/.pi/` 会话产物是本机非持久路径。目录说明见 `README.md`。
+
 - **Objective:** Deliver Chinese documentation for the manual, single-person, no-UI dojo business-logic POC, preserving `idea.md` verbatim and all unrelated files.
 - **Owner/status:** Luna implementation writer; **completed and accepted by parent as a runnable documentation POC**. Acceptance covers the documented/manual exercise package only; it does not validate roleplay fidelity, efficacy, product demand, or claims in the simulated examples.
 - **Work item:** This record; the live plan entry is `docs/plan.md` (`## 当前推进状态`, `## 恢复入口`). The `.scratch/active-work.md` this record used to name was retired on 2026-10-21.

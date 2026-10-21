@@ -1,5 +1,7 @@
 # Work record: runnable local dojo POC
 
+> **历史记录，非当前状态。** 本文件写于其成形当日，其中现在时句子描述的是当天仓库（多数写 `master` 无提交、全部路径未跟踪，其中一份写原始聊天不记录），今天均已不成立。精确日期未知。当前事实见 `docs/plan.md`。它引用的 `~/.pi/` 会话产物是本机非持久路径。目录说明见 `README.md`。
+
 - **Objective:** Implement and document the authorized standard-library Python/SQLite local no-UI dojo POC.
 - **Owner/status:** Worker implementation complete; parent acceptance complete for a local CLI/business-storage POC only. Not accepted as chat experience or efficacy evidence.
 - **Authority/constraints:** Explicit authorization. No UI/server/auth/network/API/model integration/dependency install/commit/subagents. Preserve `idea.md` and pre-existing `.pi/`. Default storage local/private; raw chat is not recorded. Entry point `python3 -m dojo`.
