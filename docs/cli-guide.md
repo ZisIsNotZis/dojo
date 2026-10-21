@@ -29,6 +29,16 @@ python3 -m dojo add --id life-01 --kind abstract_idea \
 python3 -m dojo show life-01
 ```
 
+重复内容不会写成第二张卡：`add` 比对的是内容本身（陈述、类型、五条列表，忽略空白与列表顺序），命中就报错并给出已有卡 ID，不写入新版本。两个会话各自独立得出同一结论时的做法是给已有卡加来源，而不是再写一张卡：
+
+```sh
+python3 -m dojo attach-source life-01 \
+  --session life-anon-2 \
+  --source-json '{"type":"unknown","claim":"第二个独立会话得出相容主张","independence_group":"life-anon-2","verification":"unknown"}'
+```
+
+同一会话重复附来源是空操作（不写事件、不升版本），所以跑两遍和跑一遍一样。
+
 ## 3–7 分钟：关系、确认、中文检索
 
 alias 只用于真正等价的表达变体；条件不同则用 link 保留区别。确认仅表示值得检索：

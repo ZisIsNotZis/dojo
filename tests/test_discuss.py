@@ -18,8 +18,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dojo.discuss import (
-    SYSTEM_PROMPT, _candidate_equivalent, _interactive_reader, _load_readline, _trace_error,
-    run_discuss, validate_conclusion,
+    SYSTEM_PROMPT, _candidate_equivalent, _interactive_reader, _load_readline, _save_conclusion,
+    _trace_error, run_discuss, validate_conclusion,
 )
 from dojo.live import (
     MAX_DISCUSS_ERROR_DETAIL_CHARS, MAX_DISCUSS_RAW_RESPONSE_CHARS,
@@ -77,6 +77,28 @@ class FakeClient:
         if self.error is not None:
             raise self.error
         return self.responses.pop(0)
+
+
+class ConclusionWriteTests(unittest.TestCase):
+    def test_a_second_session_reaching_the_same_conclusion_attaches_instead_of_versioning(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = Store(Path(temp) / "dojo.sqlite3")
+            self.addCleanup(store.close)
+            first, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+            self.assertIsNone(error)
+            self.assertEqual(1, len(store.list_candidates()))
+            reused, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+            self.assertIsNone(error)
+            self.assertEqual(first, reused)
+            self.assertEqual(1, len(store.list_candidates()))
+            self.assertEqual(1, store.show(first)["candidate"]["version"])
+            second, error = _save_conclusion(store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False)
+            self.assertIsNone(error)
+            self.assertEqual(first, second)
+            afterwards = store.show(first)["candidate"]
+            self.assertEqual(1, len(store.list_candidates()))
+            self.assertEqual(["sess-a", "sess-b"], afterwards["sessions"])
+            self.assertEqual("attach_source", store.history(first)["events"][-1]["event"])
 
 
 class DiscussTests(unittest.TestCase):

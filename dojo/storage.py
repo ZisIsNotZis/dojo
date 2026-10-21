@@ -30,6 +30,14 @@ class DojoError(Exception):
     """An expected, user-correctable POC operation error."""
 
 
+class DuplicateContent(DojoError):
+    """The store already holds this claim; the existing card is named, none is written."""
+
+    def __init__(self, message: str, candidate_id: str) -> None:
+        super().__init__(message)
+        self.candidate_id = candidate_id
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -213,6 +221,23 @@ class Store:
             raise DojoError(f"kind must be one of: {', '.join(sorted(KINDS))}")
         candidate_id = _id(candidate_id or _new_id("d"))
         source_values = [self._source(source) for source in sources or []]
+        fields = {
+            "premises": _strings(premises, "premise"),
+            "scope": _strings(scope, "scope"),
+            "alternatives": _strings(alternatives, "alternative"),
+            "contradictions": _strings(contradictions, "contradiction"),
+            "unknowns": _strings(unknowns, "unknown"),
+        }
+        wanted = content_key(statement, kind, fields)
+        for row in self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall():
+            existing = json.loads(row["state_json"])
+            same = content_key(existing["statement"], existing["kind"], existing)
+            if same == wanted:
+                raise DuplicateContent(
+                    f"duplicate content already stored as {existing['id']} "
+                    f"(status {existing['status']}, v{existing['version']}); no new version was created",
+                    existing["id"],
+                )
         with self.transaction():
             if self.connection.execute("SELECT 1 FROM candidates WHERE id=?", (candidate_id,)).fetchone():
                 raise DojoError(f"candidate ID already exists: {candidate_id}")
@@ -223,11 +248,7 @@ class Store:
                 "status": "draft",
                 "statement": statement,
                 "kind": kind,
-                "premises": _strings(premises, "premise"),
-                "scope": _strings(scope, "scope"),
-                "alternatives": _strings(alternatives, "alternative"),
-                "contradictions": _strings(contradictions, "contradiction"),
-                "unknowns": _strings(unknowns, "unknown"),
+                **fields,
                 "sources": source_values,
                 "aliases": [],
                 "relations": [],
@@ -235,6 +256,30 @@ class Store:
                 "confirmation": {"active": False},
             }
             self._insert_candidate(state, "add", {"session": session})
+        return state
+
+    def attach_source(self, candidate_id: str, source: dict[str, Any], session: str | None = None) -> dict[str, Any]:
+        """Add provenance to an existing card without restating it.
+
+        This is what a second independent session reaching the same claim does: the
+        content is a duplicate, so no new version of the wording is written, but the
+        card gains an independence group and can then be broadcast as two sessions'
+        compatible claim. The evidence needed to say that is the source itself.
+        """
+        with self.transaction():
+            state = self._get(_id(candidate_id))
+            source_value = self._source(source)
+            if session and session in state.get("sessions", []):
+                # This session already contributed its word; re-running is a no-op
+                # rather than a second version of the same provenance.
+                return state
+            if any(item == source_value for item in state.get("sources", [])):
+                return state
+            self._source_ids_available([source_value])
+            state["sources"] = list(state.get("sources", [])) + [source_value]
+            if session:
+                state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
+            state = self._write(state, "attach_source", {"source": source_value["id"], "session": session})
         return state
 
     def list_candidates(self, include_history: bool = False) -> list[dict[str, Any]]:
@@ -790,6 +835,25 @@ def lexical_terms(text: str, *, query: bool = False) -> set[str]:
             terms.update(run)
         terms.update(run[index:index + 2] for index in range(len(run) - 1))
     return terms
+
+
+CONTENT_FIELDS = ("premises", "scope", "alternatives", "contradictions", "unknowns")
+
+
+def content_key(statement: str, kind: str, fields: dict[str, list[str]]) -> str:
+    """Identity of what a card says, ignoring wording spacing and list order.
+
+    Sources and sessions are excluded on purpose: the same claim reached twice is
+    the same claim, and reaching it twice is provenance, not a second card.
+    """
+    def normalized(value: str) -> str:
+        return " ".join(str(value).split())
+
+    return _json({
+        "statement": normalized(statement),
+        "kind": kind,
+        **{field: sorted(normalized(value) for value in fields.get(field, [])) for field in CONTENT_FIELDS},
+    })
 
 
 def independence(state: dict[str, Any]) -> dict[str, Any]:

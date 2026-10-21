@@ -40,7 +40,7 @@ from .live import (
     _validate_model_content,
 )
 from .search import SearchError, search as deepseek_search
-from .storage import DojoError, KINDS, Store
+from .storage import DojoError, DuplicateContent, KINDS, Store
 
 MAX_SEARCHES_PER_SESSION = 3
 
@@ -320,22 +320,28 @@ def _save_conclusion(
                 unknowns=candidate["unknowns"], session=session,
             )
         else:
-            saved = store.add(
-                candidate["statement"], candidate["kind"],
-                premises=candidate["premises"], scope=candidate["scope"],
-                alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
-                unknowns=candidate["unknowns"], session=session,
-                sources=[{
-                    "type": "unknown",
-                    "claim": (
-                        "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。"
-                        if trace_enabled else "本次讨论会话形成的结论；会话原文未保存，内容未经独立核验。"
-                    ),
-                    "independence_group": session,
-                    "verification": "unknown",
-                    "scope_note": "单一会话来源；不构成独立佐证。",
-                }],
-            )
+            source = {
+                "type": "unknown",
+                "claim": (
+                    "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。"
+                    if trace_enabled else "本次讨论会话形成的结论；会话原文未保存，内容未经独立核验。"
+                ),
+                "independence_group": session,
+                "verification": "unknown",
+                "scope_note": "单一会话来源；不构成独立佐证。",
+            }
+            try:
+                saved = store.add(
+                    candidate["statement"], candidate["kind"],
+                    premises=candidate["premises"], scope=candidate["scope"],
+                    alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
+                    unknowns=candidate["unknowns"], session=session,
+                    sources=[source],
+                )
+            except DuplicateContent as duplicate:
+                # The same claim already has a card: this session's reach does not
+                # write a second version of it, it adds a second independence group.
+                saved = store.attach_source(duplicate.candidate_id, source, session)
     except (DojoError, OSError) as exc:
         return None, str(exc)
     return saved["id"], None

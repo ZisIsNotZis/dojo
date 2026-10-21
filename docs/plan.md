@@ -128,6 +128,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 | 包 | 现在为真的事 | 命令 |
 |---|---|---|
 | `default-model` | 不设 `DOJO_LLM_MODEL` 时用的是端点公布的下划线写法，不再每次 HTTP 400 | `python3 -m unittest discover -s tests -p 'test_live.py'` |
+| `duplicate-content`（验收 ③） | 同一内容（陈述＋类型＋五条列表，忽略空白与顺序）不再写成第二张卡：`add` 拒绝并给出已有卡 ID，不写新版本。第二个独立会话得出同一结论时用 `attach-source` 给已有卡加来源，不写第二张卡；同一会话重复附来源是空操作 | `python3 -m unittest discover -s tests -p 'test_storage.py' -k duplicate`；CLI：同一条 `add` 跑两次，第二次以 `duplicate content already stored as …` 失败且 `list` 仍是一张 |
 | `isolation-guard`（验收 ②） | `broadcast` 拒收"写它的会话是唯一独立性来源"的卡与发问会话自己写的卡，拒收原因列在 `suppressed`；`export --mode c` 同样拒收前者并在每条摘录上标 `independence_groups`/`independent` | `python3 -m unittest discover -s tests -p 'test_storage.py' -k broadcast`（另有一条 CLI 命令：`python3 -m dojo broadcast '<查询>'`，`suppressed` 里能看到被拒的卡与原因） |
 
 `isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条"单一会话来源不进入广播"。独立性只有一组但**不是**会话出来的卡（seed、模拟方法材料）不拦，只在结果里报 `independent: false`；`unknown` 来源算"没有独立性信息"，照实报空而不是猜。广播端怎么把它转述成人话仍是 M3 的事。

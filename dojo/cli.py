@@ -60,6 +60,14 @@ def _parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--source-json", action="append", default=[], help="source object as JSON; repeat as needed")
     add_parser.add_argument("--session", help="anonymous session ID only")
 
+    attach = sub.add_parser(
+        "attach-source",
+        help="add provenance to an existing card without restating it; a second independent session reaching the same claim uses this",
+    )
+    attach.add_argument("id")
+    attach.add_argument("--source-json", required=True)
+    attach.add_argument("--session", help="anonymous session ID only")
+
     confirm = sub.add_parser("confirm", help="confirm discussability only; not truth")
     confirm.add_argument("id")
     confirm.add_argument("--basis", required=True)
@@ -194,6 +202,8 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
             scope=args.scope, alternatives=args.alternative, contradictions=args.contradiction,
             unknowns=args.unknown, sources=sources, session=args.session,
         )
+    if command == "attach-source":
+        return store.attach_source(args.id, json.loads(args.source_json), args.session)
     if command == "confirm":
         return store.confirm(args.id, args.basis, args.session)
     if command == "revoke":

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dojo.storage import DojoError, Store, independence, load_simulated_seeds
+from dojo.storage import DojoError, DuplicateContent, Store, independence, load_simulated_seeds
 
 
 class StoreTests(unittest.TestCase):
@@ -272,7 +272,7 @@ class StoreTests(unittest.TestCase):
             self.store.export_prompt("c", ["d-session"], 6000, outdir)
         self.assertFalse(outdir.exists() and any(outdir.iterdir()))
         self.store.add(
-            "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id="d-two-groups",
+            "交接时把未验证的假设单独列出来，能减少返工。", "application", candidate_id="d-two-groups",
             scope=["交接"], session="sess-a",
             sources=[
                 {"type": "unknown", "claim": "本次会话形成的结论", "independence_group": "sess-a", "verification": "unknown"},
@@ -292,6 +292,74 @@ class StoreTests(unittest.TestCase):
         self.assertEqual([], info["independence_groups"])
         self.assertFalse(info["independent"])
         self.assertFalse(info["single_session"])
+
+    def test_duplicate_content_creates_no_second_card_and_no_version(self):
+        first = self.add("d-first", "交接前先写下当前版本的范围，能减少返工。", scope=["交接"])
+        before = len(self.store.list_candidates()), self.store.history("d-first")["versions"][-1]["version"]
+        with self.assertRaises(DuplicateContent) as caught:
+            self.add("d-second", "交接前先写下当前版本的范围，能减少返工。", scope=["交接"])
+        self.assertEqual("d-first", caught.exception.candidate_id)
+        self.assertIn("no new version was created", str(caught.exception))
+        self.assertEqual(before, (len(self.store.list_candidates()), self.store.history("d-first")["versions"][-1]["version"]))
+        self.assertEqual(1, first["version"])
+
+    def test_duplicate_is_content_not_spacing_or_list_order(self):
+        self.add("d-first", "交接前先写下当前版本的范围，能减少返工。", scope=["交接", "上线前"])
+        with self.assertRaises(DuplicateContent):
+            self.store.add(
+                "  交接前先写下当前版本的范围，能减少返工。 ", "abstract_idea",
+                candidate_id="d-second", scope=["上线前", "交接"],
+            )
+
+    def test_a_different_scope_or_wording_is_not_a_duplicate(self):
+        self.add("d-first", "交接前先写下当前版本的范围，能减少返工。", scope=["交接"])
+        other_scope = self.add("d-second", "交接前先写下当前版本的范围，能减少返工。", scope=["多人协作交接"])
+        other_wording = self.add("d-third", "交接前先写下这次要交接的范围。", scope=["交接"])
+        self.assertEqual(3, len(self.store.list_candidates()))
+        self.assertEqual("d-second", other_scope["id"])
+        self.assertEqual("d-third", other_wording["id"])
+
+    def test_attach_source_turns_a_duplicate_into_a_second_independence_group(self):
+        source = {"id": "src-a", "type": "unknown", "claim": "第一次会话的结论", "independence_group": "sess-a", "verification": "unknown"}
+        self.store.add(
+            "交接前先写下当前版本的范围，能减少返工。", "application", candidate_id="d-one",
+            scope=["交接"], session="sess-a", sources=[source],
+        )
+        self.store.confirm("d-one", "worth discussing")
+        self.assertFalse(independence(self.store.show("d-one")["candidate"])["independent"])
+        with self.assertRaises(DuplicateContent):
+            self.store.add(
+                "交接前先写下当前版本的范围，能减少返工。", "application", candidate_id="d-two",
+                scope=["交接"], session="sess-b",
+                sources=[{"id": "src-b", "type": "unknown", "claim": "第二次会话独立得出同一结论", "independence_group": "sess-b", "verification": "unknown"}],
+            )
+        attached = self.store.attach_source(
+            "d-one",
+            {"id": "src-b", "type": "unknown", "claim": "第二次会话独立得出同一结论", "independence_group": "sess-b", "verification": "unknown"},
+            "sess-b",
+        )
+        info = independence(attached)
+        self.assertEqual(["sess-a", "sess-b"], info["independence_groups"])
+        self.assertTrue(info["independent"])
+        self.assertEqual("attach_source", self.store.history("d-one")["events"][-1]["event"])
+        self.assertEqual(["d-one"], [item["id"] for item in self.store.broadcast("交接 范围 返工")["results"]])
+
+    def test_attaching_the_same_session_twice_is_a_no_op(self):
+        self.store.add(
+            "交接前先写下当前版本的范围，能减少返工。", "application", candidate_id="d-one",
+            scope=["交接"], session="sess-a",
+            sources=[{"id": "src-a", "type": "unknown", "claim": "会话结论", "independence_group": "sess-a", "verification": "unknown"}],
+        )
+        before = self.store.show("d-one")["candidate"]
+        events_before = len(self.store.history("d-one")["events"])
+        again = self.store.attach_source(
+            "d-one",
+            {"id": "src-b", "type": "unknown", "claim": "同一会话再次跑到同一结论", "independence_group": "sess-a", "verification": "unknown"},
+            "sess-a",
+        )
+        self.assertEqual(before, again)
+        self.assertEqual(before, self.store.show("d-one")["candidate"])
+        self.assertEqual(events_before, len(self.store.history("d-one")["events"]))
 
     def test_abstain_is_event_only_and_does_not_increment_version(self):
         self.add()
