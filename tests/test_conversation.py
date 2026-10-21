@@ -535,7 +535,7 @@ class ConversationTests(unittest.TestCase):
             with self.assertRaises(LiveError):
                 LiveConfig.from_environment(values)
         config = LiveConfig.from_environment({"DOJO_LLM_BASE_URL": "http://127.0.0.1:1234/v1"})
-        self.assertEqual("github-copilot/gpt-6-luna", config.model)
+        self.assertEqual("github_copilot/gpt-6-luna", config.model)
         self.assertIsNone(config.api_key)
 
     def test_model_timeout_is_configurable_with_a_bounded_default(self):

@@ -16,7 +16,7 @@ python3 -m dojo demo
 
 ```sh
 export DOJO_LLM_BASE_URL='https://your-approved-compatible-endpoint/v1'
-export DOJO_LLM_MODEL='github-copilot/gpt-6-luna'  # 默认模型名；不会静默替换
+export DOJO_LLM_MODEL='github_copilot/gpt-6-luna'  # 不设则用同一个默认值；不会静默替换
 # 可选：只对需要 token 的服务设置；本地服务可以省略
 export DOJO_LLM_API_KEY='从本机安全方式提供的 token'
 python3 -m dojo chat

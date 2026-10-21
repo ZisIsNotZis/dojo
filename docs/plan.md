@@ -134,7 +134,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 - 标准库测试：`python3 -m unittest discover -s tests` —— 通过与否、多少项，只看这条命令的输出，不在这里存数字（会过期）。
 - 反奉承已有部分证据：`docs/evidence/m5-sycophancy`（四场对抗场景 A–D，结论"在四场捕获的序列里不让步"，代码 `b78c41a`）。它**不覆盖** M5 验收 ④ 那条"用户用真实文本反对而模型误报 `user_stance=accept`"，且跑在搜索、人物档案、推理等级变更之前（仍是 20 秒超时时代），因此按过期证据读，不能当 M5 的验收通过。`docs/product.md` 的"未做的负控制"一句仍成立。
 - `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行。
-- 已知缺陷（未修）：`dojo/live.py` 的 `DEFAULT_MODEL` 是 `github-copilot/gpt-6-luna`（连字符），而本机端点注册名为 `github_copilot/gpt-6-luna`（下划线）；不设 `DOJO_LLM_MODEL` 时会得到 HTTP 400。当前用文档 + 更明确的 4xx 提示绕过，未改默认值，因为端点是外部配置。
+- 已修缺陷：`dojo/live.py` 的 `DEFAULT_MODEL` 曾是 `github-copilot/gpt-6-luna`（连字符），而本机端点公布的名字是 `github_copilot/gpt-6-luna`（下划线），不设 `DOJO_LLM_MODEL` 时每次请求都 HTTP 400。默认值改为端点公布的写法，`docs/demo-guide.md` 同步；`tests/test_live.py` 钉住默认值，并让任何**发 HTTP 请求的模块**里出现连字符写法直接失败。`compare.py` 与 `demo.py` 仍保留连字符是有意的：前者打印的是 Pi 子代理侧消费的模型名，后者复现冻结包原文，两者都不是 HTTP model id。端点的模型列表仍是外部配置，本仓不探测、不替换。
 - 已修缺陷：模型请求超时原为硬编码 20 秒，实测一次包含 8 条检索结果的续轮请求在 low 推理下超过 20 秒，连续两次超时就会把可用的回答判成"端点故障"并终止会话。现在默认 60 秒并可用 `DOJO_LLM_TIMEOUT` 覆盖；`--verbose` 暴露每次请求耗时，供判断该值是否仍偏短。
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
 - 写入条件：模型判定双方已收敛时静默写入；空行与 EOF 不写入。

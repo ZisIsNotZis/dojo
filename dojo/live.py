@@ -15,7 +15,7 @@ from typing import Any, Callable, TextIO
 
 from .storage import DojoError, Store
 
-DEFAULT_MODEL = "github-copilot/gpt-6-luna"
+DEFAULT_MODEL = "github_copilot/gpt-6-luna"  # 端点公布的 model id（下划线）；连字符写法是 pi 侧 provider 名，本端点会回 HTTP 400
 REQUEST_TIMEOUT_SECONDS = 20
 DEFAULT_TIMEOUT_SECONDS = 60
 MAX_TIMEOUT_SECONDS = 600
