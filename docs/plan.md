@@ -4,12 +4,13 @@
 
 ## 当前推进状态
 
-- **下一个里程碑是 M2**，由 root 于 2026-10-21 判定并接受；assent：agreed。依据：commit `7753d73` 里的 `mail/2026-10-21-answers.md`（该文件按 `mail/README.md` 的读后即删约定已删除，git 历史里仍在）。M2 的边界与验收以本页 `## M2` 五条为准，不另立编号。
-- **M2 尚未派发。** 入口条件是用户对 M1 / M1.5 用户检查点的确认，即上方"须经用户确认"那一句；该问题在用户手里，仓库内没有可复核的落盘记录，只能等，不能代替他答。门未过，依赖 M2 的工作一律不开始。
+- **下一个里程碑是 M2**，由 root 于 2026-10-21 判定并接受；assent：agreed。依据：commit `7753d73` 里的 `mail/2026-10-21-answers.md`（该文件按 `inbox/README.md` 的读后即删约定已删除，git 历史里仍在）。M2 的边界与验收以本页 `## M2` 五条为准，不另立编号。
+- **M2 的独立评审已到，判定为 fail**：在 `939bf90` 上五条验收只有 ⑤ 成立，且 ⑤ 在基线 `621bf26` 就已存在，因此不能算那一轮的推进。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict.md`，绑定 `939bf90`，只在那个修订上可复核；此后代码一动其命令与命中数即过期，须重跑而非引用。它同时指出：M2 五条当时**没有一条有验收命令**，所以"98 项测试通过"对 M2 什么都证明不了。
+- **M2 作为里程碑仍未达成，门仍在。** 入口条件是用户对 M1 / M1.5 用户检查点的确认；该问题在用户手里，仓库内没有可复核的落盘记录，只能等，不能代替他答。**不依赖该门的 M2 能力包已按 root 2026-10-21 的契约落地**（见 `## 不依赖门的 M2 能力包`）：写代码、带验收命令，但不宣布 M2 通过，不把提炼清单交用户过目，不开始依赖 M2 的 M3。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
 - **已落地、不受该门限制的工作包：`plan-truthtelling`** —— 本页、`README.md` 与恢复入口的一致性修复。它不改设计、不改范围、不调模型，因此不等门。见 `## 文档一致性`。
 - 派发状态一句话：M2 待门；M2 之外无在跑工作包。
-- **本轮推进做了什么**：`plan-truthtelling`（文档与实际行为对齐）、`scratch-retire`（`.scratch/` 退休）、`m2-prep`（把 M2 五条拆成包并标出哪些已存在）。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
+- **本轮推进做了什么**：上一轮是 `plan-truthtelling`、`scratch-retire`、`m2-prep`，零行代码，评审据此判 M2 fail；本轮是不依赖门的 M2 能力包，每条带命令，见下一节。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 
 ## 执行契约（每个里程碑统一适用）
 
@@ -130,7 +131,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 ## 当前基线
 
 - 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、`discuss`（含搜索工具与人物档案）。
-- 标准库测试：`python3 -m unittest discover -s tests` —— 通过与否看这条命令，不在这里存数字（会过期）。最近一次：2026-10-21，`master` @ 7753d73，`Ran 98 tests … OK`。
+- 标准库测试：`python3 -m unittest discover -s tests` —— 通过与否、多少项，只看这条命令的输出，不在这里存数字（会过期）。
 - 反奉承已有部分证据：`docs/evidence/m5-sycophancy`（四场对抗场景 A–D，结论"在四场捕获的序列里不让步"，代码 `b78c41a`）。它**不覆盖** M5 验收 ④ 那条"用户用真实文本反对而模型误报 `user_stance=accept`"，且跑在搜索、人物档案、推理等级变更之前（仍是 20 秒超时时代），因此按过期证据读，不能当 M5 的验收通过。`docs/product.md` 的"未做的负控制"一句仍成立。
 - `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行。
 - 已知缺陷（未修）：`dojo/live.py` 的 `DEFAULT_MODEL` 是 `github-copilot/gpt-6-luna`（连字符），而本机端点注册名为 `github_copilot/gpt-6-luna`（下划线）；不设 `DOJO_LLM_MODEL` 时会得到 HTTP 400。当前用文档 + 更明确的 4xx 提示绕过，未改默认值，因为端点是外部配置。
@@ -146,5 +147,5 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 - **怎么继续规划**：先看本页 `## 当前推进状态`；门未过时不要开 M2 的包。
 - **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
 - **证据在哪**：`docs/evidence/m1*`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。
-- **写给谁**：给 root 的报告进 `mail/`，形状见 `mail/README.md`。
+- **写给谁**：两层之间的消息走 `inbox/`（2026-10-21 由 `mail/` 改名）：落到本项目的消息躺在 `inbox/`，四行头 `kind`/`from`/`spend`/`id`，形状见 `inbox/README.md`。
 

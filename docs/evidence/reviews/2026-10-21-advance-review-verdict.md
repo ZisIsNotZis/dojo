@@ -1,3 +1,7 @@
+> 归档评审记录（2026-10-21 收到，读完即删出 `inbox/`，原文保真）。它绑定的是 `939bf90`，只在那个修订上可复核；此后代码一动，里面的命令与命中数即过期，须重跑而不是引用。它评审的对象是 `621bf26..939bf90` 这五个提交。
+>
+> 以下为原文。
+
 ## Verdict: **fail** — M2 does not pass at `939bf90`; 1 of its 5 acceptance items holds (and only as a pre-existing store capability), 4 do not
 
 Read at `939bf905e6ed6feb7acecbc2c94af04178c01117`, worktree clean (`git status --porcelain -uall` empty), branch `master`, ahead 7, nothing staged.
