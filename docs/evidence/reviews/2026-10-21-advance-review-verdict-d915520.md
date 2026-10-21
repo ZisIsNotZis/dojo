@@ -1,3 +1,5 @@
+> **归档说明**：本文件是 dojo 的第二份独立评审原文，绑定修订 `d915520`。它在那个修订上可复核；此后代码一动，其命令与命中数即过期，须重跑而非引用。原文保真，未改一字；上游要求的三处缺陷由这次推进在上表之后的提交里关闭，见 `docs/plan.md` `## 当前推进状态`。
+
 Read at `d915520bbc44471115f0bb4252dfc4181807c1ce`, worktree clean (`git status --porcelain -uall` → 0 lines), branch `master`, nothing staged, I wrote no file in the project — every probe ran under `/tmp/rv915/`.
 
 ## Base I used, and why
