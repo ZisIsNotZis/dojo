@@ -596,6 +596,25 @@ class Store:
             state = self._write(state, "withdraw", {"reason": reason})
         return state
 
+    def _matches(self, terms: set[str]) -> list[tuple[int, set[str], dict[str, Any]]]:
+        """Every discussable card whose text overlaps `terms`, best overlap first."""
+        rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
+        matches: dict[str, tuple[int, set[str], dict[str, Any]]] = {}
+        for row in rows:
+            state = json.loads(row["state_json"])
+            try:
+                canonical, _chain = self.resolve(state["id"])
+            except DojoError:
+                continue
+            if canonical["status"] != "discussable" or canonical.get("redirect_to"):
+                continue
+            found = terms.intersection(lexical_terms(candidate_text(canonical)))
+            if found:
+                previous = matches.get(canonical["id"])
+                if previous is None or len(found) > previous[0]:
+                    matches[canonical["id"]] = (len(found), found, canonical)
+        return sorted(matches.values(), key=lambda item: (-item[0], item[2]["id"]))
+
     def retrieve(self, query: str, limit: int = 10) -> dict[str, Any]:
         query = str(query or "").strip()
         if limit < 1 or limit > 100:
@@ -603,23 +622,7 @@ class Store:
         terms = lexical_terms(query, query=True)
         if not terms:
             return {"query": query, "method": "distinct lexical term overlap; no semantic inference", "matched_terms": [], "results": []}
-        rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
-        matches: dict[str, tuple[int, set[str], dict[str, Any]]] = {}
-        for row in rows:
-            state = json.loads(row["state_json"])
-            try:
-                canonical, chain = self.resolve(state["id"])
-            except DojoError:
-                continue
-            if canonical["status"] != "discussable" or canonical.get("redirect_to"):
-                continue
-            corpus = candidate_text(canonical)
-            found = terms.intersection(lexical_terms(corpus))
-            if found:
-                previous = matches.get(canonical["id"])
-                if previous is None or len(found) > previous[0]:
-                    matches[canonical["id"]] = (len(found), found, canonical)
-        ordered = sorted(matches.values(), key=lambda item: (-item[0], item[2]["id"]))[:limit]
+        ordered = self._matches(terms)[:limit]
         results = []
         for score, found, state in ordered:
             results.append({
@@ -646,6 +649,63 @@ class Store:
             "results": results,
         }
 
+    def broadcast(self, query: str, limit: int = 10, exclude_session: str | None = None) -> dict[str, Any]:
+        """Retrieval as cross-session broadcasting uses it: what other sessions arrived at.
+
+        Two exclusions, both reported rather than dropped: a card that arrived over
+        the network as a raw list is not what the facilitator may say, and a card
+        resting on one discussion session is that session's word, not a second
+        stranger's compatible or opposing claim. Independence is reported per result
+        and is not used to reorder relevance.
+        """
+        query = str(query or "").strip()
+        if limit < 1 or limit > 100:
+            raise DojoError("limit must be between 1 and 100")
+        terms = lexical_terms(query, query=True)
+        method = (
+            "transparent lexical overlap (distinct query terms only) over cross-session material; "
+            "independence is reported per result and is not a relevance or truth ranking"
+        )
+        if not terms:
+            return {"query": query, "method": method, "matched_terms": [], "results": [], "suppressed": []}
+        results = []
+        suppressed = []
+        for score, found, state in self._matches(terms):
+            info = independence(state)
+            reason = None
+            if exclude_session is not None and exclude_session in info["sessions"]:
+                reason = "written by the session asking: a session does not broadcast its own word back"
+            elif info["single_session"]:
+                reason = "single-session provenance: no second independent group backs it"
+            if reason is not None:
+                suppressed.append({"id": state["id"], "reason": reason})
+                continue
+            if len(results) >= limit:
+                continue
+            results.append({
+                "id": state["id"],
+                "version": state["version"],
+                "status": state["status"],
+                "statement": state["statement"],
+                "kind": state["kind"],
+                "score": score,
+                "matched_terms": sorted(found),
+                "scope": state.get("scope", []),
+                "premises": state.get("premises", []),
+                "alternatives": state.get("alternatives", []),
+                "contradictions": state.get("contradictions", []),
+                "unknowns": state.get("unknowns", []),
+                "sources": state.get("sources", []),
+                "independence": info,
+            })
+        return {
+            "query": query,
+            "method": method,
+            "matched_terms": sorted(terms),
+            "results": results,
+            "suppressed": suppressed,
+        }
+
     def export_prompt(self, mode: str, ids: list[str], budget_chars: int, export_dir: str | Path) -> dict[str, Any]:
         if mode not in {"b", "c"}:
             raise DojoError("export mode must be b or c")
@@ -666,7 +726,12 @@ class Store:
             state, _ = self.resolve(candidate_id)
             if state["status"] != "discussable" or state.get("redirect_to"):
                 raise DojoError(f"selected candidate is not currently discussable: {candidate_id}")
-            excerpts.append(state)
+            info = independence(state)
+            if info["single_session"]:
+                raise DojoError(
+                    f"single-session provenance cannot be exported as cross-session material: {candidate_id}"
+                )
+            excerpts.append((state, info))
         lines = [
             "This is a simulated decision exercise, not verified evidence.",
             "Distinguish supplied facts, opinions, assumptions, conflicts, and unknowns. Do not invent probabilities or treat discussability as truth.",
@@ -677,8 +742,12 @@ class Store:
         ]
         if mode == "c":
             lines.extend(["", "Explicitly selected dojo excerpts (not an answer key):"])
-            for state in excerpts:
-                lines.append(f"\n[{state['id']} v{state['version']} | {state['kind']} | status={state['status']}]")
+            for state, info in excerpts:
+                lines.append(
+                    f"\n[{state['id']} v{state['version']} | {state['kind']} | status={state['status']}"
+                    f" | independence_groups={len(info['independence_groups'])}"
+                    f" | independent={str(info['independent']).lower()}]"
+                )
                 lines.append(state["statement"])
                 for key in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
                     values = state.get(key, [])
@@ -709,7 +778,7 @@ class Store:
             path.chmod(0o600)
         except OSError:
             pass
-        return {"path": str(path), "mode": mode.upper(), "source_candidate_ids": [state["id"] for state in excerpts], "characters": len(prompt), "budget_chars": budget_chars}
+        return {"path": str(path), "mode": mode.upper(), "source_candidate_ids": [state["id"] for state, _info in excerpts], "characters": len(prompt), "budget_chars": budget_chars}
 
 
 def lexical_terms(text: str, *, query: bool = False) -> set[str]:
@@ -721,6 +790,29 @@ def lexical_terms(text: str, *, query: bool = False) -> set[str]:
             terms.update(run)
         terms.update(run[index:index + 2] for index in range(len(run) - 1))
     return terms
+
+
+def independence(state: dict[str, Any]) -> dict[str, Any]:
+    """What a card's provenance supports, computed from its sources and sessions.
+
+    `single_session` is the isolation claim design.md names: the card comes from a
+    discussion session and its one provenance group is that same session, so it is
+    one session's word and not cross-session material. `independent` says two or
+    more distinct groups back it. A card that names no group is reported as having
+    none rather than assumed either way. Nothing here is stored twice.
+    """
+    groups = sorted({
+        source["independence_group"]
+        for source in state.get("sources", [])
+        if source.get("independence_group") and source.get("independence_group") != "unknown"
+    })
+    sessions = list(state.get("sessions", []))
+    return {
+        "independence_groups": groups,
+        "sessions": sessions,
+        "independent": len(groups) >= 2,
+        "single_session": len(groups) == 1 and groups[0] in sessions,
+    }
 
 
 def candidate_text(state: dict[str, Any]) -> str:

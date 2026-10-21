@@ -121,6 +121,17 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 `generalize` 与 `condition` 不在 M2 内（`design.md` 第 5 节把它们划归 M4）。每包的六行契约（目标、范围、验收命令、路径、预算与墙钟、停止条件）在门过后派发时才写；此刻写了就是要改的错。
 
+## 不依赖门的 M2 能力包（2026-10-21 落地，每包带命令）
+
+门拦的是"把 M2 作为里程碑交用户过目"，不是全部 M2 代码：这些包不改 M1 行为、不改设计、不调模型，所以不等门。它们落地只意味着能力就位，**不意味着 M2 通过**——验收清单仍要等门过后整场跑一遍（`m2e`）才能判。
+
+| 包 | 现在为真的事 | 命令 |
+|---|---|---|
+| `default-model` | 不设 `DOJO_LLM_MODEL` 时用的是端点公布的下划线写法，不再每次 HTTP 400 | `python3 -m unittest discover -s tests -p 'test_live.py'` |
+| `isolation-guard`（验收 ②） | `broadcast` 拒收"写它的会话是唯一独立性来源"的卡与发问会话自己写的卡，拒收原因列在 `suppressed`；`export --mode c` 同样拒收前者并在每条摘录上标 `independence_groups`/`independent` | `python3 -m unittest discover -s tests -p 'test_storage.py' -k broadcast`（另有一条 CLI 命令：`python3 -m dojo broadcast '<查询>'`，`suppressed` 里能看到被拒的卡与原因） |
+
+`isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条"单一会话来源不进入广播"。独立性只有一组但**不是**会话出来的卡（seed、模拟方法材料）不拦，只在结果里报 `independent: false`；`unknown` 来源算"没有独立性信息"，照实报空而不是猜。广播端怎么把它转述成人话仍是 M3 的事。
+
 ## 文档一致性（已修复，工作包 `plan-truthtelling`）
 
 - **读者曾会被误导的两处**：`README.md` 把 `docs/current-demo-direction.md` 标作当前产品方向，而 `docs/product.md` 已取代它、把旧文件收窄为已实现 Demo 的说明；`README.md` 写"不会录制原始聊天"，而 `discuss` 默认逐轮写 JSONL 轨迹。两处都已按实际行为改写，旧句不再复述。

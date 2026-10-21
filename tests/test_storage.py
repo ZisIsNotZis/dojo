@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dojo.storage import DojoError, Store, load_simulated_seeds
+from dojo.storage import DojoError, Store, independence, load_simulated_seeds
 
 
 class StoreTests(unittest.TestCase):
@@ -211,6 +211,87 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(DojoError):
             self.store.export_prompt("c", ["seed-m01", "seed-m01"], 6000, outdir)
         self.assertEqual(len({b["path"], c["path"]}), 2)
+
+    def _single_session_card(self, session="sess-a", candidate_id="d-session"):
+        return self.store.add(
+            "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id=candidate_id,
+            scope=["交接"], session=session,
+            sources=[{
+                "type": "unknown", "claim": "本次讨论会话形成的结论；内容未经独立核验。",
+                "independence_group": session, "verification": "unknown",
+                "scope_note": "单一会话来源；不构成独立佐证。",
+            }],
+        )
+
+    def test_single_session_card_is_visible_to_search_but_not_to_broadcast(self):
+        self._single_session_card()
+        self.store.confirm("d-session", "worth discussing")
+        searched = [item["id"] for item in self.store.retrieve("交接 版本 范围")["results"]]
+        self.assertEqual(["d-session"], searched)
+        broadcast = self.store.broadcast("交接 版本 范围")
+        self.assertEqual([], broadcast["results"])
+        self.assertEqual(["d-session"], [item["id"] for item in broadcast["suppressed"]])
+        self.assertIn("single-session provenance", broadcast["suppressed"][0]["reason"])
+
+    def test_a_second_independence_group_makes_a_card_broadcastable(self):
+        self.store.add(
+            "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id="d-two-groups",
+            scope=["交接"], session="sess-a",
+            sources=[
+                {"type": "unknown", "claim": "本次会话形成的结论", "independence_group": "sess-a", "verification": "unknown"},
+                {"type": "claimed_firsthand", "claim": "另一位互不相关的会话也独立得出相容主张", "independence_group": "sess-b", "verification": "unverified"},
+            ],
+        )
+        self.store.confirm("d-two-groups", "worth discussing")
+        broadcast = self.store.broadcast("交接 版本 范围")
+        self.assertEqual(["d-two-groups"], [item["id"] for item in broadcast["results"]])
+        self.assertEqual(["sess-a", "sess-b"], broadcast["results"][0]["independence"]["independence_groups"])
+        self.assertTrue(broadcast["results"][0]["independence"]["independent"])
+        self.assertEqual([], broadcast["suppressed"])
+
+    def test_broadcast_excludes_the_asking_session_even_with_two_groups(self):
+        self.store.add(
+            "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id="d-own",
+            scope=["交接"], session="sess-a",
+            sources=[
+                {"type": "unknown", "claim": "本次会话形成的结论", "independence_group": "sess-a", "verification": "unknown"},
+                {"type": "claimed_firsthand", "claim": "另一独立会话得出相容主张", "independence_group": "sess-b", "verification": "unverified"},
+            ],
+        )
+        self.store.confirm("d-own", "worth discussing")
+        self.assertEqual(1, len(self.store.broadcast("交接 版本 范围")["results"]))
+        own = self.store.broadcast("交接 版本 范围", exclude_session="sess-a")
+        self.assertEqual([], own["results"])
+        self.assertIn("its own word back", own["suppressed"][0]["reason"])
+
+    def test_export_c_refuses_single_session_provenance_and_names_independence(self):
+        self._single_session_card()
+        self.store.confirm("d-session", "worth discussing")
+        outdir = self.root / "exports"
+        with self.assertRaises(DojoError):
+            self.store.export_prompt("c", ["d-session"], 6000, outdir)
+        self.assertFalse(outdir.exists() and any(outdir.iterdir()))
+        self.store.add(
+            "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id="d-two-groups",
+            scope=["交接"], session="sess-a",
+            sources=[
+                {"type": "unknown", "claim": "本次会话形成的结论", "independence_group": "sess-a", "verification": "unknown"},
+                {"type": "claimed_firsthand", "claim": "另一独立会话得出相容主张", "independence_group": "sess-b", "verification": "unverified"},
+            ],
+        )
+        self.store.confirm("d-two-groups", "worth discussing")
+        exported = self.store.export_prompt("c", ["d-two-groups"], 6000, outdir)
+        text = Path(exported["path"]).read_text(encoding="utf-8")
+        self.assertIn("independence_groups=2", text)
+        self.assertIn("independent=true", text)
+
+    def test_independence_counts_no_group_when_sources_say_unknown(self):
+        self.add(candidate_id="d-unknown", sources=[{"type": "unknown", "claim": "来源未知", "verification": "unknown"}])
+        shown = self.store.show("d-unknown")["candidate"]
+        info = independence(shown)
+        self.assertEqual([], info["independence_groups"])
+        self.assertFalse(info["independent"])
+        self.assertFalse(info["single_session"])
 
     def test_abstain_is_event_only_and_does_not_increment_version(self):
         self.add()

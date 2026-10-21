@@ -119,6 +119,14 @@ def _parser() -> argparse.ArgumentParser:
     search.add_argument("query", nargs="?")
     search.add_argument("--limit", type=int, default=10)
 
+    broadcast = sub.add_parser(
+        "broadcast",
+        help="transparent lexical retrieval of cross-session material only; suppressed cards are listed with their reason",
+    )
+    broadcast.add_argument("query", nargs="?")
+    broadcast.add_argument("--limit", type=int, default=10)
+    broadcast.add_argument("--session", help="exclude cards written by this session: it does not broadcast its own word back")
+
     export = sub.add_parser("export", help="create a new isolated B (no seed) or C (selected excerpt) prompt")
     export.add_argument("--mode", choices=["b", "c"], required=True)
     export.add_argument("--id", action="append", default=[], help="explicit selected candidate ID (C only); repeat to add")
@@ -214,6 +222,8 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.withdraw(args.id, args.reason)
     if command == "search":
         return store.retrieve(args.query or "", args.limit)
+    if command == "broadcast":
+        return store.broadcast(args.query or "", args.limit, args.session)
     if command == "export":
         return store.export_prompt(args.mode, args.id, args.budget_chars, args.outdir)
     if command == "events":
