@@ -64,6 +64,18 @@ python3 -m dojo broadcast '摩擦 持续 行为' --session life-anon-1
 python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 单一会话来源的卡会被拒
 ```
 
+## 会话末管线（`pipeline`）
+
+`pipeline` 只处理一场会话写下的卡，按 `classify → locate → challenge` 顺序跑；每张卡对每个 pass 只处理一次，标记记的是"已处理到版本 N"，卡升版后才会再处理。重跑同一会话是空操作：不写事件、不改卡。pass 只提议，不合并、不改写、不删卡。
+
+```sh
+python3 -m dojo pipeline --session life-anon-1            # 跑一次
+python3 -m dojo pipeline --session life-anon-1            # 再跑：events_written 为 0
+python3 -m dojo pipeline --session life-anon-1 --dry-run  # 只报会做什么，不写标记与事件
+```
+
+`classify` 需要在场判定这条主张属于哪类（`kind`），本轮不猜：它报 `unavailable` 并写明理由，不写事件也不打标记，所以等端点可用时它仍会被重新跑。`locate` 给出 新 / 变体 / 重复 的提议（重复已由 `add` 挡住，这里只用于发现旧数据里的重复）；`challenge` 只在两个邻居用同一批词而肯定/否定相反时提议挑战。
+
 ## 7–10 分钟：同一目标下的 B/C 人工复制
 
 ```sh

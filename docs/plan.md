@@ -128,8 +128,11 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 | 包 | 现在为真的事 | 命令 |
 |---|---|---|
 | `default-model` | 不设 `DOJO_LLM_MODEL` 时用的是端点公布的下划线写法，不再每次 HTTP 400 | `python3 -m unittest discover -s tests -p 'test_live.py'` |
+| `pipe-core`（M2 的 `m2a`，验收 ④） | 会话末管线按 `classify → locate → challenge` 跑，每张卡每个 pass 记"已处理到版本 N"；同一会话重跑不写事件、不改卡，卡升版后才重跑。pass 只提议，不合并不改写。`classify` 报 `unavailable`（要模型判定，见 `m2b`）而不猜，也不留标记，端点可用时重跑仍会做 | `python3 -m unittest discover -s tests -p 'test_pipeline.py'`；CLI：`python3 -m dojo pipeline --session <s>` 连跑两次，第二次 `events_written` 为 0 |
 | `duplicate-content`（验收 ③） | 同一内容（陈述＋类型＋五条列表，忽略空白与顺序）不再写成第二张卡：`add` 拒绝并给出已有卡 ID，不写新版本。第二个独立会话得出同一结论时用 `attach-source` 给已有卡加来源，不写第二张卡；同一会话重复附来源是空操作 | `python3 -m unittest discover -s tests -p 'test_storage.py' -k duplicate`；CLI：同一条 `add` 跑两次，第二次以 `duplicate content already stored as …` 失败且 `list` 仍是一张 |
 | `isolation-guard`（验收 ②） | `broadcast` 拒收"写它的会话是唯一独立性来源"的卡与发问会话自己写的卡，拒收原因列在 `suppressed`；`export --mode c` 同样拒收前者并在每条摘录上标 `independence_groups`/`independent` | `python3 -m unittest discover -s tests -p 'test_storage.py' -k broadcast`（另有一条 CLI 命令：`python3 -m dojo broadcast '<查询>'`，`suppressed` 里能看到被拒的卡与原因） |
+
+`pipe-core` 落地的是运行器与顺序，不是 M2 的整场提炼：`m2b classify` 要模型判定、`m2e` 要整场跑一遍并把清单交用户过目，两者都在门后。**① 抽检因此仍不可判**——没有提炼结果可抽。
 
 `isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条"单一会话来源不进入广播"。独立性只有一组但**不是**会话出来的卡（seed、模拟方法材料）不拦，只在结果里报 `independent: false`；`unknown` 来源算"没有独立性信息"，照实报空而不是猜。广播端怎么把它转述成人话仍是 M3 的事。
 

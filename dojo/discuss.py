@@ -13,7 +13,6 @@ import stat
 import sys
 import time
 import uuid
-from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, TextIO
@@ -40,7 +39,7 @@ from .live import (
     _validate_model_content,
 )
 from .search import SearchError, search as deepseek_search
-from .storage import DojoError, DuplicateContent, KINDS, Store
+from .storage import DojoError, DuplicateContent, KINDS, Store, normalize_wording, wording_equivalent
 
 MAX_SEARCHES_PER_SESSION = 3
 
@@ -264,34 +263,17 @@ def _uses_recording_language(answer: str) -> bool:
     return any(pattern.search(answer) for pattern in _RECORD_LANGUAGE_PATTERNS)
 
 
-def _normalize_wording(value: str) -> str:
-    return re.sub(r"[\s\W_]+", "", value.casefold())
-
-
-def _wording_equivalent(first: str, second: str) -> bool:
-    first_normalized = _normalize_wording(first)
-    second_normalized = _normalize_wording(second)
-    if first_normalized == second_normalized:
-        return True
-    negations = ("不", "无", "未", "非", "不能")
-    if {word for word in negations if word in first_normalized} != {
-        word for word in negations if word in second_normalized
-    }:
-        return False
-    return SequenceMatcher(None, first_normalized, second_normalized).ratio() >= 0.92
-
-
 def _candidate_equivalent(first: dict[str, Any], second: dict[str, Any]) -> bool:
     if first["kind"] != second["kind"]:
         return False
-    if not _wording_equivalent(first["statement"], second["statement"]):
+    if not wording_equivalent(first["statement"], second["statement"]):
         return False
     for field in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
-        first_values = sorted(_normalize_wording(value) for value in first[field])
-        second_values = sorted(_normalize_wording(value) for value in second[field])
+        first_values = sorted(normalize_wording(value) for value in first[field])
+        second_values = sorted(normalize_wording(value) for value in second[field])
         if len(first_values) != len(second_values):
             return False
-        if any(not _wording_equivalent(left, right) for left, right in zip(first_values, second_values)):
+        if any(not wording_equivalent(left, right) for left, right in zip(first_values, second_values)):
             return False
     return True
 

@@ -7,6 +7,7 @@ import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -104,6 +105,14 @@ class Store:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS events_by_candidate ON events(candidate_id, seq);
+            CREATE TABLE IF NOT EXISTS pipeline_marks (
+                session TEXT NOT NULL,
+                pass_name TEXT NOT NULL,
+                candidate_id TEXT NOT NULL REFERENCES candidates(id),
+                version INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(session, pass_name, candidate_id)
+            );
             """
         )
 
@@ -281,6 +290,32 @@ class Store:
                 state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
             state = self._write(state, "attach_source", {"source": source_value["id"], "session": session})
         return state
+
+    def record_pipeline_pass(
+        self, candidate_id: str, pass_name: str, session: str, version: int, proposals: list[dict[str, Any]],
+    ) -> int:
+        """One pass's outcome for one card, and the marker that stops a rerun repeating it."""
+        with self.transaction():
+            event_id = self._event(candidate_id, "pipeline_pass", {
+                "pass": pass_name, "session": session, "version": version, "proposals": proposals,
+            })
+            self.set_pipeline_mark(session, pass_name, candidate_id, version)
+        return event_id
+
+    def pipeline_mark(self, session: str, pass_name: str, candidate_id: str) -> int | None:
+        """The version a pass last processed for this session, or None if never."""
+        row = self.connection.execute(
+            "SELECT version FROM pipeline_marks WHERE session=? AND pass_name=? AND candidate_id=?",
+            (session, pass_name, candidate_id),
+        ).fetchone()
+        return None if row is None else int(row["version"])
+
+    def set_pipeline_mark(self, session: str, pass_name: str, candidate_id: str, version: int) -> None:
+        self.connection.execute(
+            "INSERT INTO pipeline_marks(session,pass_name,candidate_id,version,created_at) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(session,pass_name,candidate_id) DO UPDATE SET version=excluded.version, created_at=excluded.created_at",
+            (session, pass_name, candidate_id, version, _now()),
+        )
 
     def list_candidates(self, include_history: bool = False) -> list[dict[str, Any]]:
         rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
@@ -837,7 +872,26 @@ def lexical_terms(text: str, *, query: bool = False) -> set[str]:
     return terms
 
 
+NEGATIONS = ("不", "无", "未", "非", "不能")
 CONTENT_FIELDS = ("premises", "scope", "alternatives", "contradictions", "unknowns")
+
+
+def normalize_wording(value: str) -> str:
+    """Compare wording without letting spacing or punctuation decide."""
+    return re.sub(r"[\s\W_]+", "", value.casefold())
+
+
+def wording_equivalent(first: str, second: str) -> bool:
+    """Same claim said differently, with a negation flip treated as a different claim."""
+    first_normalized = normalize_wording(first)
+    second_normalized = normalize_wording(second)
+    if first_normalized == second_normalized:
+        return True
+    if {word for word in NEGATIONS if word in first_normalized} != {
+        word for word in NEGATIONS if word in second_normalized
+    }:
+        return False
+    return SequenceMatcher(None, first_normalized, second_normalized).ratio() >= 0.92
 
 
 def content_key(statement: str, kind: str, fields: dict[str, list[str]]) -> str:

@@ -15,6 +15,7 @@ from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
 from .discuss import _load_resume_trace, run_discuss
 from .live import LiveConfig, LiveError, run_chat
+from .pipeline import run_pipeline
 from .storage import DojoError, Store, load_simulated_seeds
 
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
@@ -135,6 +136,13 @@ def _parser() -> argparse.ArgumentParser:
     broadcast.add_argument("--limit", type=int, default=10)
     broadcast.add_argument("--session", help="exclude cards written by this session: it does not broadcast its own word back")
 
+    pipeline = sub.add_parser(
+        "pipeline",
+        help="run the end-of-session passes (classify, locate, challenge) over one session's cards; each card is processed once per revision",
+    )
+    pipeline.add_argument("--session", required=True, help="the session whose cards to process")
+    pipeline.add_argument("--dry-run", action="store_true", help="report what each pass would do without writing marks or events")
+
     export = sub.add_parser("export", help="create a new isolated B (no seed) or C (selected excerpt) prompt")
     export.add_argument("--mode", choices=["b", "c"], required=True)
     export.add_argument("--id", action="append", default=[], help="explicit selected candidate ID (C only); repeat to add")
@@ -232,6 +240,8 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.withdraw(args.id, args.reason)
     if command == "search":
         return store.retrieve(args.query or "", args.limit)
+    if command == "pipeline":
+        return run_pipeline(store, args.session, dry_run=args.dry_run)
     if command == "broadcast":
         return store.broadcast(args.query or "", args.limit, args.session)
     if command == "export":
