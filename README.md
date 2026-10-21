@@ -42,7 +42,9 @@ python3 -m dojo show idea-01 --history
 python3 -m dojo revoke idea-01 --reason '范围仍不清楚'
 ```
 
-`confirm` 仅将候选标为可继续讨论/检索；不会增加事实可信度。检索是可查看命中词的透明词汇重合（中文多字符查询按相邻二元组、单字符查询按单字匹配），不是语义理解。只返回当前 `discussable` 的候选，撤回、草稿和分裂父项不匹配；合并重定向解析到规范 ID。重复次数不加权。
+`confirm` 仅将候选标为可继续讨论/检索；不会增加事实可信度。检索是可查看命中词的透明词汇重合（中文多字符查询按相邻二元组、单字符查询按单字匹配），不是语义理解。只返回当前 `discussable` 的候选，撤回、草稿和分裂父项不匹配；合并重定向解析到规范 ID。重复次数不加权；同一内容再写一次会被拒绝并给出已有卡 ID，第二个独立会话得出同一结论时用 `attach-source` 给那张卡加来源，而不是再写一张卡。
+
+`broadcast` 是同一次检索的跨会话出口：它拒收"写它的会话就是它唯一独立性来源"的卡，也拒收 `--session` 指名的会话自己写的卡，被拒的卡连同原因列在 `suppressed` 里而不静默丢弃。`pipeline --session <id>` 跑会话末的三个 pass（`classify → locate → challenge`），每张卡每个 pass 只处理一次，重跑是空操作，pass 只提议不改写。
 
 显式人工作出等价判断后才能合并：
 
@@ -58,7 +60,7 @@ python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 
 - `python3 -m dojo chat` 或 `python3 -m dojo demo --live`：只有显式选择这些模式且配置端点后才会发 HTTP 请求。详见 [`docs/demo-guide.md`](docs/demo-guide.md)；无端点配置时不联网、不回退到预设。
 - `python3 -m dojo discuss` 的主持人先推断再回答：用户没说的参数由它假设并写明条件，能推的公式当场推、能给数字就给数字，只在真存在活分歧时才不给单一结论；默认推理等级为 `medium`。检索带回页面正文（每条摘录上限 1200 字，每场 6000 字），并在对话里显示 `[检索 N] 查询 → 命中数：域名`。当结论依赖真实数值计算时，主持人会在回答里写一节 `## 计算交接单`，程序把它落盘为 `<会话目录>/compute-<id>-<轮>.md`，交给外部执行器运行后把结果说回对话；主持人自己没有代码执行能力，也不会声称跑过计算。
-- `python3 -m dojo discuss --verbose`：把模型请求、检索 query 与命中域名、每轮耗时实时打到 stderr，stdout 与轨迹不变。一轮讨论会等待多次模型请求和检索（实测单轮 5–30 秒），没有这个通道就只能看到空提示符。`DOJO_LLM_MODEL` 必须与端点注册的模型名一字不差：本机端点是 `github_copilot/gpt-6-luna`（下划线），连字符版本会被端点以 HTTP 400 拒绝。单次模型请求超时默认 60 秒，可用 `DOJO_LLM_TIMEOUT`（5–600 秒整数）调整；默认值偏长的原因见 [`docs/plan.md`](docs/plan.md) 的已知缺陷。
+- `python3 -m dojo discuss --verbose`：把模型请求、检索 query 与命中域名、每轮耗时实时打到 stderr，stdout 与轨迹不变。一轮讨论会等待多次模型请求和检索（实测单轮 5–30 秒），没有这个通道就只能看到空提示符。`DOJO_LLM_MODEL` 必须与端点注册的模型名一字不差：本机端点是 `github_copilot/gpt-6-luna`（下划线），连字符版本会被端点以 HTTP 400 拒绝。单次模型请求超时默认 60 秒，可用 `DOJO_LLM_TIMEOUT`（5–600 秒整数）调整；默认值偏长的原因见 [`docs/plan.md`](docs/plan.md) 的已修缺陷小节。
 - `python3 -m dojo demo --auto`：无 stdin 的 CI 预设故事；`python3 -m dojo demo --details` 展开每条检索卡；`python3 -m dojo demo --workdir ./my-dojo-run` 可保存数据库和简短总结，目录必须为空且不会覆盖已有数据。
 - `python3 -m dojo compare --full`：显示两份归档原文（旧 editor-bridge 评价，非当前故事）；默认 `compare` 提供短摘要、run ID 和输入文件路径，不联网。
 - `python3 -m dojo freeze-materials`：生成四份独立模型输入；C 条件来自程序实际 Store 检索，输出不会覆盖现有目录。默认输出目录为 `docs/packets/frozen-conversation-v2/`。
