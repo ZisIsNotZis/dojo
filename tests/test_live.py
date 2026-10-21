@@ -16,10 +16,20 @@ from dojo.live import DEFAULT_MODEL, LiveConfig
 LIVE_URL = "http://127.0.0.1:4000/v1"
 PUBLISHED_MODEL = "github_copilot/gpt-6-luna"
 PACKAGE_DIR = Path(__file__).resolve().parent.parent / "dojo"
-# Modules that build a request to the OpenAI-compatible endpoint. `compare.py`
-# and `demo.py` are excluded on purpose: they name the pi-side provider and
+# A module is in scope when it imports an HTTP client, so the set is derived from
+# the code instead of a hand-kept list that drifts from it. `compare.py` and
+# `demo.py` are outside it on purpose: they name the pi-side provider and
 # reproduce a frozen packet, neither of which is an HTTP model id.
-HTTP_MODEL_MODULES = ("live.py", "discuss.py")
+HTTP_CLIENT_IMPORTS = ("urllib.request", "http.client", "litellm", "requests")
+
+
+def http_request_modules() -> list[Path]:
+    modules = []
+    for path in sorted(PACKAGE_DIR.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if any(re.search(rf"^\s*(?:import|from)\s+{re.escape(name)}\b", text, re.M) for name in HTTP_CLIENT_IMPORTS):
+            modules.append(path)
+    return modules
 
 
 class DefaultModelTests(unittest.TestCase):
@@ -34,14 +44,19 @@ class DefaultModelTests(unittest.TestCase):
         config = LiveConfig.from_environment({"DOJO_LLM_BASE_URL": LIVE_URL, "DOJO_LLM_MODEL": "other/model"})
         self.assertEqual(config.model, "other/model")
 
+    def test_the_scope_is_derived_from_the_code_it_claims_to_cover(self) -> None:
+        names = {path.name for path in http_request_modules()}
+        self.assertIn("live.py", names)
+        self.assertIn("search.py", names)
+        self.assertNotIn("demo.py", names)
+
     def test_no_http_module_spells_the_model_with_a_hyphen_provider(self) -> None:
         offenders = []
-        for name in HTTP_MODEL_MODULES:
-            path = PACKAGE_DIR / name
+        for path in http_request_modules():
             text = path.read_text(encoding="utf-8")
             for match in re.finditer(r"github[-_]copilot/gpt-6-luna", text):
                 if match.group(0) != PUBLISHED_MODEL:
-                    offenders.append(f"{name}: {match.group(0)}")
+                    offenders.append(f"{path.name}: {match.group(0)}")
         self.assertEqual(offenders, [], "an HTTP model id must use the endpoint's underscore spelling")
 
 

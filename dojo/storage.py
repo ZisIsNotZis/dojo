@@ -753,10 +753,10 @@ class Store:
         for score, found, state in self._matches(terms):
             info = independence(state)
             reason = None
-            if exclude_session is not None and exclude_session in info["sessions"]:
+            if exclude_session is not None and exclude_session in info["provenance_groups"]:
                 reason = "written by the session asking: a session does not broadcast its own word back"
             elif info["single_session"]:
-                reason = "single-session provenance: no second independent group backs it"
+                reason = "single-session provenance: the card's whole provenance is the one session that wrote it"
             if reason is not None:
                 suppressed.append({"id": state["id"], "reason": reason})
                 continue
@@ -913,11 +913,16 @@ def content_key(statement: str, kind: str, fields: dict[str, list[str]]) -> str:
 def independence(state: dict[str, Any]) -> dict[str, Any]:
     """What a card's provenance supports, computed from its sources and sessions.
 
-    `single_session` is the isolation claim design.md names: the card comes from a
-    discussion session and its one provenance group is that same session, so it is
-    one session's word and not cross-session material. `independent` says two or
-    more distinct groups back it. A card that names no group is reported as having
-    none rather than assumed either way. Nothing here is stored twice.
+    A session that wrote the card is itself one source of provenance, so it counts
+    as a group even when no source names it. That closes the shape the isolation
+    guard used to admit: a card written with `--session` and no sources has no
+    group list, and reading the empty list as "not single-session" was passing on
+    absence. `single_session` is design.md's isolation claim — the card's whole
+    provenance is the one session that wrote it. `independent` says two or more
+    distinct provenance groups back it. A card whose one group is not a session
+    that wrote it (seed and methodology material) is `unidentified`: neither one
+    session's word nor two independent ones, reported as such and not guessed.
+    Nothing here is stored twice.
     """
     groups = sorted({
         source["independence_group"]
@@ -925,11 +930,20 @@ def independence(state: dict[str, Any]) -> dict[str, Any]:
         if source.get("independence_group") and source.get("independence_group") != "unknown"
     })
     sessions = list(state.get("sessions", []))
+    provenance = sorted(set(groups) | set(sessions))
+    if len(provenance) >= 2:
+        status = "cross_session"
+    elif len(provenance) == 1 and provenance[0] in sessions:
+        status = "single_session"
+    else:
+        status = "unidentified"
     return {
         "independence_groups": groups,
         "sessions": sessions,
-        "independent": len(groups) >= 2,
-        "single_session": len(groups) == 1 and groups[0] in sessions,
+        "provenance_groups": provenance,
+        "provenance_status": status,
+        "independent": len(provenance) >= 2,
+        "single_session": status == "single_session",
     }
 
 

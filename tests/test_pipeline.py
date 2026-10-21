@@ -51,7 +51,9 @@ class PipelineTests(unittest.TestCase):
     def test_passes_run_in_the_declared_order(self):
         self.add("交接前先写下当前版本的范围，能减少返工。")
         report = run_pipeline(self.store, "sess-a")
-        self.assertEqual(list(PASS_ORDER), [entry["pass"] for entry in report["passes"]])
+        # Spelled out rather than compared to PASS_ORDER: pinning the report to the
+        # constant let a reordering of the constant pass M2's 「classify → locate → challenge」.
+        self.assertEqual(["classify", "locate", "challenge"], [entry["pass"] for entry in report["passes"]])
 
     def test_a_revised_card_is_processed_again(self):
         card = self.add("交接前先写下当前版本的范围，能减少返工。")

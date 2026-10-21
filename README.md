@@ -44,7 +44,7 @@ python3 -m dojo revoke idea-01 --reason '范围仍不清楚'
 
 `confirm` 仅将候选标为可继续讨论/检索；不会增加事实可信度。检索是可查看命中词的透明词汇重合（中文多字符查询按相邻二元组、单字符查询按单字匹配），不是语义理解。只返回当前 `discussable` 的候选，撤回、草稿和分裂父项不匹配；合并重定向解析到规范 ID。重复次数不加权；同一内容再写一次会被拒绝并给出已有卡 ID，第二个独立会话得出同一结论时用 `attach-source` 给那张卡加来源，而不是再写一张卡。
 
-`broadcast` 是同一次检索的跨会话出口：它拒收"写它的会话就是它唯一独立性来源"的卡，也拒收 `--session` 指名的会话自己写的卡，被拒的卡连同原因列在 `suppressed` 里而不静默丢弃。`pipeline --session <id>` 跑会话末的三个 pass（`classify → locate → challenge`），每张卡每个 pass 只处理一次，重跑是空操作，pass 只提议不改写。
+`broadcast` 是同一次检索的跨会话出口：它拒收"全部独立性来源就是写它的那一个会话"的卡（含没有来源组、只带 `--session` 写下的卡），也拒收 `--session` 指名的会话自己写的卡，被拒的卡连同原因列在 `suppressed` 里而不静默丢弃。`pipeline --session <id>` 跑会话末的三个 pass（`classify → locate → challenge`），每张卡每个 pass 只处理一次，重跑是空操作，pass 只提议不改写。
 
 显式人工作出等价判断后才能合并：
 

@@ -57,11 +57,11 @@ python3 -m dojo search '摩擦 持续 行为'
 
 逐条读命中的 `matched_terms`、条件、来源、unknowns 和 contradictions。分数只计算不同查询词命中数，不代表可信度。草稿/撤回状态不返回；不匹配就接受空结果，不要换词直到“搜出答案”。
 
-`search` 与 `broadcast` 是同一次词汇检索的两个出口，差别只在要不要跨会话材料：`search` 返回所有可讨论命中，`broadcast` 额外拒收两类卡，并把拒收原因列在 `suppressed` 里而不静默丢弃——单一会话来源的卡（写它的那个会话是它唯一的独立性来源），以及 `--session` 指名的那个会话自己写的卡（一场会话不把自己的话当别人的佐证）。每条命中带 `independence`：`independence_groups` 列出了几个互不相同的独立性来源，`independent` 表示是否至少两个。这些只做报告，不参与排序：
+`search` 与 `broadcast` 是同一次词汇检索的两个出口，差别只在要不要跨会话材料：`search` 返回所有可讨论命中，`broadcast` 额外拒收两类卡，并把拒收原因列在 `suppressed` 里而不静默丢弃——全部独立性来源就是写它的那一个会话的卡（写它的会话无论记在来源组里，还是只记在卡上），以及 `--session` 指名的那个会话自己写的卡（一场会话不把自己的话当别人的佐证）。每条命中带 `independence`：`independence_groups` 列出几个互不相同的来源组，`sessions` 列出写过它的会话，`provenance_status` 是 `cross_session`／`single_session`／`unidentified` 三者之一（最后一种是来源组只有一个且查不到它是会话，例如 seed，只在结果里点名而不拒收）。这些只做报告，不参与排序：
 
 ```sh
 python3 -m dojo broadcast '摩擦 持续 行为' --session life-anon-1
-python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 单一会话来源的卡会被拒
+python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 全部来源就是写它的那一个会话的卡会被拒
 ```
 
 ## 会话末管线（`pipeline`）

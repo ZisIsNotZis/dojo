@@ -11,7 +11,8 @@
 - 派发状态一句话：M2 待门；M2 之外无在跑工作包。
 - **本轮推进做了什么**：上一轮是 `plan-truthtelling`、`scratch-retire`、`m2-prep`，零行代码，评审据此判 M2 fail；本轮是不依赖门的 M2 能力包加两个缺陷修复，每条带命令，见 `## 不依赖门的 M2 能力包`。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：门没过，`m2e` 没跑，用户没看过提炼清单。
-- **开放问题（不在本轮判定内）**：`discuss` 中途的检索用的是 `retrieve`，它会把本场自己写下的结论也检索回来；要不要改成按 `broadcast` 口径（排除本场），是 M3 转述的取数口径问题，改动会碰到已交付的 M1 行为，因此本轮只记录不擅改。
+- **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
+- **证据块只写命令跑出来的东西**：作废的是一件具体的事——提交计数行由记忆生成而非由命令生成，因此同一命令在绑定修订上返回的数不是它印的数。此后任何证据块写之前先跑，数字从输出复制；命令保留，数不保留。
 
 ## 执行契约（每个里程碑统一适用）
 
@@ -128,14 +129,19 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 | 包 | 现在为真的事 | 命令 |
 |---|---|---|
-| `default-model` | 不设 `DOJO_LLM_MODEL` 时用的是端点公布的下划线写法，不再每次 HTTP 400 | `python3 -m unittest discover -s tests -p 'test_live.py'` |
+| `default-model` | 不设 `DOJO_LLM_MODEL` 时用的是端点公布的下划线写法，不再每次 HTTP 400；被扫的模块集合由代码推出（凡是 import HTTP 客户端的 `dojo/*.py`），不是手写清单，`search.py` 因此在范围内 | `python3 -m unittest discover -s tests -p 'test_live.py'` |
 | `pipe-core`（M2 的 `m2a`，验收 ④） | 会话末管线按 `classify → locate → challenge` 跑，每张卡每个 pass 记"已处理到版本 N"；同一会话重跑不写事件、不改卡，卡升版后才重跑。pass 只提议，不合并不改写。`classify` 报 `unavailable`（要模型判定，见 `m2b`）而不猜，也不留标记，端点可用时重跑仍会做 | `python3 -m unittest discover -s tests -p 'test_pipeline.py'`；CLI：`python3 -m dojo pipeline --session <s>` 连跑两次，第二次 `events_written` 为 0 |
 | `duplicate-content`（验收 ③） | 同一内容（陈述＋类型＋五条列表，忽略空白与顺序）不再写成第二张卡：`add` 拒绝并给出已有卡 ID，不写新版本。第二个独立会话得出同一结论时用 `attach-source` 给已有卡加来源，不写第二张卡；同一会话重复附来源是空操作 | `python3 -m unittest discover -s tests -p 'test_storage.py' -k duplicate`；CLI：同一条 `add` 跑两次，第二次以 `duplicate content already stored as …` 失败且 `list` 仍是一张 |
-| `isolation-guard`（验收 ②） | `broadcast` 拒收"写它的会话是唯一独立性来源"的卡与发问会话自己写的卡，拒收原因列在 `suppressed`；`export --mode c` 同样拒收前者并在每条摘录上标 `independence_groups`/`independent` | `python3 -m unittest discover -s tests -p 'test_storage.py' -k broadcast`（另有一条 CLI 命令：`python3 -m dojo broadcast '<查询>'`，`suppressed` 里能看到被拒的卡与原因） |
+| `isolation-guard`（验收 ②） | 卡的独立性来源 = 它写的来源组 ∪ 写过它的会话；`broadcast` 拒收“全部来源就是写它的那一个会话”的卡——包括**没有任何来源组**、只带 `--session` 写下的卡——以及发问会话自己写的（含只在来源组里点到该会话的）卡，拒收原因列在 `suppressed`；`export --mode c` 同样拒收前者并在每条摘录上标 `independence_groups`/`independent` | `python3 -m unittest discover -s tests -p 'test_storage.py' -k broadcast`（另有一条 CLI 命令：`python3 -m dojo broadcast '<查询>'`，`suppressed` 里能看到被拒的卡与原因） |
 
 `pipe-core` 落地的是运行器与顺序，不是 M2 的整场提炼：`m2b classify` 要模型判定、`m2e` 要整场跑一遍并把清单交用户过目，两者都在门后。**① 抽检因此仍不可判**——没有提炼结果可抽。
 
-`isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条"单一会话来源不进入广播"。独立性只有一组但**不是**会话出来的卡（seed、模拟方法材料）不拦，只在结果里报 `independent: false`；`unknown` 来源算"没有独立性信息"，照实报空而不是猜。广播端怎么把它转述成人话仍是 M3 的事。
+`isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条「单一会话来源不进入广播」，判据是**能查到的**来源是否只有一个会话。空集不再是漏洞：没有来源组但有 `--session` 的卡，那个会话本身就是它的全部来源，因此拒收。仍放行的一类只有「来源组恰好一个，且库里查不到它是会话」——seed、模拟方法材料，以及**没带 `--session` 却把会话名写进来源组**的写入；这类卡在结果里报 `provenance_status: unidentified`、`independent: false`，缺席被点名而不是默认成通过。要不要把广播口径收紧成「两个独立组或缺席」，会让四张 seed 被拒并影响 M3 的演示材料，所以那是用户的取舍，本轮只记录（见上表后的残余风险）。
+
+## 证据卫生
+
+- **一条规则**：证据块在写之前先跑它点名的命令，数字从输出复制；不凭记忆写数。上一份报告的提交计数行作废，原因就是这一条。
+- **一类错误的治法是让它写不出来**：扫描范围不再用手写清单（会与它声称的范围脱钩），改由代码推出并在测试里断言 `live.py` 与 `search.py` 都在集合里；一条测试若断言的是它自己的常量（`PASS_ORDER`），重排常量时它不会失败，因此改成在测试里写出「`classify → locate → challenge`」这三个字。
 
 ## 文档一致性（已修复，工作包 `plan-truthtelling`）
 

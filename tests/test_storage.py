@@ -233,6 +233,60 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(["d-session"], [item["id"] for item in broadcast["suppressed"]])
         self.assertIn("single-session provenance", broadcast["suppressed"][0]["reason"])
 
+    def test_a_card_with_no_sources_but_a_writing_session_is_not_broadcast(self):
+        """The empty case: no group list at all, so the old guard read it as not single-session."""
+        self.store.add(
+            "交接前把当前版本的范围写下来，可以减少临场改口。", "application", candidate_id="d-bare",
+            scope=["交接"], session="sess-a",
+        )
+        self.store.confirm("d-bare", "worth discussing", session="sess-a")
+        info = independence(self.store.resolve("d-bare")[0])
+        self.assertEqual(["sess-a"], info["provenance_groups"])
+        self.assertEqual("single_session", info["provenance_status"])
+        self.assertTrue(info["single_session"])
+        broadcast = self.store.broadcast("交接 版本 范围")
+        self.assertEqual([], broadcast["results"])
+        self.assertEqual(["d-bare"], [item["id"] for item in broadcast["suppressed"]])
+        outdir = self.root / "exports"
+        with self.assertRaises(DojoError):
+            self.store.export_prompt("c", ["d-bare"], 6000, outdir)
+        self.assertFalse(outdir.exists() and any(outdir.iterdir()))
+
+    def test_the_asking_session_is_excluded_when_only_a_source_names_it(self):
+        self.store.add(
+            "交接清单的范围在开始前固定下来，可以减少返工。", "application", candidate_id="d-named-only",
+            scope=["交接"],
+            sources=[{
+                "type": "unknown", "claim": "某会话形成的结论",
+                "independence_group": "sess-a", "verification": "unknown",
+            }],
+        )
+        self.store.confirm("d-named-only", "worth discussing")
+        self.assertEqual(1, len(self.store.broadcast("交接 清单 范围")["results"]))
+        own = self.store.broadcast("交接 清单 范围", exclude_session="sess-a")
+        self.assertEqual([], own["results"])
+        self.assertIn("its own word back", own["suppressed"][0]["reason"])
+
+    def test_one_non_session_group_is_admitted_and_reported_unidentified(self):
+        """The undecided boundary: seed / methodology material is neither one session's
+        word nor two independent ones. It is admitted and its absence of provenance is
+        named; whether broadcast should require two groups is the person's call."""
+        self.store.add(
+            "降低启动摩擦通常比反复下决心更可持续。", "abstract_idea", candidate_id="d-method",
+            scope=["交接"],
+            sources=[{
+                "type": "abstract_reasoning", "claim": "模拟场景推演",
+                "independence_group": "stranger-methodology-v1", "verification": "not_evidence",
+            }],
+        )
+        self.store.confirm("d-method", "worth discussing")
+        broadcast = self.store.broadcast("交接 摩擦 可持续")
+        self.assertEqual(["d-method"], [item["id"] for item in broadcast["results"]])
+        info = broadcast["results"][0]["independence"]
+        self.assertEqual("unidentified", info["provenance_status"])
+        self.assertFalse(info["independent"])
+        self.assertFalse(info["single_session"])
+
     def test_a_second_independence_group_makes_a_card_broadcastable(self):
         self.store.add(
             "交接前先把当前版本的范围写下来，能减少返工。", "application", candidate_id="d-two-groups",
