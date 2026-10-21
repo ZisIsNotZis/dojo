@@ -107,13 +107,15 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 即：`m2a` 单独先行，`m2b`/`m2c`/`m2d` 三者并行，`m2e` 收口。
 
-| 包 | 结果 | 验收（对应 M2 五条） |
-|---|---|---|
-| `m2a pipe-core` | 会话结束触发一次有序 pass 运行；每个 pass 见到"已处理到版本 N"；同一会话重跑不产生第二份事件 | ④ |
-| `m2b classify` | 每条 draft 卡带上 `kind` | ① |
-| `m2c locate` | 透明检索给出 新 / 变体 / 重复 三分类，重复不改版本 | ③ |
-| `m2d challenge` | 成立的挑战把卡置为 `challenged` 并保留旧版本 | ⑤ |
-| `m2e integrate` | 整场会话跑完的结论清单，用户过目；单会话来源不入广播 | ①②，并汇总 ③④⑤ |
+| 包 | 结果 | 验收 | 已有 / 缺 |
+|---|---|---|---|
+| `m2a pipe-core` | 会话结束触发一次有序 pass 运行；每个 pass 见到"已处理到版本 N"；同一会话重跑不产生第二份事件 | ④ | **缺**：会话末钩子、幂等键、pass 顺序；`discuss` 现在结尾只写一条 `session_end` 轨迹事件 |
+| `m2b classify` | 每条 draft 卡带上 `kind` | ① | 部分：`store.add(..., kind=...)` 已收 kind，缺的是自动判定与抽检输出 |
+| `m2c locate` | 透明检索给出 新 / 变体 / 重复 三分类，重复不改版本 | ③ | 部分：`store.retrieve` 是可见词汇重合；`discuss` 只在**同一会话内**去重，跨会话去重与三分类是新工作 |
+| `m2d challenge` | 成立的挑战把卡置为 `challenged` 并保留旧版本 | ⑤ | **已有**：`Store.challenge` 已置 `challenged` 且快照只增不改，由 `tests/test_storage.py` 的 `test_challenge_revision_and_alias_link_versions_preserve_sources` 覆盖；缺的只是"何时调用" |
+| `m2e integrate` | 整场会话跑完的结论清单，用户过目；单会话来源不入广播 | ①②③④⑤ | **缺**：整场跑一遍、结论清单、测试报告 |
+
+由此得出 M2 的真实风险面：五条验收中只有 ⑤ 是已完成的存储能力，④ 是新脚手架，①③ 是新增判定；“已有能力用得上”这一点已在本页落地（2026-10-21 读 `dojo/storage.py:345` 与对应测试确认），不是推测。
 
 `generalize` 与 `condition` 不在 M2 内（`design.md` 第 5 节把它们划归 M4）。每包的六行契约（目标、范围、验收命令、路径、预算与墙钟、停止条件）在门过后派发时才写；此刻写了就是要改的错。
 
