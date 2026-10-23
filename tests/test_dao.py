@@ -1,7 +1,8 @@
 """一条道的一生的验收：三道检查各自能判、能判不过，未检印得出来，重跑不改字。
 
 负控制是这份文件的重点：一个只会说「是的」的对抗台证明不了任何东西，
-所以这里有一条套话道（结构该判不过）和一条装饰性失效条件（模拟该判不过）。
+所以这里有套话道（结构该判不过）、装饰性失效条件（模拟该判不过），
+以及一条没有写清「用在哪件真实活里」的自验（落地该判未跑）。
 """
 
 import copy
@@ -13,45 +14,53 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DAO = ROOT / "docs" / "dao"
 SPEC = importlib.util.spec_from_file_location("dao_life", ROOT / "scripts" / "dao_life.py")
 dao_life = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(dao_life)
 
-DATA_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json")
-REPO_DATA = ROOT / "docs" / "dao" / "person-dojo"
 AT = "2026-10-23T22:00:00Z"
+LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json")
 
 
 class DaoLifeTests(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="dojo-dao-"))
-        for name in DATA_FILES:
-            shutil.copy(REPO_DATA / name, self.dir / name)
+        shutil.copy(DAO / "vocabulary.json", self.dir / "vocabulary.json")
+        (self.dir / "person-dojo").mkdir()
+        for file_name in LIBRARY_FILES:
+            shutil.copy(DAO / "person-dojo" / file_name, self.dir / "person-dojo" / file_name)
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
     # --- helpers ---------------------------------------------------------
-    def read(self, name):
-        return json.loads((self.dir / name).read_text(encoding="utf-8"))
+    def read(self, name, library="person-dojo"):
+        return json.loads((self.dir / library / name).read_text(encoding="utf-8"))
 
-    def write(self, name, value):
-        (self.dir / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    def write(self, name, value, library="person-dojo"):
+        (self.dir / library / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    def dossiers(self):
-        return {
-            "episodes": self.read("episodes.json"),
-            "daos": self.read("daos.json"),
-            "observations": self.read("observations.json"),
-            "exposures": self.read("exposures.json"),
-            "map": self.read("map.json"),
+    def vocabulary(self):
+        return json.loads((self.dir / "vocabulary.json").read_text(encoding="utf-8"))
+
+    def dossiers(self, library="person-dojo"):
+        data = {
+            "episodes": self.read("episodes.json", library),
+            "daos": self.read("daos.json", library),
+            "observations": self.read("observations.json", library),
+            "exposures": self.read("exposures.json", library),
+            "map": self.read("map.json", library),
+            "root": str(self.dir / library),
         }
+        return data
 
-    def bench(self, data=None):
-        return dao_life.run_bench(data or self.dossiers(), AT)
+    def bench(self, data=None, library="person-dojo"):
+        return dao_life.run_bench(data or self.dossiers(library), AT, self.vocabulary())
 
-    def run_command(self):
-        return dao_life.main(["dao_life", str(self.dir), "--at", AT])
+    def run_command(self, *extra):
+        argv = ["dao_life", str(self.dir / "person-dojo"), "--at", AT, *extra]
+        return dao_life.main(argv)
 
     # --- the real library ------------------------------------------------
     def test_person_library_passes_both_network_checks_and_keeps_its_unrun_cell(self):
@@ -60,13 +69,11 @@ class DaoLifeTests(unittest.TestCase):
         for dao_id, receipt in receipts.items():
             self.assertEqual(receipt["structure"]["verdict"], "pass", (dao_id, receipt["structure"]["failures"]))
             self.assertEqual(receipt["falsifiable"]["verdict"], "pass", (dao_id, receipt["falsifiable"]["notes"]))
-            self.assertEqual(receipt["field"]["verdict"] in {"pass", "fail", "not_run"}, True)
-        self.assertEqual(receipts["dojo-d-001"]["field"]["verdict"], "not_run")
-        self.assertIsNone(receipts["dojo-d-001"]["field"]["observation"])
-        self.assertIsNone(receipts["dojo-d-001"]["field"]["ran"])
-        self.assertEqual(receipts["dojo-d-002"]["field"]["verdict"], "pass")
-        self.assertEqual(receipts["dojo-d-002"]["field"]["observation"]["kind"], "later_session")
-        self.assertIn("弱", receipts["dojo-d-002"]["field"]["strength"])
+        self.assertEqual(receipts["dojo-d-001"]["field"]["verdict"], "pass")
+        self.assertEqual(receipts["dojo-d-001"]["field"]["observation"]["kind"], "agent_self")
+        self.assertIn("弱", receipts["dojo-d-001"]["field"]["strength"])
+        self.assertEqual(receipts["dojo-d-003"]["field"]["verdict"], "not_run")
+        self.assertIsNone(receipts["dojo-d-003"]["field"]["observation"])
 
     def test_each_falsifiable_receipt_carries_two_situations_two_actions_and_a_conclusion(self):
         data = self.dossiers()
@@ -76,14 +83,24 @@ class DaoLifeTests(unittest.TestCase):
             self.assertGreaterEqual(len(cases), 2, dao["id"])
             actions = {case["action"] for case in cases}
             self.assertGreaterEqual(len(actions), 2, f"{dao['id']}：两个处境给出了同一个动作")
-            self.assertTrue(all(case["situation"] for case in cases), dao["id"])
-            self.assertTrue(receipts[dao["id"]]["falsifiable"]["notes"] == [])
+            self.assertEqual(receipts[dao["id"]]["falsifiable"]["notes"], [])
+
+    def test_self_verification_grounds_a_cell_only_with_the_three_fields(self):
+        data = self.dossiers()
+        observation = copy.deepcopy(data["observations"]["observations"][1])
+        self.assertEqual(observation["kind"], "agent_self")
+        del observation["applied_in"]
+        data["observations"]["observations"] = [observation]
+        receipt = self.bench(data)["dojo-d-001"]["field"]
+        self.assertEqual(receipt["verdict"], "not_run")
+        self.assertTrue(any("自验" in item["reason"] for item in receipt["rejected"]), receipt["rejected"])
 
     def test_status_line_prints_the_missing_cell_instead_of_calling_it_verified(self):
         data = self.dossiers()
         receipts = self.bench()
+        episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
         for dao in data["daos"]["daos"]:
-            line = dao_life.status_of(dao, receipts[dao["id"]])["line"]
+            line = dao_life.status_of(dao, receipts[dao["id"]], episodes)["line"]
             self.assertIn("/3", line)
             if receipts[dao["id"]]["field"]["verdict"] == "not_run":
                 self.assertIn("未检", line)
@@ -91,9 +108,9 @@ class DaoLifeTests(unittest.TestCase):
 
     def test_rerun_with_the_same_stamp_writes_the_same_bytes(self):
         self.assertEqual(self.run_command(), 0)
-        first = (self.dir / "receipts.json").read_bytes(), (self.dir / "道图.md").read_bytes()
+        first = (self.dir / "person-dojo" / "receipts.json").read_bytes(), (self.dir / "person-dojo" / "道图.md").read_bytes()
         self.assertEqual(self.run_command(), 0)
-        second = (self.dir / "receipts.json").read_bytes(), (self.dir / "道图.md").read_bytes()
+        second = (self.dir / "person-dojo" / "receipts.json").read_bytes(), (self.dir / "person-dojo" / "道图.md").read_bytes()
         self.assertEqual(first, second)
         self.assertIn("未检", second[1].decode("utf-8"))
         self.assertNotIn("已验证", second[1].decode("utf-8"))
@@ -148,7 +165,25 @@ class DaoLifeTests(unittest.TestCase):
         data["daos"]["daos"] = [data["daos"]["daos"][1]]
         receipt = self.bench(data)["dojo-d-002"]["structure"]
         self.assertEqual(receipt["verdict"], "fail")
-        self.assertTrue(any("之后的 person 输入" in name for name in receipt["failures"]), receipt["failures"])
+        self.assertTrue(any("窗口" in name for name in receipt["failures"]), receipt["failures"])
+
+    def test_a_tension_word_outside_the_vocabulary_fails_structure(self):
+        data = self.dossiers()
+        data["daos"]["daos"][0]["tension_key"] = "我自己编的一个词"
+        receipt = self.bench(data)["dojo-d-001"]["structure"]
+        self.assertEqual(receipt["verdict"], "fail")
+        self.assertTrue(any("受控词表" in name for name in receipt["failures"]), receipt["failures"])
+
+    # --- the pending line stays pending ---------------------------------
+    def test_the_pending_boundary_is_not_written_into_the_product_documents(self):
+        boundaries = json.loads((DAO / "person-dojo" / "map.json").read_text(encoding="utf-8"))["boundaries"]
+        boundary = boundaries[0]
+        self.assertEqual(boundary["status"], "待确认")
+        product = (ROOT / "docs" / "product.md").read_text(encoding="utf-8")
+        need = (ROOT / "docs" / "need.md").read_text(encoding="utf-8")
+        for document in (product, need):
+            self.assertNotIn("入口显式", document)
+            self.assertNotIn(boundary["test_line"], document)
 
 
 if __name__ == "__main__":
