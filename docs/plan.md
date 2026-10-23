@@ -234,6 +234,28 @@ dao-life：3 条道（docs/dao/person-dojo）
 
 **下一步（不预支）**：不派下一片。等 loan 结束、他读到 `b-001` 的那一句，再决定是把它写进 `need.md`/`product.md` 还是推翻；推翻就改 `map.json` 后重跑同一条命令。
 
+### 第二次推进（2026-10-23，同一 loan）：把未检那一格放进世界，并找第二个来源
+
+同样先写验收再动手。这次要动的东西只有三样：落地那一格、第二来源、以及“待确认”这句话不被当成已经接受。
+
+**目标状态**：两条 `自述 · 未检（2/3）` 的道各得到一个答服——要么是一条设计允许的观察（后续会话 / agent 自己真实用一次 / 有意的对照），要么是一句写明白的「还是未检，要什么才能变」；记录里能找到的第二个来源用同一条 loop 跑一遍，并与 person 的三条道逐对比较；`b-001` 仍是 `待确认`。
+
+**边界（不做）**
+
+- **不把 `b-001` 写进 `product.md`/`need.md`，也不把它当成已接受**，即使它读起来顺。它只有 person 一句话才能动，本包不问他（loan）。
+- **不把模拟材料当第二个人**。它只能测「这张库装不装得下第二个来源」，不能回答「不同人的道会不会落到同一批张力上」。
+- 不做真人访谈、不联系 person、不调模型；不为了让格位好看而伪造观察。
+- 不做自动合并：对比只给关系（同一张力 / 相反 / 无关），不改任何一条道。
+
+**验收（可观察）**
+
+- **K1-9 两条未检各有答服**：`observations.json` 里每条 `未跑` 的道都有一条 `needed`（要什么、为什么现在拿不到、谁能补）；能由网络自己补的，要真跑出来。
+- **K1-10 自验不得白拿**：`agent_self` 的观察必须写 `applied_in`（在哪件真实活里用过）、`result`、`could_have_gone_otherwise`，且晚于案例；缺一项就不计入，且被拒的原因要印出来（`test_agent_self_without_applied_in_is_not_counted`）。
+- **K1-11 第二来源跑通同一条 loop**：`python3 scripts/dao_life.py docs/dao/demo-strangers --check` 退出码 0，状态行以 `模拟` 开头（记录里没有第二个人：demo 台词、seed 语料、m5 四场景、m1 讨论输入全部是作者写的或脚本，`docs/evidence/m1-discuss/provenance.md` 原话写“they are not a participant sample”）。
+- **K1-12 对比可跑可读**：`python3 scripts/dao_life.py docs/dao/person-dojo --compare docs/dao/demo-strangers` 退出码 0，写出 `对比.md`，逐对给关系，并写明第二来源改没改任何道。
+- **K1-13 “待确认”不动**：`map.json` 里 `b-001` 仍是 `待确认`；`grep -rn "入口显式" docs/product.md docs/need.md` 无命中（测试钉住）。
+- **K1-14 一条命令、零计量调用**：`--check` 干净；全量测试绿。
+
 ## 证据卫生
 
 - **一条规则**：证据块在写之前先跑它点名的命令，数字从输出复制；不凭记忆写数。上一份报告的提交计数行作废，原因就是这一条。
