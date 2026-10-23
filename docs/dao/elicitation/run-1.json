@@ -1,0 +1,393 @@
+{
+  "at": "2026-10-23T14:02:48Z",
+  "entries": [
+    {
+      "after": {
+        "move": "他的原话",
+        "off": "他的原话",
+        "price": "他的原话",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "before": {
+        "move": "他的原话",
+        "off": "他的原话",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "id": "dojo-d-005",
+      "parts": [
+        {
+          "answers": [
+            {
+              "episode": "ep-idea-2-4",
+              "kind": "another-rule",
+              "line": 7,
+              "quote": "只存储剥离了具体约束的核心方法论、指导原则、思想结构。"
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 8,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "情境",
+          "to_fill": "一句带「什么时候/什么时候不会」的话，外加一次能对上日期或场合的事；只有场合没有条件，按「答了半句」处理，仍不填。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": "ep-idea-2-2",
+              "kind": "vague",
+              "line": 10,
+              "quote": "用户自行判断是否接受。"
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 11,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "张力",
+          "to_fill": "一句说出「另一件好事」的话，而且他承认两件不能同时拿满（「要么……要么……」或「只能选一个」）；只说出另一件好事、没说不能同时要，按「半句」处理。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": "ep-idea-2-2",
+              "kind": "his",
+              "line": 13,
+              "quote": "用户自行判断是否接受。"
+            }
+          ],
+          "becomes": "他的原话",
+          "filled": true,
+          "part": "代价",
+          "to_fill": "一句能指出「谁」和「多花了什么」的话（时间、钱、别人的耐心、一次机会）；只说「费劲」而说不出谁、什么，按「半句」处理。",
+          "turns": 1
+        }
+      ],
+      "supplied_after": [
+        "situation",
+        "tension"
+      ],
+      "turns": 5
+    },
+    {
+      "after": {
+        "move": "他的原话",
+        "off": "系统补",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "他的原话",
+        "tension": "他的原话"
+      },
+      "before": {
+        "move": "他的原话",
+        "off": "系统补",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "id": "dojo-d-001",
+      "parts": [
+        {
+          "answers": [
+            {
+              "episode": "ep-2026-10-23-detach",
+              "kind": "his",
+              "line": 18,
+              "quote": "user is already detached"
+            }
+          ],
+          "becomes": "他的原话",
+          "filled": true,
+          "part": "情境",
+          "to_fill": "一句带「什么时候/什么时候不会」的话，外加一次能对上日期或场合的事；只有场合没有条件，按「答了半句」处理，仍不填。",
+          "turns": 1
+        },
+        {
+          "answers": [
+            {
+              "episode": "ep-2026-10-23-detach",
+              "kind": "his",
+              "line": 20,
+              "quote": "He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that."
+            }
+          ],
+          "becomes": "他的原话",
+          "filled": true,
+          "part": "张力",
+          "to_fill": "一句说出「另一件好事」的话，而且他承认两件不能同时拿满（「要么……要么……」或「只能选一个」）；只说出另一件好事、没说不能同时要，按「半句」处理。",
+          "turns": 1
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 22,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 23,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "代价",
+          "to_fill": "一句能指出「谁」和「多花了什么」的话（时间、钱、别人的耐心、一次机会）；只说「费劲」而说不出谁、什么，按「半句」处理。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 25,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 26,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "失效",
+          "to_fill": "一句能指认「看到什么就该停/反过来」的话，最好挂在一次真事上；只说「看情况」不算。",
+          "turns": 2
+        }
+      ],
+      "supplied_after": [
+        "price",
+        "off"
+      ],
+      "turns": 6
+    },
+    {
+      "after": {
+        "move": "他的原话",
+        "off": "他的原话",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "before": {
+        "move": "他的原话",
+        "off": "他的原话",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "id": "dojo-d-004",
+      "parts": [
+        {
+          "answers": [
+            {
+              "episode": "ep-idea-8-identity",
+              "kind": "another-rule",
+              "line": 30,
+              "quote": "内部使用匿名 ID，仅用于防滥用、限流、贡献统计。"
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 31,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "情境",
+          "to_fill": "一句带「什么时候/什么时候不会」的话，外加一次能对上日期或场合的事；只有场合没有条件，按「答了半句」处理，仍不填。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": "ep-idea-2-1",
+              "kind": "another-rule",
+              "line": 33,
+              "quote": "对外不展示作者，不建立公开的“人 → 观点”映射。"
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 34,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "张力",
+          "to_fill": "一句说出「另一件好事」的话，而且他承认两件不能同时拿满（「要么……要么……」或「只能选一个」）；只说出另一件好事、没说不能同时要，按「半句」处理。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 36,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 37,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "代价",
+          "to_fill": "一句能指出「谁」和「多花了什么」的话（时间、钱、别人的耐心、一次机会）；只说「费劲」而说不出谁、什么，按「半句」处理。",
+          "turns": 2
+        }
+      ],
+      "supplied_after": [
+        "situation",
+        "tension",
+        "price"
+      ],
+      "turns": 6
+    },
+    {
+      "after": {
+        "move": "他的原话",
+        "off": "系统补",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "他的原话",
+        "tension": "系统补"
+      },
+      "before": {
+        "move": "他的原话",
+        "off": "系统补",
+        "price": "系统补",
+        "provenance": "他的原话",
+        "situation": "系统补",
+        "tension": "系统补"
+      },
+      "id": "dojo-d-013",
+      "parts": [
+        {
+          "answers": [
+            {
+              "episode": "ep-2026-10-23-gate-wait",
+              "kind": "his",
+              "line": 42,
+              "quote": "还没。"
+            }
+          ],
+          "becomes": "他的原话",
+          "filled": true,
+          "part": "情境",
+          "to_fill": "一句带「什么时候/什么时候不会」的话，外加一次能对上日期或场合的事；只有场合没有条件，按「答了半句」处理，仍不填。",
+          "turns": 1
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 44,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 45,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "张力",
+          "to_fill": "一句说出「另一件好事」的话，而且他承认两件不能同时拿满（「要么……要么……」或「只能选一个」）；只说出另一件好事、没说不能同时要，按「半句」处理。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 47,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 48,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "代价",
+          "to_fill": "一句能指出「谁」和「多花了什么」的话（时间、钱、别人的耐心、一次机会）；只说「费劲」而说不出谁、什么，按「半句」处理。",
+          "turns": 2
+        },
+        {
+          "answers": [
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 50,
+              "quote": null
+            },
+            {
+              "episode": null,
+              "kind": "none",
+              "line": 51,
+              "quote": null
+            }
+          ],
+          "becomes": "系统补",
+          "filled": false,
+          "part": "失效",
+          "to_fill": "一句能指认「看到什么就该停/反过来」的话，最好挂在一次真事上；只说「看情况」不算。",
+          "turns": 2
+        }
+      ],
+      "supplied_after": [
+        "tension",
+        "price",
+        "off"
+      ],
+      "turns": 7
+    }
+  ],
+  "layer": "elicitation",
+  "questions": "docs/dao/elicitation/questions.json",
+  "script": "docs/dao/elicitation/session-1.txt",
+  "totals": {
+    "entries": 4,
+    "filled": 4,
+    "parts": 14,
+    "turns": 24,
+    "turns_per_filled": 6.0,
+    "turns_per_rule": 6.0,
+    "unfilled": 10
+  }
+}

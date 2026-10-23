@@ -1,0 +1,51 @@
+# 一场模拟会话：被访者的话全部逐字取自他过去说过的话（带 episode 与出处）；提问与重问是 harness 的台词。
+# 这一份不是新数据，是对四句问法的演练：它只回答一个问题——照这个问法，哪一件能变成他的，哪一件问不出来。
+# 读法：ask 是一问，answer 是一答（最多两答）；kind 是 harness 对这一答的判断，写在脚本里、可被复核。
+
+entry: dojo-d-005
+  ask 情境
+  answer another-rule ep-idea-2-4 | 只存储剥离了具体约束的核心方法论、指导原则、思想结构。
+  answer none
+  ask 张力
+  answer vague ep-idea-2-2 | 用户自行判断是否接受。
+  answer none
+  ask 代价
+  answer his ep-idea-2-2 | 用户自行判断是否接受。
+# 失效那件不在这里问：§2.2 的「法律红线」已经是他自己的原话（dojo-d-005 的失效条件就是 他的原话），不该再问一遍。
+
+entry: dojo-d-001
+  ask 情境
+  answer his ep-2026-10-23-detach | user is already detached
+  ask 张力
+  answer his ep-2026-10-23-detach | He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that.
+  ask 代价
+  answer none
+  answer none
+  ask 失效
+  answer none
+  answer none
+
+entry: dojo-d-004
+  ask 情境
+  answer another-rule ep-idea-8-identity | 内部使用匿名 ID，仅用于防滥用、限流、贡献统计。
+  answer none
+  ask 张力
+  answer another-rule ep-idea-2-1 | 对外不展示作者，不建立公开的“人 → 观点”映射。
+  answer none
+  ask 代价
+  answer none
+  answer none
+# 失效那件不在这里问：§2.2 的「法律红线」已经是他的原话（dojo-d-004 的失效条件是 他的原话）。
+
+entry: dojo-d-013
+  ask 情境
+  answer his ep-2026-10-23-gate-wait | 还没。
+  ask 张力
+  answer none
+  answer none
+  ask 代价
+  answer none
+  answer none
+  ask 失效
+  answer none
+  answer none
