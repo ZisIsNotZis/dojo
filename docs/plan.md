@@ -8,11 +8,13 @@
 - **M2 的独立评审已到，判定为 fail**：在 `939bf90` 上五条验收只有 ⑤ 成立，且 ⑤ 在基线 `621bf26` 就已存在，因此不能算那一轮的推进。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict.md`，绑定 `939bf90`，只在那个修订上可复核；此后代码一动其命令与命中数即过期，须重跑而非引用。它同时指出：M2 五条当时**没有一条有验收命令**，所以"98 项测试通过"对 M2 什么都证明不了。
 - **M1.5 由 person 确认（2026-10-23）**：他亲手跑过并给出判断，原话「finished experiencing the product… way better than last time, I'm satisfied with the user experience part.」。判断来自他的会话，不来自 trace 文件；记录在 `docs/evidence/m1.5-checkpoint/person-2026-10-23.md`，其中 trace 路径与用量两项写成「未提供／未记录」并写明谁能补，不阻塞。这条确认覆盖体验层的判断，不代替 M1.5 验收 ①–⑥ 的每一条。
 - **`m2f` 不跑**：person 跑过并给出判断，门就关了，再让模型跑一遍是拿模型的判断替换他的判断；2026-10-25T12:28Z 那个到点条件随之作废。若他以后把 trace 交来，它原样加进同一份 `person-2026-10-23.md`，不新开一份记录。
-- **person 2026-10-23 给的下一个方向是底层知识网络**，不是把 UX 再磨一轮：他说用户体验这一部分满意，要的是「严肃设计底层知识网络……一个真正的人类之间『道理』的数据库」。提案在 `docs/proposal-knowledge-network.md`；**提案未经他同意前不改 M2/M3/M4 的边界**，也不派生工作包。
+- **person 2026-10-23 给的下一个方向是底层知识网络**，不是把 UX 再磨一轮：他说用户体验这一部分满意，要的是「严肃设计底层知识网络……一个真正的人类之间『道理』的数据库」。
+- **他当天答了提案（2026-10-23）**：单位换成「道」（旧卡只映射、不迁移、不删）；证据要，但检验由网络自己跑（他原话：用户已经抽身，提醒不是他的责任，是网络的；他以后可以质疑「你跑过模拟吗」）；首里程碑是「一条道的一生」。决定与改动后的设计在 `docs/proposal-knowledge-network.md` 的「状态」节与第二、五、七、十节。
+- **这个里程碑还没进执行**：它排在 M2 收尾之后，名字暂记 `K1 一条道的一生`（第一节到第七节的验收行就是它的边界，实现时再按六行契约派发）；本轮不建，也不改 M2 的五条验收。K1 排 M2 之后、与 M2 剩余两件（`m2b` 判定、`m2e` 整场跑）不互斥，M2 仍是当前里程碑。
 - **M2 里还缺的不是门，是两件要做的事**：`m2b` 缺一次真实模型判定（`classify` 现在报 `unavailable` 而不猜），`m2e` 缺整场跑一遍与把清单交给他过目；其余 M2 能力包已就位，但落地只代表能力就位，M2 不按通过记。实验 harness 仍要一个完整包位（见 `## 实验 harness`）。
 - **M2 作为里程碑仍未达成**：拦它的不再是 M1.5 的门（已由 person 那一局关闭），而是 `m2e` 没跑、person 没看过提炼清单。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
-- 派发状态一句话：`m2f` 不跑（门已由 person 关闭）；`m2a`/`m2c` 已就位，`m2b` 缺一次真实模型判定、`m2e` 缺整场跑；实验 harness 排队等一个完整包位（见 `## 实验 harness`）；M2 之外无在跑工作包，下一件大事是 person 判 `docs/proposal-knowledge-network.md`。
+- 派发状态一句话：`m2f` 不跑（门已由 person 关闭）；`m2a`/`m2c` 已就位，`m2b` 缺一次真实模型判定、`m2e` 缺整场跑；实验 harness 排队等一个完整包位（见 `## 实验 harness`）；M2 之外无在跑工作包，下一个里程碑是 `K1 一条道的一生`（已同意、未派发）。
 - **本轮推进做了什么**：把 person 2026-10-23 的检查点判断按「判断来自他的会话、不来自 trace」落盘（`docs/evidence/m1.5-checkpoint/person-2026-10-23.md`），据此关掉 `m2f` 并改掉本页与目录 README 里那条等待窗；同时写出他当天要的底层知识网络提案（`docs/proposal-knowledge-network.md`），只提案、不动 M2/M3/M4 的边界。本轮有一次小的计量支出：一个检索子代理读了前人项目的原始页面（≤ ¥2），没有给 person 写任何模型回答。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：`m2e` 没跑，用户没看过提炼清单。
 - **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
@@ -136,7 +138,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 `m2f` 的等待窗已作废，它盯的是「person 是否亲手跑过」这一件只有 person 能给的事，而这件事在 2026-10-23 发生了；窗口本身（person 的 trace 或 2026-10-25T12:28Z 先到者开门）随之删除，不再调度、不再花那一局额度。
 
-由此得出 M2 的真实风险面：五条验收中只有 ⑤ 是已完成的存储能力，④ 是新脚手架，①③ 是新增判定；“已有能力用得上”这一点已在本页落地（2026-10-21 读 `dojo/storage.py:345` 与对应测试确认），不是推测。2026-10-21 之后 `m2a` 与 `m2c` 的实现已在不依赖门的那一轮落地，本表的"已有 / 缺"一列按那一轮改写。person 2026-10-23 的话把下一段的重心放到另一个地方：UX 够用了，要设计的是底下那个知识网络（`docs/proposal-knowledge-network.md`）；提案获批前 M2 仍按本页的边界跑完。
+由此得出 M2 的真实风险面：五条验收中只有 ⑤ 是已完成的存储能力，④ 是新脚手架，①③ 是新增判定；“已有能力用得上”这一点已在本页落地（2026-10-21 读 `dojo/storage.py:345` 与对应测试确认），不是推测。2026-10-21 之后 `m2a` 与 `m2c` 的实现已在不依赖门的那一轮落地，本表的"已有 / 缺"一列按那一轮改写。person 2026-10-23 的话把下一段的重心放到另一个地方：UX 够用了，要设计的是底下那个知识网络；他当天答了提案，M2 仍按本页的边界跑完，然后才轮到 `K1 一条道的一生`（`docs/proposal-knowledge-network.md` 第七节）。
 
 `generalize` 与 `condition` 不在 M2 内（`design.md` 第 5 节把它们划归 M4）。每包的六行契约（目标、范围、验收命令、路径、预算与墙钟、停止条件）在派发那一刻才写；此刻写了就是要改的错。
 
@@ -193,7 +195,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 - **怎么开始**：`python3 -m dojo --db /tmp/play.sqlite3 discuss`。续跑加 `--resume <轨迹>`，关人物档案加 `--no-profile`，看请求进度加 `--verbose`。端点须显式配置（见 `README.md`），不配置就不联网。
 - **person 想亲手玩一局时的那一条命令**：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=/tmp/dojo-play python3 -m dojo --db /tmp/dojo-play/dojo.sqlite3 discuss`——trace 落在 `/tmp/dojo-play/discuss-<32位十六进制>.jsonl`，玩完把 `ls -t /tmp/dojo-play/*.jsonl | head -1` 打出来的那一行发回来就行（2026-10-23 用回环桩服务实际跑过这条命令：轨迹目录 0700、文件 0600、末行 `session_end` 带 `model`）。
-- **怎么继续规划**：先看本页 `## 当前推进状态`；下一件要 person 判的事是 `docs/proposal-knowledge-network.md`，它与 M2 的收尾（`m2b`/`m2e`）不互斥。
+- **怎么继续规划**：先看本页 `## 当前推进状态`；`K1 一条道的一生` 已获同意、未派发，它的验收行在 `docs/proposal-knowledge-network.md` 第七节，排在 M2 收尾之后。
 - **person 那一局的记录**：`docs/evidence/m1.5-checkpoint/person-2026-10-23.md`，他的原话、他判断的出处、四行里的缺项与谁能补都在那一份里；他以后交来 trace，原样加进同一份。
 - **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
 - **证据在哪**：`docs/evidence/m1*`、`m1.5-checkpoint`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。

@@ -4,6 +4,7 @@
 
 ## 1. 不变量（稳定，不改）
 
+- **2026-10-23 person 决定把单位从「卡」换成「道」**：本节描述的卡模型是**当前实现**，不是终点；替换设计与未实现状态见 `proposal-knowledge-network.md`，实现在 `K1 一条道的一生` 之后开始。在那之前，本节各条仍是这个库的实际不变量。
 - 一条主张 = 卡：`statement`、`kind`、`scope`、`premises`、`alternatives`、`contradictions`、`unknowns`、`sources`、`independence`、`version`、`status`。
 - 版本只增不改：修订产生新版本，挑战产生 `challenged` 状态，永不删除旧记录。
 - 关系：`instantiates`（应用 → 抽象）、`challenges`（异议 → 被挑战）、合并重定向。
