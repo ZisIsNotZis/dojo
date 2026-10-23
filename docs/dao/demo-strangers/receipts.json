@@ -1,0 +1,196 @@
+{
+  "at": "2026-10-23T14:02:48Z",
+  "bench": "scripts/dao_life.py",
+  "bench_version": 1,
+  "daos": {
+    "demo-d-101": {
+      "digest": "949f54e5c47cf627149d01335a52841dbb9a29b79cdddd43551a2bde74c0de86",
+      "id": "demo-d-101",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "把摩擦降在开始这一侧：减少与目标无关的步骤，核心动作的难度不动",
+              "action_kind": "apply",
+              "recorded": "模拟语料给出一条条件路线：行为无训练价值时，减少与目标无关的步骤。",
+              "side": "域内（案例 ep-demo-m02）",
+              "situation": {
+                "friction_role": "只是麻烦",
+                "value_is_practice": "否"
+              }
+            },
+            {
+              "action": "保留有意义的难度，只去掉与目标无关的无谓摩擦",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（value_is_practice=是练习）",
+              "situation": {
+                "friction_role": "只是麻烦",
+                "value_is_practice": "是练习"
+              },
+              "when": "这个行为本身的价值就是练习（体能、专注、手艺）"
+            },
+            {
+              "action": "不降这一步；降了等于去掉一次检查",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（friction_role=安全检查或学习步骤）",
+              "situation": {
+                "friction_role": "安全检查或学习步骤",
+                "value_is_practice": "否"
+              },
+              "when": "摩擦本身是安全检查或学习步骤"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "949f54e5c47c",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '省力 vs 练习'，张力叫 '省力 vs 练习'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'开始摩擦' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'降摩擦' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-21；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "949f54e5c47c",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "模拟 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "模拟"
+      },
+      "version": 1
+    }
+  },
+  "inputs": {
+    "daos": "2900853f761f7e7b0a5d3d4cade93cf7019ebf22d757981c60180081267d5830",
+    "episodes": "9fb4b26d5238fac1a8c15d7deadbba970c1a4a62d3426eaf883102f684247f69",
+    "exposures": "15f1c9ab52341b23b71477dbe5416dc9b62206ebf718143433767478d5a0ee81",
+    "map": "a2e941d8c1c9d04c685d9b4188ab7a679a9ffed5f045918e34dfe9f2c81bd6cc",
+    "observations": "f8d9752feb1aef8944746e333e830e15dc2406508487a7049e03591c72414f6f"
+  },
+  "layer": "checks"
+}

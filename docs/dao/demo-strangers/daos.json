@@ -1,0 +1,57 @@
+{
+  "layer": "extraction",
+  "owner": "dojo 的 manager（从模拟语料读出；标「模拟」）",
+  "extracted_at": "2026-10-23",
+  "what": "第二来源的一条道。它不是某个人的道：来源类别是模拟，所以在任何出口里都印成「模拟」，不进独立性，也不进 person 的道图。它的用处是测这张库装不装得下第二个来源、受控词表分不分得开两条看起来很像的道。",
+  "daos": [
+    {
+      "id": "demo-d-101",
+      "version": 1,
+      "title": "把摩擦降在开始这一侧，难度留给练习",
+      "tension_key": "开始摩擦",
+      "move_key": "降摩擦",
+      "one_line": "在一个想靠重复行为维持某个状态、动机撑不住的情境里，宁可把摩擦降在开始这一侧也不把整件事变容易，代价是一次性重设环境，以及失去在困难里练出来的那部分能力；当这个行为本身的价值就是练习、或摩擦本身是安全检查时，反过来。",
+      "situation": {
+        "who": "一个想靠重复行为维持某个状态的人（房间整洁、按点写东西），动机不足以单独支撑",
+        "when": "这个行为会重复发生，而正确动作的准备太麻烦；行为本身不构成能力练习",
+        "constraints": ["环境由自己控制", "行为会重复发生", "行为本身没有训练价值"],
+        "domain": ["日常重复行为", "工具与流程"],
+        "covers": ["ep-demo-m02", "ep-demo-m03"]
+      },
+      "tension": {
+        "name": "省力 vs 练习",
+        "sides": ["更容易开始", "在困难里练出来的能力"],
+        "why": "降低摩擦让人更容易开始，也把「在困难里坚持」那部分能力从流程里拿走了；两样不能同时拿满。"
+      },
+      "move": {
+        "on_tension": "省力 vs 练习",
+        "direction": "把摩擦降在「开始」这一侧：减少与目标无关的步骤，核心动作的难度不动",
+        "locus": "开始这一侧（准备、归位路径），不是核心动作本身",
+        "magnitude": "只减到「能开始」为止；难的、有练习价值的那一步保留"
+      },
+      "price": [
+        {"what": "一次性重设环境与归位路径", "unit": "时间", "who": "他"},
+        {"what": "失去在困难里练出来的那部分能力", "unit": "能力", "who": "他"},
+        {"what": "别人可能找不到东西", "unit": "关系", "who": "别人"}
+      ],
+      "off": [
+        {"when": "这个行为本身的价值就是练习（体能、专注、手艺）", "axis": "value_is_practice", "value": "是练习", "then_kind": "reverse", "then": "保留有意义的难度，只去掉与目标无关的无谓摩擦"},
+        {"when": "摩擦本身是安全检查或学习步骤", "axis": "friction_role", "value": "安全检查或学习步骤", "then_kind": "reverse", "then": "不降这一步；降了等于去掉一次检查"}
+      ],
+      "axes": {
+        "value_is_practice": ["否", "是练习"],
+        "friction_role": ["只是麻烦", "安全检查或学习步骤"]
+      },
+      "rule": [
+        {"when": {"value_is_practice": "是练习"}, "kind": "reverse", "action": "保留有意义的难度，只去掉与目标无关的无谓摩擦"},
+        {"when": {"friction_role": "安全检查或学习步骤"}, "kind": "reverse", "action": "不降这一步；降了等于去掉一次检查"},
+        {"when": {"value_is_practice": "否", "friction_role": "只是麻烦"}, "kind": "apply", "action": "把摩擦降在开始这一侧：减少与目标无关的步骤，核心动作的难度不动"}
+      ],
+      "provenance": [
+        {"person": "synthetic-demo", "episode": "ep-demo-m02", "status": "推得", "learned_from": "未记录", "exposure": "none-at-time"},
+        {"person": "synthetic-demo", "episode": "ep-demo-m03", "status": "推得", "learned_from": "未记录", "exposure": "none-at-time", "note": "同一张道的另一条条件路线"},
+        {"person": "synthetic-demo", "episode": "ep-demo-m04", "status": "传闻", "learned_from": "未记录", "exposure": "none-at-time", "note": "模拟角色的一句自述，只能旁证"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "layer": "events",
+  "owner": "dojo 的 manager",
+  "what": "第二个来源：记录里唯一另一批具体材料——模拟语料（seed-pack-v2 的 M02–M04 与三幕 demo 的台词）。它不是一个人的经历：作者与我们是同一只手。放在这里只为一件事：用同一条 loop 跑一遍，看这张库装不装得下第二个来源。",
+  "person": {
+    "id": "synthetic-demo",
+    "label": "模拟语料（不是人）"
+  },
+  "window": {
+    "first_session": "2026-10-15",
+    "last_person_input": "2026-10-21",
+    "rule": "这一库没有 person。窗口写成语料与台词的最后落盘日期，只为让「第一场之后不再要人补」这条检查跑得通；出现更晚的材料就说明语料又改过，要重看。"
+  },
+  "episodes": [
+    {
+      "id": "ep-demo-m02",
+      "at": "2026-10-15",
+      "at_basis": "seed-pack-v2 的提交日期（41d925a）。",
+      "attribution": "synthetic",
+      "attribution_note": "写死的模拟语料，不是某个人的报告；docs/packets/seed-pack-v2.md 自己写着「数据性质：这是写好的 POC 模拟语料」。",
+      "quote": "若只是想维持现状、且这个行为本身没有训练价值，那么减少步骤、把正确动作的准备前置，通常能提高它持续发生的概率。",
+      "source": {"path": "docs/packets/seed-pack-v2.md", "ref": "M02 条件路线甲", "commit": "41d925a"},
+      "observed_action": "模拟语料给出一条条件路线：行为无训练价值时，减少与目标无关的步骤。",
+      "conditions": {"value_is_practice": "否", "friction_role": "只是麻烦"},
+      "reading": "模拟材料的自述，不是观察。"
+    },
+    {
+      "id": "ep-demo-m03",
+      "at": "2026-10-15",
+      "at_basis": "同一次落盘（41d925a）。",
+      "attribution": "synthetic",
+      "attribution_note": "同一张道的另一条条件路线，同一份模拟语料。",
+      "quote": "若一个行为的价值正来自练习过程本身，那么降低难度等于同时去掉练习机会；这时应保留有意义的难度，只去除与目标无关的无谓摩擦。",
+      "source": {"path": "docs/packets/seed-pack-v2.md", "ref": "M03 对向条件路线乙", "commit": "41d925a"},
+      "observed_action": "同一张道的另一条条件路线：练习价值要求保留难度。",
+      "conditions": {"value_is_practice": "是练习", "friction_role": "只是麻烦"},
+      "reading": "模拟材料的自述，不是观察。"
+    },
+    {
+      "id": "ep-demo-m04",
+      "at": "2026-10-15",
+      "at_basis": "同一次落盘（41d925a）。",
+      "attribution": "synthetic",
+      "attribution_note": "模拟角色自述的未核验经验；seed-pack-v2 自己标了「仅一个被声称的记忆，独立性未知」。",
+      "quote": "一名模拟角色自述靠每次只做一件小事坚持了数月整洁，而没有依赖更强的自律。",
+      "source": {"path": "docs/packets/seed-pack-v2.md", "ref": "M04 未核验的经验报告", "commit": "41d925a"},
+      "observed_action": "模拟角色声称靠「每次只做一件小事」坚持了数月；时间范围、是否中途失败、是否有独立来源都缺。",
+      "conditions": {},
+      "reading": "连案例都算不上：它不是一个人真的做了什么，是一句写好的台词。"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "layer": "extraction",
+  "what": "这一库内部的连接。它没有边界提案：没有 person 可以确认或推翻。",
+  "connections": [
+    {
+      "id": "c-101",
+      "kind": "same-dao-two-routes",
+      "between": ["ep-demo-m02", "ep-demo-m03"],
+      "says": "M02 与 M03 不是两条相反的道，是同一张道的两条条件路线：分界在「这个行为本身有没有练习价值」。",
+      "why_it_may_be_new": "按字面读，它们像两条互相对立的主张（一条说减少步骤，一条说保留难度）；按第 1 节的替换试验，它们是同一个张力下的两条 route。",
+      "status": "待确认（模拟材料，没有 person 可确认）"
+    }
+  ],
+  "boundaries": []
+}
