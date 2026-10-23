@@ -7,13 +7,14 @@
 - **下一个里程碑是 M2**，由 root 于 2026-10-21 判定并接受；assent：agreed。依据：commit `7753d73` 里的 `mail/2026-10-21-answers.md`（该文件按 `inbox/README.md` 的读后即删约定已删除，git 历史里仍在）。M2 的边界与验收以本页 `## M2` 五条为准，不另立编号。
 - **M2 的独立评审已到，判定为 fail**：在 `939bf90` 上五条验收只有 ⑤ 成立，且 ⑤ 在基线 `621bf26` 就已存在，因此不能算那一轮的推进。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict.md`，绑定 `939bf90`，只在那个修订上可复核；此后代码一动其命令与命中数即过期，须重跑而非引用。它同时指出：M2 五条当时**没有一条有验收命令**，所以"98 项测试通过"对 M2 什么都证明不了。
 - **M1.5 的状态是「未确认」，既不是通过也不是否决**：root 2026-10-23 转达 person 的话「还没。」，原文在 `mail/2026-10-23-answer-unconfirmed-and-model.md`（`8ed7cb5`）。M1 与 M1.5 的用户检查点因此仍开着，本页不签它们，也不把「已确认」当成已到手的东西来引用。
-- **M2 的进门条件就是把 M1.5 的检查点重跑一遍**：M2 的第一个包是 `m2f checkpoint-rerun`（见 `## M2 的工作包与依赖`），它跑一局、留 trace、把路径写进 `docs/evidence/m1.5-checkpoint/` 的记录；这一局可以由模型跑，但「person 亲手跑过」仍然只有 person 能给，重跑只保证 M2 不盖在空气上。
-- **`m2f` 的等待窗有两个端，哪个先到都结束等待**（root 2026-10-23 定）：① person 自己的 trace 落进 `docs/evidence/m1.5-checkpoint/`，或 ② 2026-10-25T12:28Z（2026-10-23T12:28Z 起 48 小时，`date -u` 的读数 `2026-10-23T12:28:35Z`）。到点后它作为进门条件跑一局，模型按本页 `## 模型与额度` 用的是 `github_copilot/gpt-6-luna`；这一句是 root 给的花钱授权，届时不再为「跑不跑」另问一次。person 先跑反而更好：他那一条 trace 记的是他实际怎么用，而模型代跑只证明脚下有东西。
-- **等待窗内不空转**：不需要那一局的东西照常推进——harness 工作、M2 里不是进门条件的包（`m2a` 缺的会话末触发、`m2b` 的自动判定、`m2c`/`m2e` 给用户看的提炼清单、`m2d` 的挑战谁执行）、以及文档。它们落地只代表能力就位，M2 仍不按通过记。
-- **M2 作为里程碑仍未达成**，但拦它的不再是「person 先确认 M1.5」这一条等待（root 2026-10-23 把它改成进门条件：先跑 `m2f`）。`m2e` 没跑、person 没看过提炼清单之前，M2 不按通过记。
+- **M2 的进门条件就是 M1.5 的检查点的记录落盘**：person 自己跑一局并留下 trace 就关这个门；他没有 trace 时，才由 `m2f checkpoint-rerun`（见 `## M2 的工作包与依赖`）跑一局代替。两者都写进 `docs/evidence/m1.5-checkpoint/`，但「person 亲手跑过」这一句只有 person 能给。
+- **`m2f` 的等待窗停在两条互斥的路之一上，不是两次跑**（root 2026-10-23 定，同日修正）：① person 自己的 trace 落进 `docs/evidence/m1.5-checkpoint/` → **`m2f` 不跑**，他那一局就是检查点，模型把同一个检查点再跑一遍买不到任何东西、只花额度；② 到 2026-10-25T12:28Z（2026-10-23T12:28Z 起 48 小时，`date -u` 读数 `2026-10-23T12:28:35Z`）仍没有他的 trace → `m2f` 跑一局，模型按本页 `## 模型与额度` 用 `github_copilot/gpt-6-luna`，这句是 root 给的花钱授权。两条路都写进记录，记录里写明实际走的是哪一条、为什么走它。
+- **为什么 person 那条路自己就够**：重跑的唯一目的是不让 M2 盖在一扇没人关过的门上。person 亲手跑过并给出判断，门就关了；再让模型跑一遍，等于拿模型的判断替换他的判断，而检查点要的正好是反过来的东西。
+- **等待窗内不空转**：不需要那一局的东西照常推进——M2 里不是进门条件的包（`m2a` 缺的会话末触发、`m2b` 的自动判定、`m2c`/`m2e` 给用户看的提炼清单、`m2d` 的挑战谁执行）、以及文档。它们落地只代表能力就位，M2 仍不按通过记。实验 harness 不在这张清单里：它要一个完整包位，20 分钟的窗口只能给它一个跑不起来的骨架（见 `## 实验 harness`）。
+- **M2 作为里程碑仍未达成**，但拦它的不再是「person 先确认 M1.5」这一条等待（root 2026-10-23 把它改成进门条件：person 那一局，或没有 trace 时的 `m2f` 一局）。`m2e` 没跑、person 没看过提炼清单之前，M2 不按通过记。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
-- 派发状态一句话：`m2f` 在等待窗里（未跑，到 2026-10-25T12:28Z 或 person 的 trace 先到就开跑）；`m2a`/`m2c` 的会话末与清单缺口在窗口内照常推进；M2 之外无在跑工作包。
-- **本轮推进做了什么**：把 `m2f` 的等待窗写成两端加一个 fallback 日期（person 的 trace 或 2026-10-25T12:28Z，先到先算），写明窗口内其他 M2 包与文档照常推进，并在窗口里补上 M2 的读者面：`python3 -m dojo distill --session <s>` 把一场会话的每张卡摆成 新/变体/重复 加挑战提议，只读、写 0 事件 0 标记（见 `## 不依赖门的 M2 能力包` 的 `distill-list` 行）。`m2f` 这一局没跑，本轮的机器时间里没有一次计量调用。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
+- 派发状态一句话：`m2f` 在等待窗里（未跑；person 的 trace 先到就由他那一局关门、`m2f` 不跑，48 小时到点仍无 trace 才跑一局）；`m2a`/`m2c` 的会话末与清单缺口在窗口内照常推进；实验 harness 排队等一个完整包位（见 `## 实验 harness`），不占窗口；M2 之外无在跑工作包。
+- **本轮推进做了什么**：按 root 的修正把 `m2f` 的窗从「两端都会跑」改成「两条互斥的路」——person 的 trace 先到就由他那一局关门、`m2f` 不跑，48 小时到点仍无 trace 才跑一局，两条路都落盘并写明走哪条、为什么；同时给实验 harness 写了它自己的验收行与包位（`## 实验 harness`），没有用半成品占位。本轮的机器时间里没有一次计量调用。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：门没过，`m2e` 没跑，用户没看过提炼清单。
 - **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
 - **证据块只写命令跑出来的东西**：作废的是一件具体的事——提交计数行由记忆生成而非由命令生成，因此同一命令在绑定修订上返回的数不是它印的数。此后任何证据块写之前先跑，数字从输出复制；命令保留，数不保留。
@@ -125,16 +126,16 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 | 包 | 结果 | 验收 | 已有 / 缺 |
 |---|---|---|---|
-| `m2f checkpoint-rerun`（M2 的第一个包，进门条件） | 跑完一局 `discuss`，trace 落盘，路径与该局的模型、请求数写进 `docs/evidence/m1.5-checkpoint/rerun-<日期>.md`；这一局不签 M1.5，只证明 M2 起步时脚下有东西 | M1.5 ①②③ 在重跑范围内可观察的部分 | 缺：本轮的跑与记录 |
+| `m2f checkpoint-rerun`（M2 的进门条件；只在没有 person 的 trace 时跑） | 48 小时到点仍无 person 的 trace 时，跑完一局 `discuss`，trace 落盘，路径与该局的模型、请求数写进 `docs/evidence/m1.5-checkpoint/rerun-<日期>.md`；这一局不签 M1.5，只证明 M2 起步时脚下有东西 | M1.5 ①②③ 在重跑范围内可观察的部分 | 缺：本轮的跑与记录。person 的 trace 先到时它不跑，那条记录由 person 那一局提供 |
 | `m2a pipe-core` | 会话结束触发一次有序 pass 运行；每个 pass 见到"已处理到版本 N"；同一会话重跑不产生第二份事件 | ④ | 运行器、pass 顺序与幂等标记已落地（`pipe-core`）；仍缺的是**会话末自动触发**：`discuss` 结尾只写一条 `session_end` 轨迹事件，现在要先手动跑 `pipeline --session` |
 | `m2b classify` | 每条 draft 卡带上 `kind` | ① | 部分：`store.add(..., kind=...)` 已收 kind，缺的是自动判定与抽检输出 |
 | `m2c locate` | 透明检索给出 新 / 变体 / 重复 三分类，重复不改版本 | ③ | 已落地（`duplicate-content`、`pipe-core` 的 locate pass 与只读的 `distill --session`）：`add` 按内容拒绝重复且不写版本，locate pass 对每张卡给出 新/变体/重复 的提议，`distill` 把同样的三分类与挑战提议摆成一条给用户读的清单。仍缺的是 `kind` 的自动判定（`m2b`），所以清单里 `kind` 一列写「未判定」而不猜 |
 | `m2d challenge` | 成立的挑战把卡置为 `challenged` 并保留旧版本 | ⑤ | **已有**：`Store.challenge` 已置 `challenged` 且快照只增不改，由 `tests/test_storage.py` 的 `test_challenge_revision_and_alias_link_versions_preserve_sources` 覆盖；`challenge` pass 现在会提议（同一批词、肯定/否定相反）；缺的是"谁来执行提议"，因为 pass 按设计只提议不调用 |
 | `m2e integrate` | 整场会话跑完的结论清单，用户过目；单会话来源不入广播 | ①②③④⑤ | 清单的读者面已由 `distill --session` 给出（只读，不写事件）；**缺**：整场跑一遍、`kind` 判定、以及用户过目后的测试报告 |
 
-`m2f checkpoint-rerun` 的验收用一条命令读：`python3 -c "import json,sys;rows=[json.loads(l) for l in open(sys.argv[1])];print(len(rows), rows[-1]['event'], {r['model'] for r in rows})" <trace.jsonl>`——行数、末行 `session_end` 与模型集合就是它的验收；跑完还要在 `docs/evidence/m1.5-checkpoint/` 里留下日期、trace 路径、请求数与换模型（如有）的理由。
+`m2f checkpoint-rerun` **只有走到第 ② 路才跑**，它自己的验收用一条命令读：`python3 -c "import json,sys;rows=[json.loads(l) for l in open(sys.argv[1])];print(len(rows), rows[-1]['event'], {r['model'] for r in rows})" <trace.jsonl>`——行数、末行 `session_end` 与模型集合就是它的验收；跑完还要在 `docs/evidence/m1.5-checkpoint/` 里留下日期、trace 路径、请求数与换模型（如有）的理由。走到第 ① 路时这条命令不适用：那时的验收是 person 那一局照 `README.md` 的四行写完，加上记录里写明「person 的 trace 已到，`m2f` 因此未跑」。
 
-`m2f` 之前是一个无期的等待，现在是一个有期的窗：不早于 person 的 trace 落进 `docs/evidence/m1.5-checkpoint/`，不晚于 2026-10-25T12:28Z（2026-10-23T12:28Z 起 48 小时）；两个端哪个先到，它就在那时跑一局。person 的 trace 先到时，那一局与 `m2f` 都记在这个目录里：他的原话与他的判断照 `README.md` 里那四行写，他说的「还没」与「还是得管机制」一样是结果，不是失败。
+`m2f` 的等待窗停在两条互斥的路之一上（root 2026-10-23 修正）：person 的 trace 落进 `docs/evidence/m1.5-checkpoint/` → 他那一局关门，`m2f` **不跑**；到 2026-10-25T12:28Z（2026-10-23T12:28Z 起 48 小时）仍无他的 trace → `m2f` 跑一局。为什么不是两次跑：重跑只为不让 M2 盖在一扇没人关过的门上，person 跑过并给出判断就把门关了，再跑一次是拿模型的判断替换他的判断。两条路都落盘，记录里写哪条发生了、为什么；他说的「还没」与「还是得管机制」一样是结果，不是失败。
 
 由此得出 M2 的真实风险面：五条验收中只有 ⑤ 是已完成的存储能力，④ 是新脚手架，①③ 是新增判定；“已有能力用得上”这一点已在本页落地（2026-10-21 读 `dojo/storage.py:345` 与对应测试确认），不是推测。2026-10-21 之后 `m2a` 与 `m2c` 的实现已在不依赖门的那一轮落地，本表的"已有 / 缺"一列按那一轮改写。
 
@@ -142,7 +143,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 ## 不依赖门的 M2 能力包（2026-10-21 落地，2026-10-23 补 `distill-list`；每包带命令）
 
-门拦的是"把 M2 作为里程碑交用户过目"，不是全部 M2 代码：这些包不改 M1 行为、不改设计、不调模型，所以不等门。它们落地只意味着能力就位，**不意味着 M2 通过**——验收清单仍要等 `m2f` 跑过、整场跑一遍（`m2e`）才能判。
+门拦的是"把 M2 作为里程碑交用户过目"，不是全部 M2 代码：这些包不改 M1 行为、不改设计、不调模型，所以不等门。它们落地只意味着能力就位，**不意味着 M2 通过**——验收清单仍要等进门那一局落下（person 的，或没有 trace 时的 `m2f`）、整场跑一遍（`m2e`）才能判。
 
 | 包 | 现在为真的事 | 命令 |
 |---|---|---|
@@ -155,6 +156,14 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 `pipe-core` 落地的是运行器与顺序，不是 M2 的整场提炼：`m2b classify` 要模型判定（还没写），`m2e` 要把整场跑一遍并把清单交用户过目（清单已能读，整场与报告还没有）。这两件的代码在 `m2f` 的等待窗里照常推进，但它们不提供“整场跑完的结果”。**① 抽检因此仍不可判**——`distill` 已把一条清单摆到人眼前，可它摆的是提议与分类，`kind` 一列写「未判定」，抽检要看的那个东西还不存在。
 
 `isolation-guard` 的边界话说清楚：它拦的是 design.md 那一条「单一会话来源不进入广播」，判据是**能查到的**来源是否只有一个会话。空集不再是漏洞：没有来源组但有 `--session` 的卡，那个会话本身就是它的全部来源，因此拒收。仍放行的一类只有「来源组恰好一个，且库里查不到它是会话」——seed、模拟方法材料，以及**没带 `--session` 却把会话名写进来源组**的写入；这类卡在结果里报 `provenance_status: unidentified`、`independent: false`，缺席被点名而不是默认成通过。要不要把广播口径收紧成「两个独立组或缺席」，会让四张 seed 被拒并影响 M3 的演示材料，所以那是用户的取舍，本轮只记录（见上表后的残余风险）。
+
+## 实验 harness（排队项：验收行与包位已写，本轮不建）
+
+- **它是什么**：一份障碍清单 → 一条命令批量验证，每项一行可复核的结论。它不是新的产品能力，而是把「这次特别该看什么、什么现象算失败」从人脑里搬到能重复跑的地方，目前只完成过设计讨论。
+- **为什么本轮不建**：20 分钟的窗口做不出一个能通过自己验收的版本。一个跑不起来的骨架比空着更差：后来的读者会把它当成已有能力引用，这比「没有」更贵。所以只有一个空位，没有占位代码。
+- **验收行（这是一条契约，不是一条跑过的命令；命令尚不存在）**：建好后用 `python3 -m dojo harness run <障碍清单.md>` 判，一行一个障碍、末行汇总 `N passed / M failed`，退出码 0 当且仅当全部通过；同一清单连跑两次输出逐字相同；清单里任何一项缺「怎么算失败」就在第一行报出并整体不跑。三条都可观察，不靠自评。
+- **不做什么**：不调模型（判定必须是确定性的检查，否则它是第二份模型意见，不是验证）；不改 M1/M2 行为、不改设计；不让清单变成只有作者看得懂的格式。
+- **它要的包位**：一个完整包位——一份六行契约（派发时写，见 `## M2 的工作包与依赖` 末段）、一个新上下文的工作者、约 2 小时机器时间与零计量调用、一轮独立评审。它不进 20 分钟的窗口，也不等 `m2f`：没有里程碑靠它关门，它只是接在下一个有完整包位的会话上的第一件活。
 
 ## 证据卫生
 
@@ -178,15 +187,15 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 - 已修缺陷：模型请求超时原为硬编码 20 秒，实测一次包含 8 条检索结果的续轮请求在 low 推理下超过 20 秒，连续两次超时就会把可用的回答判成"端点故障"并终止会话。现在默认 60 秒并可用 `DOJO_LLM_TIMEOUT` 覆盖；`--verbose` 暴露每次请求耗时，供判断该值是否仍偏短。
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
 - 写入条件：模型判定双方已收敛时静默写入；空行与 EOF 不写入。
-- 已知缺口：会话末提炼管线（M2）、广播转述（M3）、manifest（M4）未实现；实验 harness（障碍清单 → 批量验证）仅完成设计讨论，未实现；人物档案与搜索 query 的敏感信息约束是**提示级**，无强制执行。
+- 已知缺口：会话末提炼管线（M2）、广播转述（M3）、manifest（M4）未实现；实验 harness（障碍清单 → 批量验证）只有验收行与包位（见 `## 实验 harness`），没有代码；人物档案与搜索 query 的敏感信息约束是**提示级**，无强制执行。
 - 历史工作笔记：四份旧工作记录已从 `.scratch/`（已撤销的目录，不复存在）移到 `docs/evidence/work-records/`，原文保真并加历史标记；仓库根下不再有 `.scratch/`。
 
 ## 恢复入口
 
 - **怎么开始**：`python3 -m dojo --db /tmp/play.sqlite3 discuss`。续跑加 `--resume <轨迹>`，关人物档案加 `--no-profile`，看请求进度加 `--verbose`。端点须显式配置（见 `README.md`），不配置就不联网。
 - **person 想亲手玩一局时的那一条命令**：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=/tmp/dojo-play python3 -m dojo --db /tmp/dojo-play/dojo.sqlite3 discuss`——trace 落在 `/tmp/dojo-play/discuss-<32位十六进制>.jsonl`，玩完把 `ls -t /tmp/dojo-play/*.jsonl | head -1` 打出来的那一行发回来就行（2026-10-23 用回环桩服务实际跑过这条命令：轨迹目录 0700、文件 0600、末行 `session_end` 带 `model`）。
-- **怎么继续规划**：先看本页 `## 当前推进状态`；`m2f checkpoint-rerun` 是 M2 的进门条件，它在等待窗里（person 的 trace 先到，或 2026-10-25T12:28Z），窗口内其他 M2 包与文档照常推进。
-- **`m2f` 到点了怎么跑**：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=docs/evidence/m1.5-checkpoint python3 -m dojo --db /tmp/m2f/dojo.sqlite3 discuss`，然后按 `docs/evidence/m1.5-checkpoint/README.md` 的四行写 `rerun-2026-10-25.md`，验收命令在同一文件里。
+- **怎么继续规划**：先看本页 `## 当前推进状态`；`m2f checkpoint-rerun` 是 M2 的进门条件，它在等待窗里（person 的 trace 先到就不跑、由他那一局关门；2026-10-25T12:28Z 到点仍无 trace 才跑一局），窗口内其他 M2 包与文档照常推进。
+- **`m2f` 到点了怎么跑**（只在 2026-10-25T12:28Z 仍无 person 的 trace 时才执行）：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=docs/evidence/m1.5-checkpoint python3 -m dojo --db /tmp/m2f/dojo.sqlite3 discuss`，然后按 `docs/evidence/m1.5-checkpoint/README.md` 的四行写 `rerun-2026-10-25.md`，验收命令在同一文件里。person 的 trace 先到时这一步不做，改为转存他那一局。
 - **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
 - **证据在哪**：`docs/evidence/m1*`、`m1.5-checkpoint`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。
 - **写给谁**：两层之间的消息走 `inbox/`（2026-10-21 由 `mail/` 改名）：落到本项目的消息躺在 `inbox/`，四行头 `kind`/`from`/`spend`/`id`，形状见 `inbox/README.md`。root 2026-10-23 的答复落在旧名 `mail/` 下，已原样提交保留（`8ed7cb5`），本轮的回信也写在 `mail/` 里以接回那条线。
