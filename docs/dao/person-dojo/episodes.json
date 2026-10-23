@@ -1,0 +1,83 @@
+{
+  "layer": "events",
+  "owner": "dojo 的 manager",
+  "what": "一个人的具体经历：原话优先，出处写成路径与行号。这一层只记报告，不当成「这条道成立」的证据；它证明的是「这个人这样经历/相信」。",
+  "person": {
+    "id": "p-dojo",
+    "label": "本仓的使用者（person）"
+  },
+  "window": {
+    "first_session": "2026-10-23",
+    "last_person_input": "2026-10-23",
+    "rule": "第一场之后不再联系 person。出现 2026-10-23 之后的 person 输入，说明那是第二场；本包不拿它补，也不把它算进这张图。"
+  },
+  "episodes": [
+    {
+      "id": "ep-2026-10-15-draft",
+      "at": "2026-10-15",
+      "at_basis": "commit 41d925a 的日期；他写它的日子没有记录。",
+      "attribution": "person",
+      "attribution_note": "仓库根的 user 原稿，按 README 保留原样、不改写。",
+      "quote": "当前 AI 只能访问互联网上公开、主流、已被文字化的信息，无法触及大量真实世界中的隐性经验、局部洞察与失败教训。",
+      "source": {"path": "idea.md", "ref": "§1 愿景（第 13 行）；全文 15 节，从「一句话定义」写到「开放问题」", "commit": "41d925a"},
+      "observed_action": "他把整件事的完整形状先写出来（定义、原则、边界、数据模型、路线图、开放问题），写完才谈实现；这份草案此后没有改成实现规格。",
+      "conditions": {"shape_possible": "能", "asked_consecutively": "否", "who_asks": "对方在问"},
+      "reading": "推断：从他的产出是「一份完整草案、五个抽象章节之后才到数据模型」读岀他先要形状；他没有这样说过。"
+    },
+    {
+      "id": "ep-2026-10-18-pref",
+      "at": "2026-10-18",
+      "attribution": "unverified",
+      "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。",
+      "quote": "用户喜欢先看到完整方案，再讨论细节。用户不喜欢连续被追问。",
+      "source": {"path": "docs/evidence/m2.1-person-profile/person.md", "ref": "第 5–6 行", "commit": "628e9ff"},
+      "observed_action": "他把「先看完整方案、不要连续追问」写进人物档案，要求以后每场都照它办。",
+      "conditions": {"shape_possible": "能", "asked_consecutively": "否", "who_asks": "对方在问"},
+      "reading": "推断：两条写的是偏好，不是一件发生过的事；它不参与独立性计算。"
+    },
+    {
+      "id": "ep-2026-10-23-gate-wait",
+      "at": "2026-10-23",
+      "attribution": "relayed",
+      "attribution_note": "root 转达的一句话，本仓没有那一场的 trace。",
+      "quote": "还没。",
+      "source": {"path": "mail/2026-10-23-answer-unconfirmed-and-model.md", "ref": "第 9 行", "commit": "8ed7cb5"},
+      "observed_action": "他没有为那扇门做任何维护动作，门就那样开着；后来是他自己跑了一局才把门关上（同一天的另一条记录）。",
+      "conditions": {"check_keeper": "人", "check_kind": "结构或模拟可跑", "judge": "另一个独立方"},
+      "reading": "推断：「还没」是一句状态，不是一个动作；把它读成「他不肯为这扇门做维护」是管理者的读法。"
+    },
+    {
+      "id": "ep-2026-10-23-detach",
+      "at": "2026-10-23",
+      "attribution": "person",
+      "attribution_note": "原话，一字未改。",
+      "quote": "it's not user confirm, user is already detached, he's not responsible for challenging, your underlying network is. He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that.",
+      "source": {"path": "docs/proposal-knowledge-network.md", "ref": "第 104 行；§10 第 2 条（第 272 行）", "commit": "4897660"},
+      "observed_action": "他把检验退回给网络：「你的底层网络负责」；他自己只留一个权利——随时问一句「你跑过模拟吗」。",
+      "conditions": {"check_keeper": "人", "check_kind": "结构或模拟可跑", "judge": "另一个独立方"},
+      "reading": "原话是他的；把它读成「持续检查该由系统接走」是管理者的读法。"
+    },
+    {
+      "id": "ep-2026-10-23-quota",
+      "at": "2026-10-23",
+      "attribution": "relayed",
+      "attribution_note": "root 记的是他问的问题，不是他的原话；引号内是 root 的转述。",
+      "quote": "person 问的是\"copilot 还有额度吗，还是用池子里别的模型\"。",
+      "source": {"path": "mail/2026-10-23-answer-unconfirmed-and-model.md", "ref": "第 19 行", "commit": "8ed7cb5"},
+      "observed_action": "他先问额度和要不要换模型，拿到一次真调用换来的读数之后，才让那一局跑。",
+      "conditions": {"payer": "他的额度或钱", "price_known": "能算出且高于察觉阈值"},
+      "reading": "转述 + 推断：把他读成「要先知道价才同意」是管理者的读法。"
+    },
+    {
+      "id": "ep-2026-10-23-ux",
+      "at": "2026-10-23",
+      "attribution": "person",
+      "attribution_note": "原话，一字未改；判断来自他那一局的体验，不来自 trace 文件。",
+      "quote": "finished experiencing the product… way better than last time, I'm satisfied with the user experience part.",
+      "source": {"path": "docs/evidence/m1.5-checkpoint/person-2026-10-23.md", "ref": "第 9 行", "commit": "d850cca"},
+      "observed_action": "他跑完一局，判断体验满意，并且说比上一次好得多。",
+      "conditions": {},
+      "reading": "原话是他的判断；把它读成「把追问压住让他更愿意继续」是管理者的读法，而两版之间不只改了这一件。"
+    }
+  ]
+}
