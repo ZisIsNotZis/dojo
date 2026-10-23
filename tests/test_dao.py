@@ -174,6 +174,22 @@ class DaoLifeTests(unittest.TestCase):
         self.assertEqual(receipt["verdict"], "fail")
         self.assertTrue(any("受控词表" in name for name in receipt["failures"]), receipt["failures"])
 
+    # --- the claim is narrowed where it is made -------------------------
+    def test_the_limit_sentence_stands_beside_the_ambition_in_four_places(self):
+        proposal = (ROOT / "docs" / "proposal-knowledge-network.md").read_text(encoding="utf-8")
+        product = (ROOT / "docs" / "product.md").read_text(encoding="utf-8")
+        need = (ROOT / "docs" / "need.md").read_text(encoding="utf-8")
+        self.assertIn("一个真人", proposal)
+        self.assertIn("人类的道", proposal)
+        self.assertIn("一个人的思想整理器", product)
+        self.assertIn("仍然是**目标**", product)
+        self.assertIn("没有任何跨人证据", need)
+        data = self.dossiers()
+        page = dao_life.render(data, self.bench(), AT, {}, self.vocabulary())
+        self.assertIn("这张图是一个人的", page)
+        self.assertIn("人类的道", page)
+        self.assertNotIn("已经是人类的道", page)
+
     # --- the pending line stays pending ---------------------------------
     def test_the_pending_boundary_is_not_written_into_the_product_documents(self):
         boundaries = json.loads((DAO / "person-dojo" / "map.json").read_text(encoding="utf-8"))["boundaries"]

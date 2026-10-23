@@ -485,6 +485,19 @@ def render(
         add("这几条道说的是同一件事：你要我把「活」拿走，但要先把「样子」和「价」摆在你面前。")
         add("其中有一条边界是我读出来的、你没说过；一句话就能推翻它，见「连接与边界」。")
     add("")
+    real_people = set()
+    for dao in daos:
+        for item in dao.get("provenance") or []:
+            episode = episodes.get(item.get("episode")) or {}
+            if episode.get("attribution") in {"person", "relayed"}:
+                real_people.add(item.get("person"))
+    if not synthetic:
+        if len(real_people) <= 1:
+            add("**这张图是一个人的。**记录里只有一位真人的具体经历，所以它证明的是这张库能把一个人的经历收成一张带边界的地图，")
+            add("不证明它装得下第二个人的道理。目标仍是「人类的道」；要走到那儿，需要一个真实第二人的一场会话（`docs/probe/tension-convergence.md`）。")
+        else:
+            add(f"**这张图有 {len(real_people)} 个人的材料，仍不够说「人类的道」**：按探针页的判分规则，至少三场、且按事先写下的规则判过，才算一个读数。")
+        add("")
 
     states = {dao["id"]: status_of(dao, receipts[dao["id"]], episodes) for dao in daos}
     landed = [dao["id"] for dao in daos if receipts[dao["id"]]["field"]["verdict"] != "not_run"]
