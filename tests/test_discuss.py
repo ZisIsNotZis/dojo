@@ -115,6 +115,10 @@ class DiscussTests(unittest.TestCase):
         path = next((self.root / "sessions").glob("*.jsonl"))
         return path, [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
+    def rounds_only(self, records):
+        """Elicitation turns are trace lines too; a round is a model round."""
+        return [row for row in records if row.get("event") != "elicitation"]
+
     def assert_clean_discuss_output(self, output: str):
         cleaned = output.replace("会话原文仅保存在本地轨迹文件", "")
         for term in FORBIDDEN_HOST_LANGUAGE:
@@ -168,8 +172,9 @@ class DiscussTests(unittest.TestCase):
         path, records = self.trace_records()
         self.assertEqual(0o700, stat.S_IMODE(path.parent.stat().st_mode))
         self.assertEqual(0o600, stat.S_IMODE(path.stat().st_mode))
-        self.assertEqual(3, len(records))
-        first, second, end = records
+        rounds = self.rounds_only(records)
+        self.assertEqual(3, len(rounds))
+        first, second, end = rounds
         for row in (first, second):
             self.assertEqual(TRACE_FIELDS, set(row))
             datetime.fromisoformat(row["at"])
@@ -183,7 +188,7 @@ class DiscussTests(unittest.TestCase):
         self.assertIsNone(second["pending_after"])
         self.assertEqual(2, second["requests_sent"])
         self.assertEqual(
-            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model"},
+            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model", "elicitation"},
             set(end),
         )
         self.assertTrue(end["profile_used"])
@@ -324,10 +329,10 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(2, len(client.messages), "blank input must not consume a model request")
         self.assertEqual(1, len(self.store.list_candidates()))
         _, records = self.trace_records()
-        rounds = records[:-1]
+        rounds = self.rounds_only(records)[:-1]
         self.assertEqual(["提出一个想法", "是的，我认可这条表述。"], [row["user"] for row in rounds])
         self.assertNotIn("", [row["user"] for row in rounds])
-        self.assertEqual(2, records[-1]["requests_sent"])
+        self.assertEqual(2, self.rounds_only(records)[-1]["requests_sent"])
 
     def test_discuss_keeps_history_longer_than_eight_messages_for_the_model(self):
         responses = [result(f"第{index}轮的主持人回答。") for index in range(1, 7)]
@@ -408,7 +413,12 @@ class DiscussTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store, client=client,
-            read_line=read_lines(["提出一个想法", "这正是我的意思", "补充疲劳不是主因", "对，这个边界准确"]),
+            read_line=read_lines([
+                "提出一个想法", "这正是我的意思",
+                "每天早上写代码前先列三个词", "列的时候会漏掉设计的取舍",
+                "写下那三个词要十分钟", "有一次我列完反而更想直接写代码",
+                "补充疲劳不是主因", "对，这个边界准确",
+            ]),
             output=output,
         )
 
@@ -424,8 +434,8 @@ class DiscussTests(unittest.TestCase):
         versions = self.store.history(state["id"])["versions"]
         self.assertEqual([1, 2], [item["version"] for item in versions])
         _, records = self.trace_records()
-        self.assertEqual([state["id"]], records[-1]["saved"])
-        self.assertEqual("written", records[3]["decision"])
+        self.assertEqual([state["id"]], self.rounds_only(records)[-1]["saved"])
+        self.assertEqual("written", self.rounds_only(records)[3]["decision"])
         self.assertIn(state["id"], output.getvalue())
 
     def test_minor_wording_change_does_not_create_another_session_version(self):
@@ -439,7 +449,12 @@ class DiscussTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store, client=client,
-            read_line=read_lines(["提出一个想法", "是的", "微调措辞", "仍是同一意思"]),
+            read_line=read_lines([
+                "提出一个想法", "是的",
+                "每次开始前都这样", "漏掉的是取舍",
+                "要花十分钟", "有一次反着做也没事",
+                "微调措辞", "仍是同一意思",
+            ]),
             output=output,
         )
 
@@ -448,9 +463,9 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(1, len(listed))
         self.assertEqual(1, listed[0]["version"])
         _, records = self.trace_records()
-        self.assertEqual("accepted_unchanged", records[3]["reason"])
-        self.assertEqual("none", records[3]["decision"])
-        self.assertEqual([listed[0]["id"]], records[-1]["saved"])
+        self.assertEqual("accepted_unchanged", self.rounds_only(records)[3]["reason"])
+        self.assertEqual("none", self.rounds_only(records)[3]["decision"])
+        self.assertEqual([listed[0]["id"]], self.rounds_only(records)[-1]["saved"])
         self.assertEqual(1, output.getvalue().count("本场结论卡片 ID"))
 
     def test_verbose_progress_goes_to_stderr_stream_only(self):

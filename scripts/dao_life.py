@@ -24,6 +24,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dojo.elicit import (  # noqa: E402  —— 四句问法与「谁写的」只有一份，在 dojo/elicit.py
+    PART_LABELS,
+    PART_NAMES,
+    PART_SOURCES,
+    authorship,
+    his_parts,
+    supplied_parts,
+)
+
 BENCH = "scripts/dao_life.py"
 BENCH_VERSION = 1
 COST_UNITS = ("时间", "关系", "机会", "能力")
@@ -48,8 +58,7 @@ VERDICT_WORD = {"pass": "过", "fail": "不过", "not_run": "未跑", "uncertain
 ATTRIBUTION_CLASSES = ("person", "relayed", "synthetic", "unverified")
 SOURCE_WORD = {"person": "自述", "relayed": "自述（转述）", "synthetic": "模拟", "unverified": "传闻"}
 PART_NAMES = ("situation", "tension", "move", "price", "off", "provenance")
-PART_SOURCES = ("他的原话", "转述", "系统补")
-PART_LABELS = {"situation": "情境", "tension": "张力", "move": "动作", "price": "代价", "off": "失效", "provenance": "归属"}
+
 REFUSAL_PARTS = ("情境", "张力", "动作", "代价", "失效", "归属", "重复")
 RECEIPT_PATHS = ("structure", "falsifiable", "field")
 
@@ -98,26 +107,6 @@ def base_word(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> str:
         if name in classes:
             return SOURCE_WORD[name]
     return SOURCE_WORD["unverified"]
-
-
-def authorship(dao: dict[str, Any]) -> str:
-    """Who wrote the six parts: him, him and the system, or the system alone."""
-    sources = [(dao.get("part_sources") or {}).get(name, "") for name in PART_NAMES]
-    if all(source == "系统补" for source in sources):
-        return "系统的"
-    if any(source == "系统补" for source in sources):
-        return "合写"
-    return "他的"
-
-
-def supplied_parts(dao: dict[str, Any]) -> list[str]:
-    sources = dao.get("part_sources") or {}
-    return [PART_LABELS[name] for name in PART_NAMES if sources.get(name) == "系统补"]
-
-
-def his_parts(dao: dict[str, Any]) -> list[str]:
-    sources = dao.get("part_sources") or {}
-    return [PART_LABELS[name] for name in PART_NAMES if sources.get(name) in {"他的原话", "转述"}]
 
 
 def _add(checks: list[dict[str, Any]], name: str, ok: Any, detail: str = "") -> None:
@@ -391,7 +380,7 @@ def status_of(
     field = receipts["field"]
     passed = sum(1 for verdict in (structure, falsifiable, field["verdict"]) if verdict == "pass")
     base = base_word(dao, episodes)
-    who = authorship(dao)
+    who = authorship(dao.get("part_sources") or {})
     if field["verdict"] == "not_run":
         word, mark = base, "未检"
     elif field["verdict"] == "pass" and structure == "pass" and falsifiable == "pass":
@@ -417,8 +406,8 @@ def status_of(
         "count": passed,
         "cells": cells,
         "authorship": who,
-        "supplied": supplied_parts(dao),
-        "his": his_parts(dao),
+        "supplied": supplied_parts(dao.get("part_sources") or {}),
+        "his": his_parts(dao.get("part_sources") or {}),
         "line": f"{word} · {mark}（{passed}/3：{cell_text}）",
     }
 
@@ -578,7 +567,7 @@ def render(
         )
         counts_by_author: dict[str, int] = {"他的": 0, "合写": 0, "系统的": 0}
         for dao in daos:
-            counts_by_author[authorship(dao)] = counts_by_author.get(authorship(dao), 0) + 1
+            counts_by_author[authorship(dao.get("part_sources") or {})] = counts_by_author.get(authorship(dao.get("part_sources") or {}), 0) + 1
         add("")
         add(
             f"**按作者分：他的 {counts_by_author.get('他的', 0)} 条、合写 {counts_by_author.get('合写', 0)} 条、"
@@ -649,17 +638,17 @@ def render(
             + "；".join(f"{PART_LABELS[name]} {sources.get(name, '（没写）')}" for name in PART_NAMES)
         )
         add("")
-        who = authorship(dao)
+        who = authorship(dao.get("part_sources") or {})
         if who == "合写":
             add(
-                f"**读这条能得出什么：**{"、".join(his_parts(dao))}是他的，"
-                f"{"、".join(supplied_parts(dao))}是系统补的。所以这条只能读成「他这样做的假设」，不能读成他的看法；"
+                f"**读这条能得出什么：**{"、".join(his_parts(dao.get("part_sources") or {}))}是他的，"
+                f"{"、".join(supplied_parts(dao.get("part_sources") or {}))}是系统补的。所以这条只能读成「他这样做的假设」，不能读成他的看法；"
                 "要用我补的那几件，得等他一句新的确认或推翻（见「推断怎么变成他的」）。"
             )
         elif who == "系统的":
             add("**读这条能得出什么：**六件全是系统补的，没有一句是他的；它只能读成一个待问的假设。")
         else:
-            add(f"**读这条能得出什么：**六件都来自他说过的话（{"、".join(his_parts(dao))}），没有一个字是我补的。")
+            add(f"**读这条能得出什么：**六件都来自他说过的话（{"、".join(his_parts(dao.get("part_sources") or {}))}），没有一个字是我补的。")
         add("")
         for check in (data.get("record_checks") or {}).get("checks") or []:
             if check.get("dao") != dao["id"]:
@@ -1388,7 +1377,7 @@ def check_library(data: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         "authorship": {},
     }
     for dao in data["daos"]["daos"]:
-        summary["authorship"][authorship(dao)] = summary["authorship"].get(authorship(dao), 0) + 1
+        summary["authorship"][authorship(dao.get("part_sources") or {})] = summary["authorship"].get(authorship(dao.get("part_sources") or {}), 0) + 1
     return failures, summary
 
 

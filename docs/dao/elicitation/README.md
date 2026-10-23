@@ -6,9 +6,10 @@
 
 | 文件 | 是什么 |
 |---|---|
-| `questions.json` | 四句问法的家：每件写 `ask`、它会招来什么（`failure_mode`）、他答成另一条做法或答不出时怎么接（`follow_ups`）、一句回答要有什么才算数（`to_fill`）。 |
+| `../dojo/elicit.py`（不在本目录） | 四句问法的家：每件写 `ask`、会招来什么（`failure_mode`）、两种追问答法（`follow_ups`）、「一句回答要有什么才算数」（`to_fill`），以及「谁写的」那条规则。讨论循环与演练工具都引它，只有一份。 |
 | `session-1.txt` | 一场模拟会话：被访者的每一句都逐字来自事件层（带 episode 与出处），提问与重问是 harness 的台词。 |
-| `run-1.json` / `run-1.md` | 生成物：这场会话的投影。不要手改。 |
+| `run-1.json` / `run-1.md` | 生成物：这场演练的投影。不要手改。 |
+| `live-session-1.md` | 生成物：一场跑在真讨论循环里的脚本化会话（零模型调用），含逐句出处、每件问答与条目作者行。 |
 
 ## 一条命令
 
@@ -23,6 +24,11 @@ python3 scripts/dao_elicit.py --library docs/dao/person-dojo --script docs/dao/e
 - `answer his …` / `answer relayed …`：**他的话**，必须在该 episode 的原话里逐字存在，否则拒收。演练不会变成编造。
 - `answer another-rule / story / vague / none`：**他对这一问的回答形态**，逐字同上（`none` 除外）。
 - `ask`、重问、以及每条 answer 后面的 `kind`：**harness 的判断**。仪器不判语义——一句回答算不算回答了那一件，是人的判断，写在脚本里、可被复核。
+
+## 接进讨论之后
+
+`python3 -m dojo discuss` 在一条结论写入之后，按 情境 → 张力 → 代价 → 失效 一次问一件；每件最多两轮。轨迹逐件记下 `part / turn / question / answer / promoted`，`session_end.elicitation` 记 `promoted`、`supplied`、`turns`、`part_sources` 与条目作者行。写入规则没变（仍在他说「对」的那一轮），也没有表单、编号或进度条。
+`python3 scripts/dao_live_session.py docs/dao/elicitation/live-session-1.md` 是一场的实例：6 轮、两件变成他的、两件问不出来，条目停在 `合写（他写了 情境、张力、动作、归属；系统补了 代价、失效）`。
 
 ## 现在量出来的是什么（2026-10-23，第一场）
 

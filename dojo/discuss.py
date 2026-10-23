@@ -18,6 +18,14 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 from urllib.parse import urlparse
 
+from .elicit import (
+    PART_KEYS,
+    PART_ORDER,
+    QUESTIONS,
+    authorship,
+    classify_answer,
+    draft_line,
+)
 from .live import (
     DEFAULT_DISCUSS_REASONING_EFFORT,
     MAX_DISCUSS_ANSWER_CHARS,
@@ -560,6 +568,18 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     not isinstance(value["model"], str) or len(value["model"]) > 160
                 ):
                     raise ValueError("会话模型记录无效")
+            elif value.get("event") == "elicitation":
+                required = {"event", "part", "turn", "question", "answer", "promoted", "reading", "at"}
+                if not required.issubset(value):
+                    raise ValueError("追问记录缺少必要字段")
+                if value["part"] not in QUESTIONS:
+                    raise ValueError("追问记录的件不在四件里")
+                if value["turn"] not in (1, 2) or not isinstance(value["question"], str):
+                    raise ValueError("追问记录的轮次或问句无效")
+                if value["answer"] is not None and not isinstance(value["answer"], str):
+                    raise ValueError("追问记录的回答无效")
+                if not isinstance(value["promoted"], bool):
+                    raise ValueError("追问记录的晋升标记无效")
             else:
                 required = {
                     "seq", "at", "user", "answer", "candidate", "stance", "decision",
@@ -617,7 +637,8 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
             records.append(value)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise ValueError(f"无法续跑轨迹：格式不符（{exc}）") from None
-    rounds = [record for record in records if record.get("event") != "session_end"]
+    rounds = [record for record in records if record.get("event") not in {"session_end", "elicitation"}]
+    elicitations = [record for record in records if record.get("event") == "elicitation"]
     ends = [record for record in records if record.get("event") == "session_end"]
     if not rounds or not ends or records[-1].get("event") != "session_end":
         raise ValueError("无法续跑轨迹：缺少本程序的讨论轮或终止记录")
@@ -650,7 +671,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
             raise ValueError("无法续跑轨迹：待定候选不符合本程序契约") from None
     saved = list(dict.fromkeys(identifier for row in ends for identifier in row["saved"]))
     requests_sent = max(
-        [row["requests_sent"] for row in rounds + ends] or [0],
+        [row.get("requests_sent", 0) for row in rounds + ends] or [0],
     )
     resume_input = (
         last_round["user"]
@@ -677,11 +698,30 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
             except ValueError:
                 raise ValueError("无法续跑轨迹：搜索时间无效") from None
         search_count += len(search_records)
+    end_summary = next((end.get("elicitation") for end in ends if isinstance(end.get("elicitation"), dict)), None)
+    if end_summary is not None:
+        elicitation_promoted = list(end_summary.get("promoted") or [])
+        elicitation_supplied = list(end_summary.get("supplied") or [])
+        elicitation_turns = int(end_summary.get("turns") or 0)
+        elicitation_entry = end_summary.get("entry")
+    else:
+        elicitation_promoted = [row["part"] for row in elicitations if row.get("promoted")]
+        elicitation_supplied = [
+            row["part"] for row in elicitations
+            if row.get("turn") == 2 and not row.get("promoted")
+        ]
+        elicitation_turns = len(elicitations)
+        elicitation_entry = None
     return {
         "session": session, "history": history, "pending": pending,
         "saved": saved, "seq": max(row["seq"] for row in rounds),
         "requests_sent": requests_sent, "search_count": search_count,
         "resume_input": resume_input,
+        "elicitation_done": bool(elicitations) or end_summary is not None,
+        "elicitation_promoted": elicitation_promoted,
+        "elicitation_supplied": elicitation_supplied,
+        "elicitation_turns": elicitation_turns,
+        "elicitation_entry": elicitation_entry,
     }
 
 
@@ -876,6 +916,79 @@ def run_discuss(
         if trace is not None:
             trace.append(value)
 
+    elicitation: dict[str, Any] = {
+        "started": bool(resume_state and resume_state.get("elicitation_done")),
+        "entry": (resume_state or {}).get("elicitation_entry"),
+        "turns": (resume_state or {}).get("elicitation_turns", 0),
+        "promoted": list((resume_state or {}).get("elicitation_promoted", [])),
+        "supplied": list((resume_state or {}).get("elicitation_supplied", [])),
+        "events": [],
+    }
+
+    def elicitation_summary() -> dict[str, Any]:
+        part_sources = {key: "系统补" for key in PART_KEYS.values()}
+        part_sources["move"] = "他的原话"
+        part_sources["provenance"] = "他的原话"
+        for part_name in elicitation["promoted"]:
+            part_sources[PART_KEYS[part_name]] = "他的原话"
+        return {
+            "entry": elicitation["entry"],
+            "turns": elicitation["turns"],
+            "asked": [event["part"] for event in elicitation["events"]],
+            "promoted": list(elicitation["promoted"]),
+            "supplied": list(elicitation["supplied"]),
+            "part_sources": part_sources,
+            "authorship": authorship(part_sources),
+            "line": draft_line(part_sources),
+        }
+
+    def _elicit_four_parts() -> str:
+        """Ask the four parts, one at a time, in the conversation. Two turns each at most."""
+        def record(part_name: str, turn: int, question: str, answer: str | None, promoted: bool, reading: str) -> None:
+            event = {
+                "event": "elicitation",
+                "part": part_name,
+                "turn": turn,
+                "question": question,
+                "answer": answer,
+                "promoted": promoted,
+                "reading": reading,
+                "at": datetime.now(timezone.utc).isoformat(),
+            }
+            elicitation["events"].append(event)
+            elicitation["turns"] += 1
+            if trace is not None:
+                trace.append(event)
+            note(f"追问 {part_name} 第 {turn} 轮：{reading}")
+
+        for part_name in PART_ORDER:
+            asked = QUESTIONS[part_name]["ask"]
+            for turn in (1, 2):
+                question = asked if turn == 1 else QUESTIONS[part_name]["follow_ups"]["none"]
+                print("\n主持人> " + question, file=output)
+                try:
+                    raw = _ask(read_line)
+                except KeyboardInterrupt:
+                    raise
+                if raw is None:
+                    record(part_name, turn, question, None, False, "eof")
+                    return "eof"
+                text = raw.strip()
+                reading = classify_answer(text)
+                if reading == "structured":
+                    print("用一句话说就行；这里不填表。", file=output)
+                    reading = "none"
+                recorded = text[:4000] if text else ""
+                if reading == "answer":
+                    record(part_name, turn, question, recorded, True, "answer")
+                    elicitation["promoted"].append(part_name)
+                    break
+                record(part_name, turn, question, recorded, False, reading)
+                if turn == 2:
+                    elicitation["supplied"].append(part_name)
+                    break
+        return "done"
+
     def finish(reason: str, code: int = 0) -> int:
         if trace is not None:
             trace.append({
@@ -883,6 +996,7 @@ def run_discuss(
                 "requests_sent": requests_sent,
                 "profile_used": profile_used, "profile_updates": profile_entries,
                 "model": active_model,
+                "elicitation": elicitation_summary() if elicitation["started"] else None,
             })
             trace.close()
             if trace.warning:
@@ -1285,6 +1399,12 @@ def run_discuss(
             "attempts": attempts,
             "search": turn_searches,
         })
+        if decision == "written" and not elicitation["started"]:
+            elicitation["started"] = True
+            elicitation["entry"] = saved_candidate_id
+            if _elicit_four_parts() == "eof":
+                print("讨论已结束。", file=output)
+                return finish("eof")
         history.extend([{"role": "user", "content": context}, *tool_messages, {"role": "assistant", "content": answer}])
         if len(history) > MAX_DISCUSS_HISTORY_MESSAGES:
             history = history[-MAX_DISCUSS_HISTORY_MESSAGES:]

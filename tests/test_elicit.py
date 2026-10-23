@@ -6,6 +6,7 @@
 import importlib.util
 import json
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "docs" / "dao" / "person-dojo"
 ELICIT = ROOT / "docs" / "dao" / "elicitation"
-QUESTIONS = ELICIT / "questions.json"
 SCRIPT = ELICIT / "session-1.txt"
 
 
@@ -26,6 +26,8 @@ def _module(name, path):
 
 dao_life = _module("dao_life", ROOT / "scripts" / "dao_life.py")
 dao_elicit = _module("dao_elicit", ROOT / "scripts" / "dao_elicit.py")
+sys.path.insert(0, str(ROOT))
+from dojo.elicit import QUESTIONS  # noqa: E402
 
 AT = "2026-10-23T22:00:00Z"
 
@@ -40,10 +42,10 @@ class ElicitTests(unittest.TestCase):
 
     def run_script(self, text):
         self.script.write_text(text, encoding="utf-8")
-        return dao_elicit.run(LIB, self.script, QUESTIONS, AT)
+        return dao_elicit.run(LIB, self.script, AT)
 
     def test_the_replay_measures_what_asking_costs(self):
-        report = dao_elicit.run(LIB, SCRIPT, QUESTIONS, AT)
+        report = dao_elicit.run(LIB, SCRIPT, AT)
         self.assertEqual(report["totals"]["entries"], 4)
         self.assertEqual(report["totals"]["parts"], 14)
         self.assertEqual(report["totals"]["filled"], 4)
@@ -111,14 +113,14 @@ class ElicitTests(unittest.TestCase):
         self.assertIn("第三遍", str(caught.exception))
 
     def test_when_the_answer_never_comes_the_part_and_the_entry_stay_supplied(self):
-        report = dao_elicit.run(LIB, SCRIPT, QUESTIONS, AT)
+        report = dao_elicit.run(LIB, SCRIPT, AT)
         daos = {dao["id"]: dao for dao in json.loads((LIB / "daos.json").read_text(encoding="utf-8"))["daos"]}
         for entry in report["entries"]:
             if not entry["supplied_after"]:
                 continue
             projected = dict(daos[entry["id"]])
             projected["part_sources"] = entry["after"]
-            self.assertEqual(dao_life.authorship(projected), "合写", entry["id"])
+            self.assertEqual(dao_life.authorship(projected["part_sources"]), "合写", entry["id"])
         # 一场问完，四条道没有一条变成「他的」：每一场都还有问不出来的件
         self.assertTrue(all(entry["supplied_after"] for entry in report["entries"]))
 
@@ -137,17 +139,16 @@ class ElicitTests(unittest.TestCase):
         daos = {dao["id"]: dao for dao in json.loads((LIB / "daos.json").read_text(encoding="utf-8"))["daos"]}
         projected = dict(daos["dojo-d-005"])
         projected["part_sources"] = after
-        self.assertEqual(dao_life.authorship(projected), "他的")
+        self.assertEqual(dao_life.authorship(projected["part_sources"]), "他的")
 
     def test_the_run_touches_no_library_file(self):
         before = (LIB / "daos.json").read_bytes()
-        dao_elicit.run(LIB, SCRIPT, QUESTIONS, AT)
+        dao_elicit.run(LIB, SCRIPT, AT)
         self.assertEqual(before, (LIB / "daos.json").read_bytes())
 
     def test_the_report_says_what_a_live_session_would_have_to_hear(self):
-        questions = json.loads(QUESTIONS.read_text(encoding="utf-8"))
-        report = dao_elicit.run(LIB, SCRIPT, QUESTIONS, AT)
-        page = dao_elicit.render(report, SCRIPT, questions)
+        report = dao_elicit.run(LIB, SCRIPT, AT)
+        page = dao_elicit.render(report, SCRIPT, {"parts": [{"part": name, **value} for name, value in QUESTIONS.items()]})
         self.assertIn("要变成他的，还得听他说出这样一句", page)
         self.assertIn("一句说出「另一件好事」的话", page)
         self.assertIn("停「系统补」", page)

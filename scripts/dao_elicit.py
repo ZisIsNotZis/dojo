@@ -13,6 +13,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dojo.elicit import PART_KEYS as QUESTION_PARTS, QUESTIONS  # noqa: E402
+
 BENCH = "scripts/dao_elicit.py"
 PARTS = ("情境", "张力", "代价", "失效")
 PART_KEY = {"情境": "situation", "张力": "tension", "代价": "price", "失效": "off"}
@@ -81,14 +84,14 @@ def parse_script(path: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def run(library_dir: Path, script_path: Path, questions_path: Path, at: str | None) -> dict[str, Any]:
+def run(library_dir: Path, script_path: Path, at: str | None) -> dict[str, Any]:
     library = {
         "episodes": load(library_dir / "episodes.json"),
         "daos": load(library_dir / "daos.json"),
     }
     episodes = {episode["id"]: episode for episode in library["episodes"]["episodes"]}
     daos = {dao["id"]: dao for dao in library["daos"]["daos"]}
-    questions = {item["part"]: item for item in load(questions_path)["parts"]}
+    questions = QUESTIONS
     script = parse_script(script_path)
 
     results = []
@@ -169,7 +172,7 @@ def run(library_dir: Path, script_path: Path, questions_path: Path, at: str | No
         "layer": "elicitation",
         "at": at,
         "script": str(script_path),
-        "questions": str(questions_path),
+        "questions": "dojo/elicit.py",
         "entries": results,
         "totals": {
             "entries": len(results),
@@ -268,10 +271,8 @@ def main(argv: list[str]) -> int:
     if library is None or script is None:
         print("要给 --library 和 --script")
         return 2
-    questions_path = library.parent / "elicitation" / "questions.json"
     try:
-        questions = load(questions_path)
-        report = run(library, script, questions_path, at)
+        report = run(library, script, at)
     except ElicitError as error:
         print(f"拒收（{script}）：{error}")
         print("没有写任何文件。")
@@ -284,6 +285,7 @@ def main(argv: list[str]) -> int:
     if not write:
         print("--check：不写盘")
         return 0
+    questions = {"parts": [{"part": name, **value} for name, value in QUESTIONS.items()]}
     prefix = out_prefix or "run-1"
     out_dir = script.parent
     (out_dir / f"{prefix}.json").write_text(
