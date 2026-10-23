@@ -46,7 +46,7 @@ FORBIDDEN_HOST_LANGUAGE = (
 TRACE_FIELDS = {
     "seq", "at", "user", "answer", "candidate", "stance", "decision", "reason", "requests_sent",
     "pending_after", "raw_response", "finish_reason", "error", "reasoning_effort",
-    "reasoning_effort_fallback", "attempts", "search",
+    "reasoning_effort_fallback", "attempts", "search", "model",
 }
 
 
@@ -183,7 +183,7 @@ class DiscussTests(unittest.TestCase):
         self.assertIsNone(second["pending_after"])
         self.assertEqual(2, second["requests_sent"])
         self.assertEqual(
-            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates"},
+            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model"},
             set(end),
         )
         self.assertTrue(end["profile_used"])
@@ -1252,6 +1252,33 @@ class DiscussTests(unittest.TestCase):
         self.assertIn("第一轮用户原话", json.dumps(messages, ensure_ascii=False))
         self.assertIn(CONCLUSION["statement"], json.dumps(messages, ensure_ascii=False))
         self.assertIn("正在续跑会话", output.getvalue())
+
+    def test_each_trace_round_and_session_end_carry_the_model_id_used(self):
+        config = LiveConfig(endpoint="http://127.0.0.1:4000/v1", model="github_copilot/gpt-6-luna", api_key=None)
+        client = FakeClient([result("先讨论这一点。", CONCLUSION)])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, config=config, client=client,
+            read_line=read_lines(["第一轮用户原话"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        path, records = self.trace_records()
+        for row in records:
+            self.assertEqual("github_copilot/gpt-6-luna", row["model"])
+
+        switched = FakeClient([result("续跑补充。")])
+        other = LiveConfig(endpoint="http://127.0.0.1:4000/v1", model="siemens/deepseek-v4.1-flash", api_key=None)
+        self.assertEqual(0, run_discuss(
+            self.store, config=other, client=switched, resume=path,
+            read_line=read_lines(["续跑那一轮"]), output=io.StringIO(),
+        ))
+
+        appended = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(records) + 2, len(appended))
+        self.assertEqual("github_copilot/gpt-6-luna", appended[0]["model"])
+        self.assertEqual("siemens/deepseek-v4.1-flash", appended[-2]["model"])
+        self.assertEqual("siemens/deepseek-v4.1-flash", appended[-1]["model"])
 
     def test_discuss_context_has_user_input_without_model_pacing_counts(self):
         client = FakeClient([result("继续了解。"), result("继续了解。")])

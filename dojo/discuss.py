@@ -556,6 +556,10 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     or not all(isinstance(entry, str) for entry in value["profile_updates"])
                 ):
                     raise ValueError("人物档案追加记录无效")
+                if value.get("model") is not None and (
+                    not isinstance(value["model"], str) or len(value["model"]) > 160
+                ):
+                    raise ValueError("会话模型记录无效")
             else:
                 required = {
                     "seq", "at", "user", "answer", "candidate", "stance", "decision",
@@ -606,6 +610,10 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     raise ValueError("推理等级降级记录无效")
                 if value.get("finish_reason") is not None and not isinstance(value.get("finish_reason"), str):
                     raise ValueError("finish_reason 记录无效")
+                if value.get("model") is not None and (
+                    not isinstance(value["model"], str) or len(value["model"]) > 160
+                ):
+                    raise ValueError("讨论轮模型记录无效")
             records.append(value)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise ValueError(f"无法续跑轨迹：格式不符（{exc}）") from None
@@ -783,6 +791,11 @@ def run_discuss(
     elif hasattr(client, "reasoning_effort"):
         client.reasoning_effort = active_reasoning_effort
 
+    # The model id this segment actually asked, written into every round record so a switched run
+    # is distinguishable from a default one inside the trace itself (None when an external client
+    # supplies the model and no endpoint config was read here).
+    active_model = getattr(config, "model", None)
+
     profile_used = not no_profile
     profile_path: Path | None = None
     profile_text = ""
@@ -852,7 +865,7 @@ def run_discuss(
     note = _DebugProgress(progress_stream or sys.stderr, verbose)
     note(
         "讨论已启动：模型 "
-        + (getattr(config, "model", None) or "由外部客户端提供")
+        + (active_model or "由外部客户端提供")
         + "，推理 "
         + (active_reasoning_effort or "不带字段")
         + (f"，续跑 {resume}" if resume is not None else "")
@@ -869,6 +882,7 @@ def run_discuss(
                 "event": "session_end", "reason": reason, "saved": saved_ids,
                 "requests_sent": requests_sent,
                 "profile_used": profile_used, "profile_updates": profile_entries,
+                "model": active_model,
             })
             trace.close()
             if trace.warning:
@@ -1080,6 +1094,7 @@ def run_discuss(
                     "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
                     "user": original_text, "answer": None, "candidate": None, "stance": None,
                     "decision": "none", "reason": "interrupted", "requests_sent": requests_sent,
+                    "model": active_model,
                     "pending_after": pending["statement"] if pending is not None else None,
                     "raw_response": raw_response, "finish_reason": finish_reason, "error": None,
                     "reasoning_effort": round_reasoning_effort,
@@ -1161,6 +1176,7 @@ def run_discuss(
                 "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
                 "user": original_text, "answer": None, "candidate": None, "stance": None,
                 "decision": "none", "reason": "failure", "requests_sent": requests_sent,
+                "model": active_model,
                 "pending_after": pending["statement"] if pending is not None else None,
                 "raw_response": raw_response, "finish_reason": finish_reason,
                 "error": error,
@@ -1260,6 +1276,7 @@ def run_discuss(
             "user": original_text, "answer": answer, "candidate": candidate,
             "stance": stance, "decision": decision, "reason": reason,
             "requests_sent": requests_sent,
+            "model": active_model,
             "pending_after": pending["statement"] if pending is not None else None,
             "raw_response": raw_response[:MAX_DISCUSS_RAW_RESPONSE_CHARS],
             "finish_reason": finish_reason, "error": error_record,
