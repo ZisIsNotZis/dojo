@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -413,15 +414,18 @@ def run_bench(
 
 def independent_groups(data: dict[str, Any]) -> dict[str, Any]:
     """不同的人 × 不同的情境出处 × 无同源传递 × 各有案例；缺一不算一组。"""
-    people = set()
+    people: set[str] = set()
+    classes: set[str] = set()
+    episodes_by_id = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
     for dao in data["daos"]["daos"]:
         for item in dao.get("provenance") or []:
-            episode = next((e for e in data["episodes"]["episodes"] if e["id"] == item.get("episode")), {})
+            episode = episodes_by_id.get(item.get("episode")) or {}
             if episode.get("attribution") == "unverified":
                 continue
             people.add(item.get("person"))
+            classes.add(episode.get("attribution", ""))
     exposures = data["exposures"].get("rows") or []
-    synthetic_only = bool(people) and all(person.startswith("synthetic") for person in people)
+    synthetic_only = bool(people) and classes == {"synthetic"}
     if synthetic_only:
         line = (
             f"来源是模拟材料（{len(people)} 个来源 id，曝光账本 {len(exposures)} 行）："
@@ -607,6 +611,22 @@ def render(
         add(f"所有者：{boundary['owner']}；什么时候重开：{boundary['reopen']}；{boundary['where_not_written']}")
         add("")
 
+    candidates = data["map"].get("candidates") or []
+    if candidates:
+        add("## 候选（还不成立，所以没进库）")
+        add("")
+        add("这些是这几条道指出来、但那几件具体经历还撑不住的道。它们不进库，也不计进任何数目；写成候选是为了让「我们还不知道」有一个位置。")
+        add("")
+        for candidate in candidates:
+            add(f"**{candidate['id']}**　{candidate['one_line']}")
+            add("")
+            add(f"指出来的是：{'、'.join(candidate['suggested_by'])}。状态：`{candidate.get('status', '候选')}`")
+            add("")
+            add(f"为什么没进库：{candidate['why_not_entered']}")
+            add("")
+            add(f"什么能支持它：{candidate['what_would_support_it']}")
+            add("")
+
     add("## 回执（三格，一条道一条道读）")
     add("")
     for dao in daos:
@@ -780,7 +800,239 @@ def render_compare(
     return "\n".join(lines) + "\n"
 
 
+class NoteError(Exception):
+    """A probe note that cannot enter the loop, with the reason named."""
+
+
+NOTE_HEADER = ("person", "date", "minutes", "sample")
+NOTE_SECTIONS = ("逐字", "张力")
+TENSION_ID = re.compile(r"^[-*]\s*\[(?P<id>[^\]]+)\]\s*(?P<pair>.+?)\s*$")
+TENSION_FIELD = re.compile(r"^(情境|方向|原话|锚)\s*:\s*(?P<value>.*)$")
+NOTE_STAMP = re.compile(r"^\[(?P<stamp>\d{2}:\d{2})\]")
+
+
+def _parse_note(path: Path) -> dict[str, Any]:
+    """The probe page's format, read strictly. Every refusal names what is wrong."""
+    if not path.exists():
+        raise NoteError(f"{path.parent} 里既没有 episodes.json，也没有 note.md")
+    text = path.read_text(encoding="utf-8")
+    header: dict[str, str] = {}
+    sections: dict[str, list[str]] = {name: [] for name in NOTE_SECTIONS}
+    current = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        if line.startswith("## "):
+            name = line[3:].strip()
+            if name not in sections:
+                raise NoteError(f"不认识的节「{name}」：探针笔记只有「## 逐字」与「## 张力」两节")
+            current = name
+            continue
+        if current is None:
+            if ":" not in line:
+                raise NoteError(f"头部行「{line}」不是 key: value 的形状")
+            key, value = line.split(":", 1)
+            header[key.strip()] = value.strip()
+            continue
+        sections[current].append(line)
+
+    for key in NOTE_HEADER:
+        if not header.get(key):
+            raise NoteError(f"笔记缺头部行 {key}:（探针页要求四行头：person / date / minutes / sample）")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", header["date"]):
+        raise NoteError(f"date 写成「{header['date']}」；探针页要求 YYYY-MM-DD")
+    if not header["minutes"].isdigit():
+        raise NoteError(f"minutes 写成「{header['minutes']}」；要一个整数分钟")
+    if header["sample"] not in {"acquaintances", "strangers"}:
+        raise NoteError(f"sample 写成「{header['sample']}」；只能是 acquaintances 或 strangers")
+    if not sections["逐字"]:
+        raise NoteError("「## 逐字」是空的：没有原话，张力就没有锚")
+    stamps = {match.group("stamp") for line in sections["逐字"] if (match := NOTE_STAMP.match(line.strip()))}
+    if not stamps:
+        raise NoteError("「## 逐字」里没有一条带 [MM:SS] 时间戳的行")
+    if not sections["张力"]:
+        raise NoteError("「## 张力」是空的：没有张力，就没有什么可以进库")
+
+    tensions = []
+    for index, line in enumerate(sections["张力"], 1):
+        stripped = line.strip()
+        if not stripped.startswith(("-", "*")):
+            raise NoteError(f"「## 张力」第 {index} 行不是一条张力（要以 - 开头）：{stripped[:40]}")
+        chunks = [chunk.strip() for chunk in stripped.split("|")]
+        head = TENSION_ID.match(chunks[0])
+        if not head:
+            raise NoteError(f"「## 张力」第 {index} 行的开头不是「- [pX-T1] A ↔ B」：{chunks[0][:40]}")
+        fields: dict[str, str] = {}
+        for chunk in chunks[1:]:
+            match = TENSION_FIELD.match(chunk)
+            if not match:
+                raise NoteError(f"张力 {head.group('id')} 有一格读不出来：「{chunk[:30]}」（五格是 情境/方向/原话/锚）")
+            fields[match.group(1)] = match.group("value").strip()
+        for name in ("情境", "方向", "原话", "锚"):
+            if not fields.get(name):
+                raise NoteError(f"张力 {head.group('id')} 少了「{name}」这一格")
+        pair = head.group("pair")
+        sides = [side.strip() for side in pair.split("↔")]
+        if len(sides) != 2 or not all(sides):
+            raise NoteError(f"张力 {head.group('id')} 的「{pair}」不是一个 ↔ 两边的名词短语")
+        quote = fields["原话"]
+        if len(quote) < 2 or not (quote.startswith('"') and quote.endswith('"')):
+            raise NoteError(f"张力 {head.group('id')} 的原话必须逐字带引号：{quote[:30]}")
+        anchor = fields["锚"]
+        if not re.fullmatch(r"\d{2}:\d{2}", anchor):
+            raise NoteError(f"张力 {head.group('id')} 的锚「{anchor}」不是 MM:SS")
+        if anchor not in stamps:
+            raise NoteError(f"张力 {head.group('id')} 的锚 {anchor} 在「## 逐字」里找不到；没有锚的行不能进库")
+        tensions.append(
+            {
+                "id": head.group("id"),
+                "pair": pair,
+                "sides": sides,
+                "situation": fields["情境"],
+                "direction": fields["方向"],
+                "quote": quote[1:-1],
+                "anchor": anchor,
+            }
+        )
+    return {"header": header, "tensions": tensions, "text": text, "path": path}
+
+
+def _require(author: dict[str, Any], keys: tuple[str, ...], where: str) -> None:
+    for key in keys:
+        value = author.get(key)
+        if isinstance(value, str):
+            ok = bool(value.strip())
+        else:
+            ok = value not in (None, [], {})
+        if not ok:
+            raise NoteError(f"{where} 少了「{key}」：笔记只记到情境/张力/方向/原话/锚，其余要人写，本命令不替你决定")
+
+
+def build_library_from_note(root: Path) -> dict[str, Any]:
+    """One probe session in, one library out — the same loop, no code change per person."""
+    note = _parse_note(root / "note.md")
+    extraction_path = root / "extraction.json"
+    if not extraction_path.exists():
+        raise NoteError(
+            "note.md 旁边没有 extraction.json：笔记只记到情境/张力/方向/原话/锚，"
+            "动作的落点、代价、失效条件与规则表要人写；本命令不替你决定"
+        )
+    extraction = json.loads(extraction_path.read_text(encoding="utf-8"))
+    attribution = extraction.get("attribution")
+    if attribution not in ATTRIBUTION_CLASSES:
+        raise NoteError(
+            "extraction.json 没写来源类别（person / relayed / synthetic / unverified）："
+            "这个命令不猜一个人是不是真的坐在那儿"
+        )
+    authored = {item.get("tension"): item for item in extraction.get("daos") or []}
+    person = note["header"]["person"]
+    person_slug = re.sub(r"[^0-9A-Za-z_-]", "-", person) or "p"
+
+    episodes = []
+    daos = []
+    needed = []
+    for tension in note["tensions"]:
+        author = authored.get(tension["pair"])
+        if author is None:
+            raise NoteError(
+                f"extraction.json 里没有「{tension['pair']}」这一条：笔记里有、提炼里没有，不半途入库"
+            )
+        where = f"extraction.json 的「{tension['pair']}」"
+        _require(author, ("title", "one_line", "tension_key", "move_key", "tension_why", "conditions", "price", "off", "axes", "rule", "move", "situation"), where)
+        _require(author["move"], ("locus", "magnitude"), where + " 的 move")
+        _require(author["situation"], ("who", "when", "constraints", "domain"), where + " 的 situation")
+        tid_slug = re.sub(r"[^0-9A-Za-z_-]", "-", tension["id"])
+        episode_id = f"ep-{tid_slug}"
+        dao_id = f"dao-{tid_slug}"
+        episodes.append(
+            {
+                "id": episode_id,
+                "at": note["header"]["date"],
+                "at_basis": "探针笔记头部的 date:",
+                "attribution": attribution,
+                "attribution_note": extraction.get("attribution_note", ""),
+                "quote": tension["quote"],
+                "source": {
+                    "path": str(note["path"]),
+                    "ref": f"张力 {tension['id']}（锚 {tension['anchor']}）",
+                },
+                "observed_action": f"笔记记下的偏向：{tension['direction']}（锚 {tension['anchor']}）",
+                "conditions": author["conditions"],
+                "reading": author.get("reading", "读法是提炼那一步写的，不是笔记本身。"),
+            }
+        )
+        daos.append(
+            {
+                "id": dao_id,
+                "version": 1,
+                "title": author["title"],
+                "tension_key": author["tension_key"],
+                "move_key": author["move_key"],
+                "one_line": author["one_line"],
+                "situation": {
+                    "who": author["situation"]["who"],
+                    "when": author["situation"].get("when") or tension["situation"],
+                    "constraints": author["situation"]["constraints"],
+                    "domain": author["situation"]["domain"],
+                    "covers": [episode_id],
+                },
+                "tension": {"name": tension["pair"], "sides": tension["sides"], "why": author["tension_why"]},
+                "move": {
+                    "on_tension": tension["pair"],
+                    "direction": author["move"].get("direction") or tension["direction"],
+                    "locus": author["move"]["locus"],
+                    "magnitude": author["move"]["magnitude"],
+                },
+                "price": author["price"],
+                "off": author["off"],
+                "axes": author["axes"],
+                "rule": author["rule"],
+                "provenance": [
+                    {
+                        "person": person,
+                        "episode": episode_id,
+                        "status": author.get("status") or "自述",
+                        "learned_from": "亲历",
+                        "exposure": "none-at-time",
+                    }
+                ],
+            }
+        )
+        if author.get("needed"):
+            needed.append({"dao": dao_id, **author["needed"]})
+
+    window = {
+        "first_session": note["header"]["date"],
+        "last_person_input": note["header"]["date"],
+        "rule": "笔记只有一场。出现更晚的材料说明还有另一场，本库不收它：一场一个库。",
+    }
+    data = {
+        "episodes": {"layer": "events", "owner": "探针笔记", "window": window, "episodes": episodes},
+        "daos": {"layer": "extraction", "owner": extraction.get("owner", "提炼那一步"), "daos": daos},
+        "observations": {
+            "layer": "checks",
+            "observations": extraction.get("observations") or [],
+            "needed": needed,
+        },
+        "exposures": {"layer": "checks", "rows": extraction.get("exposures") or []},
+        "map": {
+            "layer": "extraction",
+            "connections": (extraction.get("map") or {}).get("connections") or [],
+            "boundaries": (extraction.get("map") or {}).get("boundaries") or [],
+            "candidates": (extraction.get("map") or {}).get("candidates") or [],
+        },
+        "root": str(root),
+        "derived_from_note": str(note["path"]),
+        "note_sha256": hashlib.sha256(note["text"].encode("utf-8")).hexdigest(),
+    }
+    return data
+
+
 def load_library(root: Path) -> dict[str, Any]:
+    if not (root / "episodes.json").exists():
+        return build_library_from_note(root)
     data = {
         "episodes": load(root / "episodes.json"),
         "daos": load(root / "daos.json"),
@@ -797,7 +1049,8 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
     episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
     needed = {item.get("dao") for item in data["observations"].get("needed") or []}
     failures: list[str] = []
-    print(f"dao-life：{len(data['daos']['daos'])} 条道（{root}）")
+    origin = f"由 {data['derived_from_note']} 推出" if data.get("derived_from_note") else "落盘库"
+    print(f"dao-life：{len(data['daos']['daos'])} 条道（{root}，{origin}）")
     for dao in data["daos"]["daos"]:
         receipt = receipts[dao["id"]]
         state = status_of(dao, receipt, episodes)
@@ -814,6 +1067,16 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
             failures.append(f"{dao['id']}：落地未跑，但没写「要什么才能给这一格一条观察」")
     for dao_id in needed - {dao["id"] for dao in data["daos"]["daos"]}:
         failures.append(f"needed 里有一条指向不存在的道：{dao_id}")
+    dao_ids = {dao["id"] for dao in data["daos"]["daos"]}
+    for candidate in (data.get("map") or {}).get("candidates") or []:
+        if candidate.get("id") in dao_ids:
+            failures.append(f"候选 {candidate.get('id')} 与库里的道同 id：候选不能既是道又是候选")
+        for key in ("one_line", "why_not_entered", "what_would_support_it", "suggested_by"):
+            if not candidate.get(key):
+                failures.append(f"候选 {candidate.get('id')} 少了「{key}」：候选要写明它为什么还不成立")
+        for source in candidate.get("suggested_by") or []:
+            if source not in dao_ids:
+                failures.append(f"候选 {candidate.get('id')} 指向不存在的道：{source}")
     print(independent_groups(data)["line"])
     return failures
 
@@ -850,14 +1113,21 @@ def main(argv: list[str]) -> int:
         return 2
 
     vocabulary = load(vocabulary_path or (root.parent / "vocabulary.json"))
-    data = load_library(root)
-    inputs = {name: digest(data[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}
-    receipts = run_bench(data, at, vocabulary)
-    failures = report_library(root, data, receipts)
-
-    other = None
+    try:
+        data = load_library(root)
+        inputs = {name: digest(data[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}
+        if data.get("note_sha256"):
+            inputs["note"] = data["note_sha256"]
+        receipts = run_bench(data, at, vocabulary)
+        failures = report_library(root, data, receipts)
+        other = None
+        if compare_dir is not None:
+            other = load_library(compare_dir)
+    except NoteError as error:
+        print(f"拒收（{root}）：{error}")
+        print("没有写任何文件。")
+        return 1
     if compare_dir is not None:
-        other = load_library(compare_dir)
         other_receipts = run_bench(other, at, vocabulary)
         failures += report_library(compare_dir, other, other_receipts)
         other_inputs = {name: digest(other[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}
