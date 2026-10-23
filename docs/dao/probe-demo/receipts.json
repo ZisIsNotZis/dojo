@@ -4,7 +4,7 @@
   "bench_version": 1,
   "daos": {
     "dao-p-demo-T1": {
-      "digest": "405892bf68fcf8184a3d5c610348bab18569fdb86a34db94e31ea5060c252e7a",
+      "digest": "f41857d3ec58adee51ad2bdfe2a42917502950f8f996f715951c74d7dad826e4",
       "id": "dao-p-demo-T1",
       "receipts": {
         "falsifiable": {
@@ -50,7 +50,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "405892bf68fc",
+            "on_digest": "f41857d3ec58",
             "on_version": 1
           },
           "verdict": "pass"
@@ -101,6 +101,11 @@
               "ok": true
             },
             {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
               "ok": true
@@ -131,12 +136,12 @@
               "ok": true
             },
             {
-              "detail": "'开始摩擦' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "detail": "'开始摩擦' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
             },
             {
-              "detail": "'降摩擦' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "detail": "'降摩擦' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
               "name": "动作键在受控词表里",
               "ok": true
             },
@@ -156,7 +161,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "405892bf68fc",
+            "on_digest": "f41857d3ec58",
             "on_version": 1
           },
           "verdict": "pass"
@@ -186,7 +191,7 @@
     }
   },
   "inputs": {
-    "daos": "e740b5072e1758725a4455fa63c5c6189ca4981a56e45ef281bd8137ccd3e74a",
+    "daos": "8470e2aa166ec44b1277d74306403ccd147d96db806b33fdead9f33e615c4059",
     "episodes": "81d5de2803c52e760986c741f2ed516be7de7545396cd67cad733591ef0bccf0",
     "exposures": "9d580b158a0dd3b65c6320a0e073377b8ac790fcb833d3be85daba8831f06d57",
     "map": "af88891e2228e8d375a0fda729296323e18ddf0d5c3949f3dc448b36a105f0c5",

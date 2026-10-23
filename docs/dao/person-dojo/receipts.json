@@ -4,7 +4,7 @@
   "bench_version": 1,
   "daos": {
     "dojo-d-001": {
-      "digest": "cbe0033ef41b724b549c2a67339a014793cf1bd5009da5b2396872c59d722b7f",
+      "digest": "eabf1976c6fdc1f2124c1498d6a9062e32c66890f957b7aa3b5eac2cd0efcb71",
       "id": "dojo-d-001",
       "receipts": {
         "falsifiable": {
@@ -53,7 +53,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "cbe0033ef41b",
+            "on_digest": "eabf1976c6fd",
             "on_version": 1
           },
           "verdict": "pass"
@@ -80,7 +80,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "cbe0033ef41b",
+            "on_digest": "eabf1976c6fd",
             "on_version": 1
           },
           "rejected": [],
@@ -125,6 +125,11 @@
               "ok": true
             },
             {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
               "ok": true
@@ -155,12 +160,12 @@
               "ok": true
             },
             {
-              "detail": "'检查归属' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "detail": "'检查归属' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
             },
             {
-              "detail": "'换承担方' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "detail": "'换承担方' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
               "name": "动作键在受控词表里",
               "ok": true
             },
@@ -180,7 +185,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "cbe0033ef41b",
+            "on_digest": "eabf1976c6fd",
             "on_version": 1
           },
           "verdict": "pass"
@@ -209,7 +214,7 @@
       "version": 1
     },
     "dojo-d-002": {
-      "digest": "5f0e0d7a5f83af3007c2e549d714a7529cd3a573d397b3e2cc022c9a9c666aea",
+      "digest": "8e5f921f71628cfc4dc355860d816ca931bdf3d3ca088e931daa3c00bfce5bea",
       "id": "dojo-d-002",
       "receipts": {
         "falsifiable": {
@@ -258,7 +263,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "5f0e0d7a5f83",
+            "on_digest": "8e5f921f7162",
             "on_version": 1
           },
           "verdict": "pass"
@@ -282,7 +287,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "5f0e0d7a5f83",
+            "on_digest": "8e5f921f7162",
             "on_version": 1
           },
           "rejected": [],
@@ -327,6 +332,11 @@
               "ok": true
             },
             {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
               "ok": true
@@ -357,12 +367,12 @@
               "ok": true
             },
             {
-              "detail": "'信息形状' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "detail": "'信息形状' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
             },
             {
-              "detail": "'加结构' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "detail": "'加结构' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
               "name": "动作键在受控词表里",
               "ok": true
             },
@@ -382,7 +392,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "5f0e0d7a5f83",
+            "on_digest": "8e5f921f7162",
             "on_version": 1
           },
           "verdict": "pass"
@@ -411,7 +421,7 @@
       "version": 1
     },
     "dojo-d-003": {
-      "digest": "a4b0c7e232c3b80a9bdf3a5911f6fba9232ab8113be255b2bd87e81e8eaef88b",
+      "digest": "2013ed9212b256500b049f0bfb4e4f4be3337bd732c3cee2c7d965d3ff1b4d50",
       "id": "dojo-d-003",
       "receipts": {
         "falsifiable": {
@@ -457,7 +467,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "a4b0c7e232c3",
+            "on_digest": "2013ed9212b2",
             "on_version": 1
           },
           "verdict": "pass"
@@ -483,7 +493,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "a4b0c7e232c3",
+            "on_digest": "2013ed9212b2",
             "on_version": 1
           },
           "rejected": [],
@@ -528,6 +538,11 @@
               "ok": true
             },
             {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
               "ok": true
@@ -558,12 +573,12 @@
               "ok": true
             },
             {
-              "detail": "'决策成本' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "detail": "'决策成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
             },
             {
-              "detail": "'披露成本' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "detail": "'披露成本' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
               "name": "动作键在受控词表里",
               "ok": true
             },
@@ -583,7 +598,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "a4b0c7e232c3",
+            "on_digest": "2013ed9212b2",
             "on_version": 1
           },
           "verdict": "pass"
@@ -610,14 +625,1805 @@
         "word": "验过（弱：后续，非对照）"
       },
       "version": 1
+    },
+    "dojo-d-004": {
+      "digest": "8d286a956f668a8d05abc80a12ff2e30e45ba7ab845a779d8066de0a85cfa355",
+      "id": "dojo-d-004",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "对外只留内容，人只留稳定的匿名号",
+              "action_kind": "apply",
+              "recorded": "他写下：对外不展示作者，内部只用匿名号做统计、防滥用与权重。",
+              "side": "域内（案例 ep-idea-2-1）",
+              "situation": {
+                "要用它追责": "否",
+                "谁在读": "陌生人"
+              }
+            },
+            {
+              "action": "转到内部号追到人；对外仍不署名",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（要用它追责=是）",
+              "situation": {
+                "要用它追责": "是",
+                "谁在读": "陌生人"
+              },
+              "when": "一条道越过法律红线、或要被追责"
+            },
+            {
+              "action": "对他本人可见",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（谁在读=他自己）",
+              "situation": {
+                "要用它追责": "否",
+                "谁在读": "他自己"
+              },
+              "when": "他自己要看自己那张图"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "8d286a956f66",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '内容可信 vs 归属可见'，张力叫 '内容可信 vs 归属可见'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'归属与匿名' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'对外匿名' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "8d286a956f66",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-005": {
+      "digest": "b402f5433b7fa5b7aaecbbf2a665e73a6b27cfda0a6e52072a279e87d100d8c4",
+      "id": "dojo-d-005",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "只要求自洽、写出边界、不重复",
+              "action_kind": "apply",
+              "recorded": "他写下：平台不裁判真理，只要自洽、说得通、不重复就能存在；但法律红线是底线。",
+              "side": "域内（案例 ep-idea-2-2）",
+              "situation": {
+                "内容越过红线": "否",
+                "要当依据": "否"
+              }
+            },
+            {
+              "action": "不收",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（内容越过红线=是）",
+              "situation": {
+                "内容越过红线": "是",
+                "要当依据": "否"
+              },
+              "when": "内容越过法律红线"
+            },
+            {
+              "action": "先要三格回执再当依据",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（要当依据=是）",
+              "situation": {
+                "内容越过红线": "否",
+                "要当依据": "是"
+              },
+              "when": "一条道要被当成判断依据"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "b402f5433b7f",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '开放 vs 质量'，张力叫 '开放 vs 质量'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'开放与质量' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'只收可论' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "b402f5433b7f",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-006": {
+      "digest": "7cdb0a62d7ac615707decd248b6197b7a07bf9cecb8adc968f469a1b16262bae",
+      "id": "dojo-d-006",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "只存剥离约束的道，案例用完不长期留",
+              "action_kind": "apply",
+              "recorded": "他写下：只存剥离约束的方法论；案例用于提炼，之后不长期保留。",
+              "side": "域内（案例 ep-idea-2-4）",
+              "situation": {
+                "要不要回头核": "不核"
+              }
+            },
+            {
+              "action": "案例留到观察写下；不能只留抽象",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（要不要回头核=要核）",
+              "situation": {
+                "要不要回头核": "要核"
+              },
+              "when": "这条道要回头核、或被挑战"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "7cdb0a62d7ac",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '可迁移 vs 可复核'，张力叫 '可迁移 vs 可复核'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'抽象与可复核' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'只存抽象' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "7cdb0a62d7ac",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-007": {
+      "digest": "dd771748c0094b3fb5d0d569cf856c70384abf73175cf91e6353ff31732eec9a",
+      "id": "dojo-d-007",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "用被合并次数、被引用数、跨域采纳、实践反馈加权",
+              "action_kind": "apply",
+              "recorded": "他写下：权重来自被合并次数、被引用数、跨域采纳与实践反馈。",
+              "side": "域内（案例 ep-idea-8-weight）",
+              "situation": {
+                "从哪条信号取权重": "重复与引用次数"
+              }
+            },
+            {
+              "action": "按独立来源加权，重复与引用不加分",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（从哪条信号取权重=各自独立的来源）",
+              "situation": {
+                "从哪条信号取权重": "各自独立的来源"
+              },
+              "when": "权重要求按独立来源算"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "dd771748c009",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '可比较 vs 可回声'，张力叫 '可比较 vs 可回声'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'可信度来源' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'按重复加权' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "dd771748c009",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-008": {
+      "digest": "592e013b3c4e43bb8945d93773669c814bc8db9a233efed2dcb9dd3739e0d4d7",
+      "id": "dojo-d-008",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "按独立来源加权：不同的人 × 不同处境 × 无同源 × 各有案例",
+              "action_kind": "apply",
+              "recorded": "记录下来的优先事项：核对时要区分独立来源与重复传播，不拿重复次数、引用或声称替代核验。",
+              "side": "域内（案例 ep-philosophy-evidence）",
+              "situation": {
+                "曝光与同源记全了吗": "记全了"
+              }
+            },
+            {
+              "action": "按不独立算，并写「未知」",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（曝光与同源记全了吗=没记全）",
+              "situation": {
+                "曝光与同源记全了吗": "没记全"
+              },
+              "when": "来源与曝光都记不全"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "592e013b3c4e",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '可判 vs 数字难看'，张力叫 '可判 vs 数字难看'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'可信度来源' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'按独立来源加权' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "592e013b3c4e",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述（转述） · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述（转述）"
+      },
+      "version": 1
+    },
+    "dojo-d-009": {
+      "digest": "b30048cba1d6329a7e96e6f4b81cd0db6bb12cef5f6221db14b95d8caa2e9db1",
+      "id": "dojo-d-009",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "不做流、榜、关注；只有对话与检索",
+              "action_kind": "apply",
+              "recorded": "他写下：没有帖子流、排名、粉丝、点赞；入口是对话。",
+              "side": "域内（案例 ep-idea-2-3）",
+              "situation": {
+                "库的规模": "几百条，检索排得出"
+              }
+            },
+            {
+              "action": "给默认顺序并写明它不是共识排序",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（库的规模=大到检索排不出）",
+              "situation": {
+                "库的规模": "大到检索排不出"
+              },
+              "when": "库大到检索排不出从头该看哪条"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "b30048cba1d6",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '可发现 vs 不排名'，张力叫 '可发现 vs 不排名'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'可发现与不排名' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'只留检索' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "b30048cba1d6",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-010": {
+      "digest": "b367461cf908f83402373c24abbd00def45743198432ee2d255d2db6d7f10065",
+      "id": "dojo-d-010",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "私人对话自己付；公共维护靠捐赠，账本公开",
+              "action_kind": "apply",
+              "recorded": "他写下：私人对话花自己的额度，公共维护靠捐赠的额度或算力。",
+              "side": "域内（案例 ep-idea-2-6）",
+              "situation": {
+                "捐赠够不够": "够",
+                "谁在付": "用的人自己"
+              }
+            },
+            {
+              "action": "公共维护收缩到骨架，账本公开写清哪部分停了",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（捐赠够不够=不够）",
+              "situation": {
+                "捐赠够不够": "不够",
+                "谁在付": "用的人自己"
+              },
+              "when": "捐赠不够撑住公共维护"
+            },
+            {
+              "action": "从捐赠池出，账本公开",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（谁在付=公共维护）",
+              "situation": {
+                "捐赠够不够": "够",
+                "谁在付": "公共维护"
+              },
+              "when": "花的是公共维护的钱"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "b367461cf908",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '免费 vs 成本'，张力叫 '免费 vs 成本'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'免费与成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'自付与捐赠' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "b367461cf908",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-011": {
+      "digest": "25dd24ce7a37fd70ece2f635730fdcd334b7aba7922cb9835f82f012e9c06fa9",
+      "id": "dojo-d-011",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "只在这条道的事件上做深度处理",
+              "action_kind": "apply",
+              "recorded": "他写下：后台不全量实时维护，只在事件上做深度处理。",
+              "side": "域内（案例 ep-idea-2-7）",
+              "situation": {
+                "要回答的问题": "一条道上的一次改动"
+              }
+            },
+            {
+              "action": "批处理一次，写明是某一刻的快照",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（要回答的问题=整库的全局状态）",
+              "situation": {
+                "要回答的问题": "整库的全局状态"
+              },
+              "when": "要回答整库的全局状态"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "25dd24ce7a37",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '一致 vs 成本'，张力叫 '一致 vs 成本'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'一致与成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'只做增量' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "25dd24ce7a37",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-012": {
+      "digest": "c3cb54a4a607bd17acb502ddd4ee63d6ec0851e9a39765e744bb9711720d8c25",
+      "id": "dojo-d-012",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "十到三十人、一个领域、最简陋的工具跑闭环",
+              "action_kind": "apply",
+              "recorded": "他写下：先选一个垂直领域、拉 10～30 个正在做事的人、用最简陋的工具跑闭环。",
+              "side": "域内（案例 ep-idea-11-1）",
+              "situation": {
+                "工具卡住人了吗": "没卡住",
+                "手上有什么": "只有群聊与文档"
+              }
+            },
+            {
+              "action": "先补那一步工具，再继续",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（工具卡住人了吗=卡住了）",
+              "situation": {
+                "工具卡住人了吗": "卡住了",
+                "手上有什么": "只有群聊与文档"
+              },
+              "when": "工具本身把人卡住了"
+            },
+            {
+              "action": "用平台，不再手工搬",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（手上有什么=有平台）",
+              "situation": {
+                "工具卡住人了吗": "没卡住",
+                "手上有什么": "有平台"
+              },
+              "when": "平台已经有了"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "c3cb54a4a607",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '快 vs 体验'，张力叫 '快 vs 体验'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'快与体验' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'先跑闭环' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "c3cb54a4a607",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-013": {
+      "digest": "679e6a3354e475484a5256bab648028b3b08ca6a15fe95b6bc06eab4c4d53f18",
+      "id": "dojo-d-013",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "只问他跑过的那一段，不替没跑过的部分背书",
+              "action_kind": "apply",
+              "recorded": "他跑完一局，判断体验满意，并且说比上一次好得多。",
+              "side": "域内（案例 ep-2026-10-23-ux）",
+              "situation": {
+                "他跑过吗": "跑过",
+                "别人能不能替他判": "能"
+              }
+            },
+            {
+              "action": "不问「你觉得呢」；问「你跑过吗」或自己跑",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（他跑过吗=没跑过）",
+              "situation": {
+                "他跑过吗": "没跑过",
+                "别人能不能替他判": "能"
+              },
+              "when": "他还没跑过这件东西"
+            },
+            {
+              "action": "必须问他，并写明在等他的判断",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（别人能不能替他判=只有他能判）",
+              "situation": {
+                "他跑过吗": "跑过",
+                "别人能不能替他判": "只有他能判"
+              },
+              "when": "这件事只有他能判断"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "679e6a3354e4",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "rejected": [],
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '要判断 vs 不为没跑过的背书'，张力叫 '要判断 vs 不为没跑过的背书'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "没写的：[]；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+              "name": "六件各自写明了是从记录来、转述来，还是读出来的",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'判断的范围' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'按范围问' 不在 ['先跑闭环', '加结构', '只做增量', '只存抽象', '只收可论', '只留检索', '对外匿名', '披露成本', '按独立来源加权', '按范围问', '按重复加权', '换承担方', '自付与捐赠', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "679e6a3354e4",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
     }
   },
   "inputs": {
-    "daos": "d3cbf3617dcb1bdfa3a0da486a067b1d321a3f1ecd99af17fe866b8516a0903c",
-    "episodes": "2c6582b0bc3e2fc1db9cb01cda20829bc17bb88fa2213aca009dfa9b56550e40",
+    "daos": "f24d40e179eedf4d42179ae37c52fef5805bdca89b24cf968c8e169c5e4734d4",
+    "episodes": "9387e0d773b564f262b1a1e86dc1a909d3cb0804abc621bb3abcb4c5dc94d776",
     "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
-    "map": "a948cf46e8d67d3e0e31e719384da8f024afb230420844dbf6877f2787790c78",
-    "observations": "5994e9469b86f38333b0d8127ad3588e9f4343bab15aeb3e2fefd58a26251700"
+    "map": "402f4dd5e852bf02c20a2ad7baac497a09bbbb3ce0181421b23ad46d7db788b3",
+    "observations": "e405ffbad03f997c3851f691295029452d0fce112fbac726283491d54332eecf",
+    "refusals": "0b62fed927203ab44bf9db1e62bd18e174043090bdb5abcdfc9c34dd2fdb406e"
   },
   "layer": "checks"
 }
