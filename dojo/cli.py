@@ -15,7 +15,7 @@ from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
 from .discuss import _load_resume_trace, run_discuss
 from .live import LiveConfig, LiveError, run_chat
-from .pipeline import run_pipeline
+from .pipeline import distill, run_pipeline
 from .storage import DojoError, Store, load_simulated_seeds
 
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
@@ -143,6 +143,12 @@ def _parser() -> argparse.ArgumentParser:
     pipeline.add_argument("--session", required=True, help="the session whose cards to process")
     pipeline.add_argument("--dry-run", action="store_true", help="report what each pass would do without writing marks or events")
 
+    distill_parser = sub.add_parser(
+        "distill",
+        help="read-only: what one session's conclusions amount to (新 / 变体 / 重复), as a list a person judges; writes nothing",
+    )
+    distill_parser.add_argument("--session", required=True, help="the session whose cards to list")
+
     export = sub.add_parser("export", help="create a new isolated B (no seed) or C (selected excerpt) prompt")
     export.add_argument("--mode", choices=["b", "c"], required=True)
     export.add_argument("--id", action="append", default=[], help="explicit selected candidate ID (C only); repeat to add")
@@ -242,6 +248,8 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.retrieve(args.query or "", args.limit)
     if command == "pipeline":
         return run_pipeline(store, args.session, dry_run=args.dry_run)
+    if command == "distill":
+        return distill(store, args.session)
     if command == "broadcast":
         return store.broadcast(args.query or "", args.limit, args.session)
     if command == "export":

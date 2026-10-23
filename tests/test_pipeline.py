@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dojo.pipeline import PASS_ORDER, run_pipeline
+from dojo.pipeline import PASS_ORDER, distill, run_pipeline
 from dojo.storage import Store
 
 
@@ -120,6 +120,48 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual([], report["cards"])
         self.assertEqual(0, report["events_written"])
         self.assertIn("wrote no cards", report["note"])
+
+    def test_distill_lists_the_session_three_ways_and_writes_nothing(self):
+        # M2's m2c gap: the three-way verdict existed inside the pipeline but never
+        # reached a reader. The list is what a person samples for acceptance ①, so
+        # it has to be askable without becoming a second record of anything.
+        self.add("先把交接范围写下来，再动手。", candidate_id="d-alone", scope=["交接"])
+        self.add("交接前写下当前版本的范围，能减少返工。", candidate_id="d-card", scope=["交接"])
+        self.add("交接前写下当前版本的范围，能减少返工。", candidate_id="d-variant", scope=["交接", "上线前"])
+        events_before = len(pass_events(self.store))
+        report = distill(self.store, "sess-a")
+        self.assertEqual(events_before, len(pass_events(self.store)))
+        for card in report["cards"]:
+            self.assertIsNone(self.store.pipeline_mark("sess-a", "locate", card["id"]))
+        verdicts = {card["id"]: card["verdict"] for card in report["cards"]}
+        self.assertEqual("new", verdicts["d-alone"])
+        self.assertEqual("variant", verdicts["d-card"])
+        self.assertEqual({"new": 1, "variant": 2, "duplicate": 0}, report["counts"])
+        self.assertEqual(3, len(report["lines"]))
+        self.assertTrue(any(line.startswith("[变体]") for line in report["lines"]))
+        # classify is not implemented (m2b): the list says so rather than showing a
+        # guessed kind as if it were a judgement.
+        self.assertIn("classify", report["unavailable"])
+        self.assertTrue(all(card["kind_status"] == "unavailable" for card in report["cards"]))
+
+    def test_distill_does_not_turn_a_processed_card_into_a_second_verdict(self):
+        self.add("交接前先写下当前版本的范围，能减少返工。", candidate_id="d-one")
+        run_pipeline(self.store, "sess-a")
+        events_after_pipeline = len(pass_events(self.store))
+        report = distill(self.store, "sess-a")
+        self.assertEqual(["d-one"], [card["id"] for card in report["cards"]])
+        self.assertEqual("new", report["cards"][0]["verdict"])
+        self.assertEqual(events_after_pipeline, len(pass_events(self.store)))
+
+    def test_distill_over_a_session_that_wrote_nothing(self):
+        report = distill(self.store, "sess-empty")
+        self.assertEqual([], report["cards"])
+        self.assertEqual([], report["lines"])
+        self.assertIn("wrote no cards", report["note"])
+
+    def test_distill_requires_a_session(self):
+        with self.assertRaises(ValueError):
+            distill(self.store, "  ")
 
 
 if __name__ == "__main__":

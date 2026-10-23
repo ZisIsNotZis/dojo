@@ -172,3 +172,62 @@ def run_pipeline(store: Store, session: str, *, dry_run: bool = False) -> dict[s
             entry["unavailable"] = unavailable
         report["passes"].append(entry)
     return report
+
+
+DISTILL_LABELS = {"new": "新", "variant": "变体", "duplicate": "重复"}
+
+
+def _verdict(proposals: list[dict[str, Any]]) -> dict[str, Any]:
+    """One verdict per card, by priority: 重复 beats 变体 beats 新."""
+    for wanted in ("duplicate", "variant"):
+        for proposal in proposals:
+            if proposal["type"] == wanted:
+                return proposal
+    return proposals[0]
+
+
+def distill(store: Store, session: str) -> dict[str, Any]:
+    """What one session's conclusions amount to, as a list a person reads.
+
+    This is the list M2 acceptance ① asks a person to sample, and the only thing
+    `m2c` had as a gap: the three-way verdict existed inside the pipeline but
+    never reached a reader. Read-only — the passes run without writing marks or
+    events, so asking for the list changes neither what the next `pipeline` run
+    does nor what the ledger holds, and it can be asked for before or after it.
+    A card's verdict is about the card, not about whether the pipeline already
+    processed it at this version.
+    """
+    session = str(session or "").strip()
+    if not session:
+        raise ValueError("a session ID is required; the distillation list is over one session's cards")
+    cards = _cards_written_by(store, session)
+    report: dict[str, Any] = {
+        "session": session, "cards": [], "lines": [],
+        "counts": {"new": 0, "variant": 0, "duplicate": 0},
+        "unavailable": {},
+    }
+    if not cards:
+        report["note"] = "this session wrote no cards; nothing to distil"
+        return report
+    for card in cards:
+        verdict = _verdict(pass_locate(store, card).proposals)
+        challenges = pass_challenge(store, card).proposals
+        classify = pass_classify(store, card)
+        if classify.unavailable is not None:
+            report["unavailable"]["classify"] = classify.unavailable
+        kind_label = "kind 未判定" if classify.unavailable is not None else card["kind"]
+        report["counts"][verdict["type"]] += 1
+        report["cards"].append({
+            "id": card["id"], "version": card["version"],
+            "statement": card["statement"], "kind": card["kind"],
+            "kind_status": "unavailable" if classify.unavailable is not None else "recorded",
+            "verdict": verdict["type"], "of": verdict["of"], "reason": verdict["reason"],
+            "challenges": challenges,
+        })
+        line = f"[{DISTILL_LABELS[verdict['type']]}] {card['id']} v{card['version']} {kind_label}：{card['statement']}"
+        if verdict["of"]:
+            line += f"（对 {verdict['of']}：{verdict['reason']}）"
+        report["lines"].append(line)
+        for proposal in challenges:
+            report["lines"].append(f"  挑战提议 → {proposal['of']}：{proposal['reason']}")
+    return report

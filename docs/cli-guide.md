@@ -76,6 +76,15 @@ python3 -m dojo pipeline --session life-anon-1 --dry-run  # 只报会做什么�
 
 `classify` 需要在场判定这条主张属于哪类（`kind`），本轮不猜：它报 `unavailable` 并写明理由，不写事件也不打标记，所以等端点可用时它仍会被重新跑。`locate` 给出 新 / 变体 / 重复 的提议（重复已由 `add` 挡住，这里只用于发现旧数据里的重复）；`challenge` 只在两个邻居用同一批词而肯定/否定相反时提议挑战。
 
+## 给用户读的提炼清单（`distill`）
+
+`distill` 是 `pipeline` 的读者面：同一场会话，同一套 `locate`/`challenge` 提议，按卡排成一条条给人看的行——`[新]`／`[变体]`／`[重复]`、对着哪张卡、理由，后面跟挑战提议。它**只读**：不写事件、不写处理标记，所以在 `pipeline` 之前或之后问都一样，问它不会变成第二份结论。`kind` 一列写「未判定」，因为 `classify` 还没落地——写入时给的 `kind` 不是判定结果。
+
+```sh
+python3 -m dojo distill --session life-anon-1
+python3 -m dojo events | wc -l    # 前后不变：这条命令不改账本
+```
+
 ## 7–10 分钟：同一目标下的 B/C 人工复制
 
 ```sh
