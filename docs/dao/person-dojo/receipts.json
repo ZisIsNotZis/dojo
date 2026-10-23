@@ -1,10 +1,10 @@
 {
-  "at": "2026-10-23T13:43:02Z",
+  "at": "2026-10-23T14:02:48Z",
   "bench": "scripts/dao_life.py",
   "bench_version": 1,
   "daos": {
     "dojo-d-001": {
-      "digest": "3ac1d2d35096c7390da169e738084437b17273e760e079f5fcc503acdd36cd8d",
+      "digest": "cbe0033ef41b724b549c2a67339a014793cf1bd5009da5b2396872c59d722b7f",
       "id": "dojo-d-001",
       "receipts": {
         "falsifiable": {
@@ -51,19 +51,41 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "3ac1d2d35096",
+            "on_digest": "cbe0033ef41b",
             "on_version": 1
           },
           "verdict": "pass"
         },
         "field": {
           "kind": "field",
-          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
-          "observation": null,
-          "ran": null,
-          "verdict": "not_run"
+          "note": "观察晚于案例，且不是被问出来的；它证明的是一条相符或相悖的观察存在，不是这条道为真。",
+          "observation": {
+            "applied_in": "第二片：给两条「落地未跑」的道找观察，并起草第二个来源的对比。做对比时，判断「两个来源的张力是否重合」的人就是这个库的作者本人——道一失效条件的第二条（检查者与被检查者是同一个作者）当场成立。",
+            "at": "2026-10-23T13:58:00Z",
+            "at_basis": "本会话的运行时间。案例是 2026-10-23 的日粒度记录，所以自验写到分，才证明它晚于案例。",
+            "could_have_gone_otherwise": "如果按字面把道二（入口把形状给全）与模拟道（入口把摩擦降下来）并成一条——两条都在讲入口、都在讲怎么让人开始——这一格同样会显示「过了」，但过的是自欺：它们的适用域、张力、动作都不同。",
+            "dao": "dojo-d-001",
+            "elicited": false,
+            "episode": "ep-2026-10-23-detach",
+            "id": "ob-2026-10-23-check-moved",
+            "kind": "agent_self",
+            "matched": true,
+            "person": "p-dojo",
+            "prediction": "把持续检查搬进系统、人只留「可推翻」之后，人的检查动作会消失，系统会留下回执；当检查者与被检查者是同一个作者时，结论要么换一个独立一方跑，要么降级并写明是谁在判。",
+            "result": "按那一条把这次比较降级：对比页只留逐对的机械关系（3 对全是「无关」）和一段明写「manager 的读法」的话，没有写成任何「第二个来源与 person 重合、或不重合」的发现；第一限制写成「这不是收敛证据」。",
+            "strength_note": "自验只说明这条道在这件真实活上被用到了、并且改变了输出；它不说明这条道对别人成立。"
+          },
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/field-v1",
+            "on_digest": "cbe0033ef41b",
+            "on_version": 1
+          },
+          "rejected": [],
+          "strength": "自验·弱一档（agent）",
+          "verdict": "pass"
         },
         "structure": {
           "checks": [
@@ -128,22 +150,37 @@
               "ok": true
             },
             {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'检查归属' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'换承担方' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "规则只改它自己声明的轴",
               "ok": true
             },
             {
-              "detail": "晚了：[]",
-              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
               "ok": true
             }
           ],
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "3ac1d2d35096",
+            "on_digest": "cbe0033ef41b",
             "on_version": 1
           },
           "verdict": "pass"
@@ -161,18 +198,18 @@
           ],
           [
             "落地",
-            "not_run"
+            "pass"
           ]
         ],
-        "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
-        "mark": "未检",
-        "word": "自述"
+        "count": 3,
+        "line": "验过（弱一档：自验） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "mark": "检",
+        "word": "验过（弱一档：自验）"
       },
       "version": 1
     },
     "dojo-d-002": {
-      "digest": "87499544bfb44e2f39a34a4fdffa91b93f2468c66df2754353a47f90a0b11617",
+      "digest": "5f0e0d7a5f83af3007c2e549d714a7529cd3a573d397b3e2cc022c9a9c666aea",
       "id": "dojo-d-002",
       "receipts": {
         "falsifiable": {
@@ -219,9 +256,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "87499544bfb4",
+            "on_digest": "5f0e0d7a5f83",
             "on_version": 1
           },
           "verdict": "pass"
@@ -243,12 +280,13 @@
             "prediction": "把追问压住、把形状一次给全，他会更愿意继续，并说得出满意。"
           },
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "87499544bfb4",
+            "on_digest": "5f0e0d7a5f83",
             "on_version": 1
           },
-          "strength": "他人的后续会话（弱：不是对照）",
+          "rejected": [],
+          "strength": "他人的后续·弱（不是对照）",
           "verdict": "pass"
         },
         "structure": {
@@ -314,22 +352,37 @@
               "ok": true
             },
             {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'信息形状' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'加结构' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "规则只改它自己声明的轴",
               "ok": true
             },
             {
-              "detail": "晚了：[]",
-              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
               "ok": true
             }
           ],
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "87499544bfb4",
+            "on_digest": "5f0e0d7a5f83",
             "on_version": 1
           },
           "verdict": "pass"
@@ -358,7 +411,7 @@
       "version": 1
     },
     "dojo-d-003": {
-      "digest": "23e4506191dcde039ee49c7ee4f63bd25060a90ffecdf2f83b49d1b120451b12",
+      "digest": "a4b0c7e232c3b80a9bdf3a5911f6fba9232ab8113be255b2bd87e81e8eaef88b",
       "id": "dojo-d-003",
       "receipts": {
         "falsifiable": {
@@ -402,9 +455,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "23e4506191dc",
+            "on_digest": "a4b0c7e232c3",
             "on_version": 1
           },
           "verdict": "pass"
@@ -414,6 +467,7 @@
           "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
           "observation": null,
           "ran": null,
+          "rejected": [],
           "verdict": "not_run"
         },
         "structure": {
@@ -479,22 +533,37 @@
               "ok": true
             },
             {
+              "detail": "类别没写：[]",
+              "name": "每条出处都写明了来源类别",
+              "ok": true
+            },
+            {
+              "detail": "'决策成本' 不在 ['信息形状', '决策成本', '开始摩擦', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
+              "name": "张力键在受控词表里",
+              "ok": true
+            },
+            {
+              "detail": "'披露成本' 不在 ['加结构', '披露成本', '换承担方', '降摩擦'] 里",
+              "name": "动作键在受控词表里",
+              "ok": true
+            },
+            {
               "detail": "",
               "name": "规则只改它自己声明的轴",
               "ok": true
             },
             {
-              "detail": "晚了：[]",
-              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "detail": "窗口最后一天 2026-10-23；晚了：[]",
+              "name": "没有窗口之后的输入（第一场之后不再要人补）",
               "ok": true
             }
           ],
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T13:43:02Z",
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "23e4506191dc",
+            "on_digest": "a4b0c7e232c3",
             "on_version": 1
           },
           "verdict": "pass"
@@ -516,19 +585,19 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "line": "自述（转述） · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "word": "自述（转述）"
       },
       "version": 1
     }
   },
   "inputs": {
-    "daos": "01f3fc70d9bbf89c8853dff6b9124071ed38d47ef33b5f926071eb656113779e",
+    "daos": "d3cbf3617dcb1bdfa3a0da486a067b1d321a3f1ecd99af17fe866b8516a0903c",
     "episodes": "2c6582b0bc3e2fc1db9cb01cda20829bc17bb88fa2213aca009dfa9b56550e40",
     "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
     "map": "2d8f95d2e6d14eafe466b36acf85f1c68d6cfa7f544076ca8315507fc489f982",
-    "observations": "cb68bd094b968ae2fac83f3194d566f723514ff3a9e5341cf2f4aab8d2caf7c9"
+    "observations": "90ead6a733be953a365b5419f8b7c616c33e4be081ed682a132107c0ffcbf284"
   },
   "layer": "checks"
 }
