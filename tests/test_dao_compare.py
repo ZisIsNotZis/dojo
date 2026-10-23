@@ -20,7 +20,7 @@ SPEC.loader.exec_module(dao_life)
 
 AT = "2026-10-23T22:00:00Z"
 LIBRARIES = ("person-dojo", "demo-strangers")
-LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json")
+LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json", "record_checks.json", "promotions.json")
 
 
 class DaoCompareTests(unittest.TestCase):
@@ -54,6 +54,8 @@ class DaoCompareTests(unittest.TestCase):
             "exposures": self.read("exposures.json", library),
             "map": self.read("map.json", library),
             "refusals": self.read("refusals.json", library) if (self.dir / library / "refusals.json").exists() else {"items": []},
+            "record_checks": self.read("record_checks.json", library) if (self.dir / library / "record_checks.json").exists() else {"checks": []},
+            "promotions": self.read("promotions.json", library) if (self.dir / library / "promotions.json").exists() else {"promotions": []},
             "root": str(self.dir / library),
         }
 

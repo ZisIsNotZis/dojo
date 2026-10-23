@@ -48,7 +48,8 @@ VERDICT_WORD = {"pass": "过", "fail": "不过", "not_run": "未跑", "uncertain
 ATTRIBUTION_CLASSES = ("person", "relayed", "synthetic", "unverified")
 SOURCE_WORD = {"person": "自述", "relayed": "自述（转述）", "synthetic": "模拟", "unverified": "传闻"}
 PART_NAMES = ("situation", "tension", "move", "price", "off", "provenance")
-PART_SOURCES = ("记录", "转述", "推断")
+PART_SOURCES = ("他的原话", "转述", "系统补")
+PART_LABELS = {"situation": "情境", "tension": "张力", "move": "动作", "price": "代价", "off": "失效", "provenance": "归属"}
 REFUSAL_PARTS = ("情境", "张力", "动作", "代价", "失效", "归属", "重复")
 RECEIPT_PATHS = ("structure", "falsifiable", "field")
 
@@ -97,6 +98,26 @@ def base_word(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> str:
         if name in classes:
             return SOURCE_WORD[name]
     return SOURCE_WORD["unverified"]
+
+
+def authorship(dao: dict[str, Any]) -> str:
+    """Who wrote the six parts: him, him and the system, or the system alone."""
+    sources = [(dao.get("part_sources") or {}).get(name, "") for name in PART_NAMES]
+    if all(source == "系统补" for source in sources):
+        return "系统的"
+    if any(source == "系统补" for source in sources):
+        return "合写"
+    return "他的"
+
+
+def supplied_parts(dao: dict[str, Any]) -> list[str]:
+    sources = dao.get("part_sources") or {}
+    return [PART_LABELS[name] for name in PART_NAMES if sources.get(name) == "系统补"]
+
+
+def his_parts(dao: dict[str, Any]) -> list[str]:
+    sources = dao.get("part_sources") or {}
+    return [PART_LABELS[name] for name in PART_NAMES if sources.get(name) in {"他的原话", "转述"}]
 
 
 def _add(checks: list[dict[str, Any]], name: str, ok: Any, detail: str = "") -> None:
@@ -370,12 +391,20 @@ def status_of(
     field = receipts["field"]
     passed = sum(1 for verdict in (structure, falsifiable, field["verdict"]) if verdict == "pass")
     base = base_word(dao, episodes)
+    who = authorship(dao)
     if field["verdict"] == "not_run":
         word, mark = base, "未检"
     elif field["verdict"] == "pass" and structure == "pass" and falsifiable == "pass":
         word, mark = OBSERVATION_KINDS[field["observation"]["kind"]][1], "检"
     else:
         word, mark = base, "未检"
+    # 等级被最弱的那一件封顶：有一件是系统补的，这条道就不是「他说的」。
+    # 模拟材料不走这条：它的词本来就说明「不是他说的」，换成「合写」只会把「模拟」藏掉。
+    if base in {"自述", "自述（转述）", "传闻"}:
+        if who == "合写":
+            word = "合写"
+        elif who == "系统的":
+            word = "系统的"
     cells = [
         ("自洽", structure),
         ("可反驳", falsifiable),
@@ -387,6 +416,9 @@ def status_of(
         "mark": mark,
         "count": passed,
         "cells": cells,
+        "authorship": who,
+        "supplied": supplied_parts(dao),
+        "his": his_parts(dao),
         "line": f"{word} · {mark}（{passed}/3：{cell_text}）",
     }
 
@@ -541,7 +573,23 @@ def render(
             )
             + "。"
         )
-        add("这一行是这张图最该被读的一句话：他给得出「做什么」和「从哪来」，给不出「什么处境」「哪两个好处在打架」「谁付什么」——那些是我读出来的，标着「推断」。")
+        add(
+            "这一行是这张图最该被读的一句话：他给得出「做什么」和「从哪来」，给不出「什么处境」「哪两个好处在打架」「谁付什么」——那些是我补的，标着「系统补」。"
+        )
+        counts_by_author: dict[str, int] = {"他的": 0, "合写": 0, "系统的": 0}
+        for dao in daos:
+            counts_by_author[authorship(dao)] = counts_by_author.get(authorship(dao), 0) + 1
+        add("")
+        add(
+            f"**按作者分：他的 {counts_by_author.get('他的', 0)} 条、合写 {counts_by_author.get('合写', 0)} 条、"
+            f"系统的 {counts_by_author.get('系统的', 0)} 条。**"
+        )
+        add("")
+        add("**「合写」是一个状态，不是一句难听的话。**它说这条道的六件里有一些是系统补的：它只能被读成「他这样做的假设」，不能被读成「他的看法」。")
+        add(
+            "规则是硬的：只要有一件是系统补的，这条道的词就不会是「自述」「验过」或「量过」——这三个词都在说「这是他的话」，而它有一半不是。"
+        )
+        add("它的等级被最弱的那一件封顶；要升，只能等他一句新的确认或推翻，走「推断怎么变成他的」那条路。")
     add(groups["line"])
     add("提炼是这次会话的 manager 从记录里读出来的（凡读法处标「推断」），不是模型判定：这一包 0 次模型调用。")
     add("")
@@ -597,13 +645,31 @@ def render(
         add("")
         sources = dao.get("part_sources") or {}
         add(
-            "六件的来源："
-            + "、".join(f"{label} {sources.get(name, '（没写）')}" for name, label in (
-                ("situation", "情境"), ("tension", "张力"), ("move", "动作"),
-                ("price", "代价"), ("off", "失效"), ("provenance", "归属"),
-            ))
-            + "（记录＝他从那句原话里写的；转述＝别人记下的他的话；推断＝提炼时读出来的）"
+            "**六件是谁写的：**"
+            + "；".join(f"{PART_LABELS[name]} {sources.get(name, '（没写）')}" for name in PART_NAMES)
         )
+        add("")
+        who = authorship(dao)
+        if who == "合写":
+            add(
+                f"**读这条能得出什么：**{"、".join(his_parts(dao))}是他的，"
+                f"{"、".join(supplied_parts(dao))}是系统补的。所以这条只能读成「他这样做的假设」，不能读成他的看法；"
+                "要用我补的那几件，得等他一句新的确认或推翻（见「推断怎么变成他的」）。"
+            )
+        elif who == "系统的":
+            add("**读这条能得出什么：**六件全是系统补的，没有一句是他的；它只能读成一个待问的假设。")
+        else:
+            add(f"**读这条能得出什么：**六件都来自他说过的话（{"、".join(his_parts(dao))}），没有一个字是我补的。")
+        add("")
+        for check in (data.get("record_checks") or {}).get("checks") or []:
+            if check.get("dao") != dao["id"]:
+                continue
+            add(
+                f"记录对这件**{PART_LABELS.get(check['part'], check['part'])}**说：**{check['status']}**——"
+                f"{check['says']}（引文：「{check['against']['quote']}」，`{check['against']['path']}` {check['against']['ref']}）"
+            )
+            if check.get("handling"):
+                add(f"处理：{check['handling']}")
         add("")
         add(f"回执：{state['line']}")
         add("")
@@ -632,6 +698,40 @@ def render(
         if grounding:
             add(f"要什么才能{'给这一格一条观察' if field['verdict'] == 'not_run' else '把这一格变强'}：{grounding['what']}（现在拿不到：{grounding['why_not']}；谁能补：{grounding['who']}）")
         add("")
+
+    if not synthetic:
+        promotions = (data.get("promotions") or {}).get("promotions") or []
+        rs = check_library(data)[1]["record_status"]
+        add("## 推断怎么变成他的")
+        add("")
+        add(
+            "一条道里的「系统补」不是永久判决，但它只有一个出口：**他后来自己说了一句话，那句话逐字落进事件层，"
+            "要么确认、要么推翻我补的那一件，并且带回执（谁跑的、对哪个版本、跑出什么）。**"
+        )
+        add(
+            "确认的，那一件从「系统补」变成他的话，条目的作者跟着变；推翻的，必须写处理（改适用域或撤回）并把条目升版——"
+            "反例不是降级，是改适用域。不是他说的不能晋，引文不在事件里的不能晋。"
+        )
+        add("")
+        add(
+            f"现在晋升 **{len(promotions)} 条**：他还没就任何一条取舍说过话。"
+            f"现有记录对 26 件「系统补」的回答是：确认 {rs['确认']}、部分 {rs['部分']}、收窄 {rs['收窄']}、"
+            f"推翻 {rs['推翻']}、未表态 {rs['未表态']}。"
+        )
+        add("")
+        add("**确认不等于晋升**：确认只说明他写过那两头，不说明他把「两者不能同时拿满」这句话说出来过。取舍要他亲口说，才算他的。")
+        add("")
+        flags = data["map"].get("red_flags") or []
+        if flags:
+            add("## 红旗（记录不同意我的地方，和它说明的抽法问题）")
+            add("")
+            for flag in flags:
+                add(f"**{flag['id']}**：{flag['what']}")
+                add("")
+                add(f"它红的地方：{flag['red_flag_about']}")
+                add("")
+                add(f"要留住的是：{flag['lesson']}")
+                add("")
 
     add("## 连接与边界（你没说过的那一处）" if not synthetic else "## 连接与边界（这份材料内部的）")
     add("")
@@ -1079,12 +1179,12 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                 ],
                 "part_sources": author.get("part_sources")
                 or {
-                    "situation": "推断",
-                    "tension": "记录",
-                    "move": "记录",
-                    "price": "推断",
-                    "off": "推断",
-                    "provenance": "记录",
+                    "situation": "系统补",
+                    "tension": "系统补",
+                    "move": "他的原话",
+                    "price": "系统补",
+                    "off": "系统补",
+                    "provenance": "他的原话",
                 },
             }
         )
@@ -1128,6 +1228,8 @@ def load_library(root: Path) -> dict[str, Any]:
         "exposures": load(root / "exposures.json"),
         "map": load(root / "map.json"),
         "refusals": load(root / "refusals.json") if (root / "refusals.json").exists() else {"items": []},
+        "record_checks": load(root / "record_checks.json") if (root / "record_checks.json").exists() else {"checks": []},
+        "promotions": load(root / "promotions.json") if (root / "promotions.json").exists() else {"promotions": []},
         "root": str(root),
     }
     return data
@@ -1194,6 +1296,82 @@ def check_library(data: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         if "重复" in missing and item.get("duplicate_of") not in dao_ids:
             failures.append(f"refusal {item.get('id')} 说是重复，但没写它重复的是哪一条道")
 
+    # 记录对「系统补」的回答：每一件的张力与代价都要有一条
+    record_checks = (data.get("record_checks") or {}).get("checks") or []
+    by_dao = {dao["id"]: dao for dao in data["daos"]["daos"]}
+    covered = {(item.get("dao"), item.get("part")) for item in record_checks}
+    episodes_for_source = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+    has_real = any(
+        (episodes_for_source.get(item.get("episode")) or {}).get("attribution") in {"person", "relayed"}
+        for dao in data["daos"]["daos"]
+        for item in dao.get("provenance") or []
+    )
+    for dao in (data["daos"]["daos"] if has_real else []):
+        for part, label in (("tension", "张力"), ("price", "代价")):
+            if (dao.get("part_sources") or {}).get(part) == "系统补" and (dao["id"], part) not in covered:
+                failures.append(
+                    f"{dao['id']} 的{label}是系统补的，但没有一条记录检查（record_checks）说他的其他话同不同意它"
+                )
+    record_status = {"确认": 0, "部分": 0, "收窄": 0, "推翻": 0, "未表态": 0}
+    for item in record_checks:
+        if item.get("dao") not in by_dao:
+            failures.append(f"record check {item.get('id')} 指向不存在的道：{item.get('dao')}")
+        if item.get("part") not in PART_NAMES:
+            failures.append(f"record check {item.get('id')} 的 part 不在六件里：{item.get('part')}")
+        if item.get("status") not in record_status:
+            failures.append(f"record check {item.get('id')} 的状态不在五档里：{item.get('status')}")
+        else:
+            record_status[item["status"]] += 1
+        if not (item.get("against") or {}).get("quote") or not item.get("says"):
+            failures.append(f"record check {item.get('id')} 没写引文或没写它说的是什么")
+        if item.get("status") in {"收窄", "推翻"}:
+            if not item.get("handling"):
+                failures.append(f"record check {item.get('id')} 是「{item.get('status')}」，但没写怎么处理")
+            dao = by_dao.get(item.get("dao")) or {}
+            revisions = dao.get("revisions") or []
+            if dao.get("version", 1) <= 1 or not any(item.get("id") in (rev.get("because") or "") for rev in revisions):
+                failures.append(
+                    f"record check {item.get('id')} 是「{item.get('status')}」，但 {item.get('dao')} 没有升版并写明因为这条检查"
+                )
+
+    # 晋升：一条推断件变成他的，只有「他后来真说过一句」这一条路
+    promotions = (data.get("promotions") or {}).get("promotions") or []
+    episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+    promoted = set()
+    for item in promotions:
+        dao = by_dao.get(item.get("dao"))
+        if dao is None:
+            failures.append(f"promotion {item.get('id')} 指向不存在的道：{item.get('dao')}")
+            continue
+        part = item.get("part")
+        if part not in PART_NAMES:
+            failures.append(f"promotion {item.get('id')} 的 part 不在六件里：{part}")
+            continue
+        if item.get("kind") not in {"确认", "推翻"}:
+            failures.append(f"promotion {item.get('id')} 的 kind 只能是确认或推翻：{item.get('kind')}")
+        episode = episodes.get(item.get("episode")) or {}
+        quote = item.get("quote") or ""
+        if not episode or not quote or quote not in (episode.get("quote") or ""):
+            failures.append(f"promotion {item.get('id')} 的引文不在事件 {item.get('episode')} 的原话里：晋不了")
+        ran = item.get("ran") or {}
+        if not (ran.get("by") and ran.get("at") and ran.get("on_version") is not None):
+            failures.append(f"promotion {item.get('id')} 没有回执（谁跑的、对哪个版本、何时）")
+        if item.get("kind") == "确认":
+            if (dao.get("part_sources") or {}).get(part) == "系统补":
+                failures.append(f"promotion {item.get('id')} 说他确认了 {part}，但那一件还标着「系统补」")
+            elif item.get("as") != (dao.get("part_sources") or {}).get(part):
+                failures.append(
+                    f"promotion {item.get('id')} 说这一件变成 {item.get('as')!r}，但条目上写的是 "
+                    f"{(dao.get('part_sources') or {}).get(part)!r}"
+                )
+            promoted.add((dao["id"], part))
+        if item.get("kind") == "推翻":
+            if not item.get("handling"):
+                failures.append(f"promotion {item.get('id')} 推翻了一件，但没写处理（改适用域或撤回）")
+            revisions = dao.get("revisions") or []
+            if not any(item.get("id") in (rev.get("because") or "") for rev in revisions):
+                failures.append(f"promotion {item.get('id')} 推翻了一件，但 {dao['id']} 没有升版并写明因为这条晋升")
+
     counts: dict[str, int] = {name: 0 for name in REFUSAL_PARTS}
     for item in items:
         for name in item.get("missing") or []:
@@ -1205,7 +1383,12 @@ def check_library(data: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
         "relations": relations,
         "contradictions": len(contradictions),
         "candidates": len(data["map"].get("candidates") or []),
+        "record_status": record_status,
+        "promotions": len(promotions),
+        "authorship": {},
     }
+    for dao in data["daos"]["daos"]:
+        summary["authorship"][authorship(dao)] = summary["authorship"].get(authorship(dao), 0) + 1
     return failures, summary
 
 
@@ -1263,6 +1446,12 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
         for source in candidate.get("suggested_by") or []:
             if source not in dao_ids:
                 failures.append(f"候选 {candidate.get('id')} 指向不存在的道：{source}")
+    rs = summary["record_status"]
+    print(
+        "  作者：" + "、".join(f"{name} {count}" for name, count in summary["authorship"].items())
+        + f"；记录检查 {sum(rs.values())} 条（确认 {rs['确认']} / 部分 {rs['部分']} / 收窄 {rs['收窄']} / 推翻 {rs['推翻']} / 未表态 {rs['未表态']}）"
+        + f"；晋升 {summary['promotions']} 条"
+    )
     print(independent_groups(data)["line"])
     return failures
 

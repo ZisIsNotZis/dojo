@@ -4,7 +4,7 @@
   "bench_version": 1,
   "daos": {
     "dojo-d-001": {
-      "digest": "eabf1976c6fdc1f2124c1498d6a9062e32c66890f957b7aa3b5eac2cd0efcb71",
+      "digest": "0c8e4c01afaf3ad5a61a1673ea591d2e870f6ce59f99a72a57338a80b2176c47",
       "id": "dojo-d-001",
       "receipts": {
         "falsifiable": {
@@ -53,7 +53,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "eabf1976c6fd",
+            "on_digest": "0c8e4c01afaf",
             "on_version": 1
           },
           "verdict": "pass"
@@ -80,7 +80,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "eabf1976c6fd",
+            "on_digest": "0c8e4c01afaf",
             "on_version": 1
           },
           "rejected": [],
@@ -185,13 +185,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "eabf1976c6fd",
+            "on_digest": "0c8e4c01afaf",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -207,14 +208,24 @@
           ]
         ],
         "count": 3,
-        "line": "验过（弱一档：自验） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
         "mark": "检",
-        "word": "验过（弱一档：自验）"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-002": {
-      "digest": "8e5f921f71628cfc4dc355860d816ca931bdf3d3ca088e931daa3c00bfce5bea",
+      "digest": "473286a108a8c7411ef81cdf49e634ff1f8c5e8d0275d19ce707b9a7e26c84a7",
       "id": "dojo-d-002",
       "receipts": {
         "falsifiable": {
@@ -263,7 +274,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "8e5f921f7162",
+            "on_digest": "473286a108a8",
             "on_version": 1
           },
           "verdict": "pass"
@@ -287,7 +298,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "8e5f921f7162",
+            "on_digest": "473286a108a8",
             "on_version": 1
           },
           "rejected": [],
@@ -392,13 +403,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "8e5f921f7162",
+            "on_digest": "473286a108a8",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -414,14 +426,24 @@
           ]
         ],
         "count": 3,
-        "line": "验过（弱：后续，非对照） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
         "mark": "检",
-        "word": "验过（弱：后续，非对照）"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-003": {
-      "digest": "2013ed9212b256500b049f0bfb4e4f4be3337bd732c3cee2c7d965d3ff1b4d50",
+      "digest": "a69a6fbcb741599363f8a7c1882091fad1163c9450be3a5b843a560f6b48cd90",
       "id": "dojo-d-003",
       "receipts": {
         "falsifiable": {
@@ -467,7 +489,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "2013ed9212b2",
+            "on_digest": "a69a6fbcb741",
             "on_version": 1
           },
           "verdict": "pass"
@@ -493,7 +515,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "2013ed9212b2",
+            "on_digest": "a69a6fbcb741",
             "on_version": 1
           },
           "rejected": [],
@@ -598,13 +620,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "2013ed9212b2",
+            "on_digest": "a69a6fbcb741",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -620,14 +643,24 @@
           ]
         ],
         "count": 3,
-        "line": "验过（弱：后续，非对照） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "his": [
+          "归属"
+        ],
+        "line": "合写 · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
         "mark": "检",
-        "word": "验过（弱：后续，非对照）"
+        "supplied": [
+          "情境",
+          "张力",
+          "动作",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-004": {
-      "digest": "8d286a956f668a8d05abc80a12ff2e30e45ba7ab845a779d8066de0a85cfa355",
+      "digest": "812e25f756aaaaa0dc5c12fb6e4bc916bd8f2f6d6a729394d17eeb58674a6ec6",
       "id": "dojo-d-004",
       "receipts": {
         "falsifiable": {
@@ -673,7 +706,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "8d286a956f66",
+            "on_digest": "812e25f756aa",
             "on_version": 1
           },
           "verdict": "pass"
@@ -784,13 +817,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "8d286a956f66",
+            "on_digest": "812e25f756aa",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -806,14 +840,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "失效",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-005": {
-      "digest": "b402f5433b7fa5b7aaecbbf2a665e73a6b27cfda0a6e52072a279e87d100d8c4",
+      "digest": "f781fe7b5c7213f4277a3ed60da7014de4fbec7fe4df9959e6b6e72027c2b3d5",
       "id": "dojo-d-005",
       "receipts": {
         "falsifiable": {
@@ -859,7 +903,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "b402f5433b7f",
+            "on_digest": "f781fe7b5c72",
             "on_version": 1
           },
           "verdict": "pass"
@@ -970,13 +1014,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "b402f5433b7f",
+            "on_digest": "f781fe7b5c72",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -992,14 +1037,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "失效",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-006": {
-      "digest": "7cdb0a62d7ac615707decd248b6197b7a07bf9cecb8adc968f469a1b16262bae",
+      "digest": "f1e3b7156e9484a9a80b0e1e1f74060c349ab1b1a2f7851065fbdbc1118a1e88",
       "id": "dojo-d-006",
       "receipts": {
         "falsifiable": {
@@ -1031,7 +1086,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "7cdb0a62d7ac",
+            "on_digest": "f1e3b7156e94",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1142,13 +1197,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "7cdb0a62d7ac",
+            "on_digest": "f1e3b7156e94",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -1164,14 +1220,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-007": {
-      "digest": "dd771748c0094b3fb5d0d569cf856c70384abf73175cf91e6353ff31732eec9a",
+      "digest": "9283fad0fc798d7399217060a980591c070a2e082f3096c3412ed9630c1360b2",
       "id": "dojo-d-007",
       "receipts": {
         "falsifiable": {
@@ -1203,7 +1269,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "dd771748c009",
+            "on_digest": "9283fad0fc79",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1314,13 +1380,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "dd771748c009",
+            "on_digest": "9283fad0fc79",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -1336,14 +1403,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-008": {
-      "digest": "592e013b3c4e43bb8945d93773669c814bc8db9a233efed2dcb9dd3739e0d4d7",
+      "digest": "2a16a6a9a91d5d024e2db4653648fcde57ed5753a23069a0a4c424dbb802be32",
       "id": "dojo-d-008",
       "receipts": {
         "falsifiable": {
@@ -1375,7 +1452,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "592e013b3c4e",
+            "on_digest": "2a16a6a9a91d",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1486,13 +1563,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "592e013b3c4e",
+            "on_digest": "2a16a6a9a91d",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -1508,14 +1586,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述（转述） · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述（转述）"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-009": {
-      "digest": "b30048cba1d6329a7e96e6f4b81cd0db6bb12cef5f6221db14b95d8caa2e9db1",
+      "digest": "09ce552155078af7ffd1b89bee4830425c71e33c28025b731acc0a9c4f2c44b6",
       "id": "dojo-d-009",
       "receipts": {
         "falsifiable": {
@@ -1547,7 +1635,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "b30048cba1d6",
+            "on_digest": "09ce55215507",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1658,13 +1746,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "b30048cba1d6",
+            "on_digest": "09ce55215507",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -1680,14 +1769,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "失效",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-010": {
-      "digest": "b367461cf908f83402373c24abbd00def45743198432ee2d255d2db6d7f10065",
+      "digest": "b5c1a90d034b9bc4c858a9643e0ce99893f70bc25d2d53402d321be79406818e",
       "id": "dojo-d-010",
       "receipts": {
         "falsifiable": {
@@ -1733,7 +1832,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "b367461cf908",
+            "on_digest": "b5c1a90d034b",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1844,13 +1943,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "b367461cf908",
+            "on_digest": "b5c1a90d034b",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -1866,14 +1966,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-011": {
-      "digest": "25dd24ce7a37fd70ece2f635730fdcd334b7aba7922cb9835f82f012e9c06fa9",
+      "digest": "5f5a87673cec7e09f6d950f26bfb96fd15d1d1e87db594d1e455f70edfd439ad",
       "id": "dojo-d-011",
       "receipts": {
         "falsifiable": {
@@ -1905,7 +2015,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "25dd24ce7a37",
+            "on_digest": "5f5a87673cec",
             "on_version": 1
           },
           "verdict": "pass"
@@ -2016,13 +2126,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "25dd24ce7a37",
+            "on_digest": "5f5a87673cec",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -2038,14 +2149,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-012": {
-      "digest": "c3cb54a4a607bd17acb502ddd4ee63d6ec0851e9a39765e744bb9711720d8c25",
+      "digest": "33c00e8713689748e823e72973ee17e9644efc7101c30fb2378a93c65b477678",
       "id": "dojo-d-012",
       "receipts": {
         "falsifiable": {
@@ -2091,7 +2212,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "c3cb54a4a607",
+            "on_digest": "33c00e871368",
             "on_version": 1
           },
           "verdict": "pass"
@@ -2202,13 +2323,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "c3cb54a4a607",
+            "on_digest": "33c00e871368",
             "on_version": 1
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -2224,14 +2346,24 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
       "version": 1
     },
     "dojo-d-013": {
-      "digest": "679e6a3354e475484a5256bab648028b3b08ca6a15fe95b6bc06eab4c4d53f18",
+      "digest": "fd4d345dbe729d3906b59a40381a214fc4bd06af32c74c9188289b9c6434fb27",
       "id": "dojo-d-013",
       "receipts": {
         "falsifiable": {
@@ -2243,7 +2375,8 @@
               "side": "域内（案例 ep-2026-10-23-ux）",
               "situation": {
                 "他跑过吗": "跑过",
-                "别人能不能替他判": "能"
+                "别人能不能替他判": "能",
+                "问的是哪一类": "对行为的判断"
               }
             },
             {
@@ -2254,7 +2387,8 @@
               "side": "越界（他跑过吗=没跑过）",
               "situation": {
                 "他跑过吗": "没跑过",
-                "别人能不能替他判": "能"
+                "别人能不能替他判": "能",
+                "问的是哪一类": "对行为的判断"
               },
               "when": "他还没跑过这件东西"
             },
@@ -2266,9 +2400,23 @@
               "side": "越界（别人能不能替他判=只有他能判）",
               "situation": {
                 "他跑过吗": "跑过",
-                "别人能不能替他判": "只有他能判"
+                "别人能不能替他判": "只有他能判",
+                "问的是哪一类": "对行为的判断"
               },
               "when": "这件事只有他能判断"
+            },
+            {
+              "action": "照问不误：方向是他的，不需要他先跑；但记成他的决定，不记成他的观察",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（问的是哪一类=方向决定）",
+              "situation": {
+                "他跑过吗": "跑过",
+                "别人能不能替他判": "能",
+                "问的是哪一类": "方向决定"
+              },
+              "when": "问的是方向性的决定，不是对行为的判断"
             }
           ],
           "kind": "falsifiable",
@@ -2277,8 +2425,8 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "679e6a3354e4",
-            "on_version": 1
+            "on_digest": "fd4d345dbe72",
+            "on_version": 2
           },
           "verdict": "pass"
         },
@@ -2388,13 +2536,14 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "679e6a3354e4",
-            "on_version": 1
+            "on_digest": "fd4d345dbe72",
+            "on_version": 2
           },
           "verdict": "pass"
         }
       },
       "status": {
+        "authorship": "合写",
         "cells": [
           [
             "自洽",
@@ -2410,18 +2559,28 @@
           ]
         ],
         "count": 2,
-        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "his": [
+          "动作",
+          "归属"
+        ],
+        "line": "合写 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
         "mark": "未检",
-        "word": "自述"
+        "supplied": [
+          "情境",
+          "张力",
+          "代价",
+          "失效"
+        ],
+        "word": "合写"
       },
-      "version": 1
+      "version": 2
     }
   },
   "inputs": {
-    "daos": "f24d40e179eedf4d42179ae37c52fef5805bdca89b24cf968c8e169c5e4734d4",
-    "episodes": "9387e0d773b564f262b1a1e86dc1a909d3cb0804abc621bb3abcb4c5dc94d776",
+    "daos": "e865ba926e7aa70987584aa7412745eadcf65c71f29bdc58f5594cd13cc70ef8",
+    "episodes": "6eafc474498fea8963694e24490af62ff40163400fd335cce41ffc2ad01c20bc",
     "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
-    "map": "402f4dd5e852bf02c20a2ad7baac497a09bbbb3ce0181421b23ad46d7db788b3",
+    "map": "6f977a08a10d14c0f2ed30f095864fa0cd98ed74df2e2c2e8b041792b98eafe8",
     "observations": "e405ffbad03f997c3851f691295029452d0fce112fbac726283491d54332eecf",
     "refusals": "0b62fed927203ab44bf9db1e62bd18e174043090bdb5abcdfc9c34dd2fdb406e"
   },

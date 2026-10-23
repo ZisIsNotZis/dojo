@@ -20,7 +20,7 @@ dao_life = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(dao_life)
 
 AT = "2026-10-23T22:00:00Z"
-LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json")
+LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json", "record_checks.json", "promotions.json")
 
 
 class DaoLifeTests(unittest.TestCase):
@@ -52,6 +52,8 @@ class DaoLifeTests(unittest.TestCase):
             "exposures": self.read("exposures.json", library),
             "map": self.read("map.json", library),
             "refusals": self.read("refusals.json", library),
+            "record_checks": self.read("record_checks.json", library),
+            "promotions": self.read("promotions.json", library),
             "root": str(self.dir / library),
         }
         return data
@@ -101,7 +103,7 @@ class DaoLifeTests(unittest.TestCase):
         self.assertIn("没进库的东西：写不成道的材料", page)
         self.assertIn("按缺的那一件数", page)
         self.assertIn("六件按来源合计", page)
-        self.assertIn("情境 推断 13", page)
+        self.assertIn("情境 系统补 13", page)
 
     def test_a_refusal_without_its_missing_part_is_refused(self):
         data = self.read("refusals.json")
@@ -260,9 +262,9 @@ class DaoLifeTests(unittest.TestCase):
         episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
         for dao in data["daos"]["daos"]:
             line = dao_life.status_of(dao, receipts[dao["id"]], episodes)["line"]
+            self.assertTrue(line.startswith("合写·") or line.startswith("合写 "), line)
             if dao["id"] in {"dojo-d-001", "dojo-d-002", "dojo-d-003"}:
                 self.assertIn("检（3/3", line, line)
-                self.assertIn("弱", line, line)
             else:
                 self.assertIn("未检（2/3", line, line)
 
@@ -288,6 +290,111 @@ class DaoLifeTests(unittest.TestCase):
         self.write("map.json", data)
         self.assertEqual(self.run_command(), 1)
         self.assertEqual(sorted(path.name for path in (self.dir / "person-dojo").iterdir() if path.name not in set(LIBRARY_FILES)), [])
+
+    # --- who wrote it, and what may be concluded -------------------------
+    def test_a_co_written_entry_never_renders_as_his_words(self):
+        data = self.dossiers()
+        receipts = self.bench()
+        episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+        page = dao_life.render(data, receipts, AT, {}, self.vocabulary())
+        self.assertIn("按作者分：他的 0 条、合写 13 条、系统的 0 条。", page)
+        for dao in data["daos"]["daos"]:
+            line = dao_life.status_of(dao, receipts[dao["id"]], episodes)["line"]
+            self.assertTrue(line.startswith("合写"), line)
+            for word in ("自述", "验过", "量过"):
+                self.assertNotIn(word, line, line)
+        self.assertIn("**六件是谁写的：**", page)
+        self.assertIn("**读这条能得出什么：**", page)
+        self.assertIn("系统补", page)
+        self.assertIn("不能被读成「他的看法」", page)
+
+    def test_every_supplied_tension_and_price_has_a_record_check(self):
+        data = self.dossiers()
+        covered = {(item["dao"], item["part"]) for item in data["record_checks"]["checks"]}
+        for dao in data["daos"]["daos"]:
+            if dao["part_sources"]["tension"] == "系统补":
+                self.assertIn((dao["id"], "tension"), covered, dao["id"])
+            if dao["part_sources"]["price"] == "系统补":
+                self.assertIn((dao["id"], "price"), covered, dao["id"])
+        failures, summary = dao_life.check_library(data)
+        self.assertEqual(failures, [])
+        self.assertEqual(summary["record_status"]["收窄"], 2)
+        self.assertEqual(summary["promotions"], 0)
+
+    def test_a_record_check_that_narrows_without_a_version_is_refused(self):
+        data = self.dossiers()
+        for dao in data["daos"]["daos"]:
+            if dao["id"] == "dojo-d-013":
+                dao["version"] = 1
+                dao["revisions"] = []
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("没有升版" in line for line in failures), failures)
+
+    def test_a_record_check_that_says_nothing_is_refused(self):
+        data = self.dossiers()
+        data["record_checks"]["checks"][0]["against"]["quote"] = ""
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("没写引文" in line for line in failures), failures)
+
+    def test_a_missing_record_check_is_refused(self):
+        data = self.dossiers()
+        data["record_checks"]["checks"] = [
+            item for item in data["record_checks"]["checks"]
+            if not (item["dao"] == "dojo-d-005" and item["part"] == "tension")
+        ]
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("记录检查" in line for line in failures), failures)
+
+    # --- promotion: the one way an inference becomes his ------------------
+    def _promotion(self, **overrides):
+        promotion = {
+            "id": "pm-001",
+            "dao": "dojo-d-013",
+            "part": "tension",
+            "kind": "确认",
+            "episode": "ep-2026-10-23-ux",
+            "quote": "way better than last time",
+            "as": "他的原话",
+            "ran": {"by": "scripts/dao_life.py promotion-v1", "at": AT, "on_version": 2},
+        }
+        promotion.update(overrides)
+        return promotion
+
+    def test_a_promotion_needs_a_quote_that_is_really_in_the_episode(self):
+        data = self.dossiers()
+        data["promotions"]["promotions"] = [self._promotion(quote="这句他没有说过")]
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("引文不在事件" in line for line in failures), failures)
+
+    def test_a_promotion_that_confirms_must_change_the_part(self):
+        data = self.dossiers()
+        data["promotions"]["promotions"] = [self._promotion()]
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("还标着「系统补」" in line for line in failures), failures)
+
+    def test_a_valid_promotion_moves_the_part_to_his_words(self):
+        data = self.dossiers()
+        data["promotions"]["promotions"] = [self._promotion()]
+        for dao in data["daos"]["daos"]:
+            if dao["id"] == "dojo-d-013":
+                dao["part_sources"]["tension"] = "他的原话"
+        failures, summary = dao_life.check_library(data)
+        self.assertEqual(failures, [])
+        self.assertEqual(summary["promotions"], 1)
+
+    def test_a_promotion_that_overturns_must_be_handled(self):
+        data = self.dossiers()
+        data["promotions"]["promotions"] = [self._promotion(kind="推翻")]
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("没写处理" in line for line in failures), failures)
+
+    def test_the_narrowed_entry_is_at_version_two_and_names_its_check(self):
+        data = self.dossiers()
+        dao = [item for item in data["daos"]["daos"] if item["id"] == "dojo-d-013"][0]
+        self.assertEqual(dao["version"], 2)
+        self.assertTrue(any("rc-013" in (rev.get("because") or "") for rev in dao["revisions"]))
+        receipts = self.bench()
+        self.assertEqual(receipts["dojo-d-013"]["structure"]["ran"]["on_version"], 2)
 
     # --- the pending line stays pending ---------------------------------
     def test_the_pending_boundary_is_not_written_into_the_product_documents(self):

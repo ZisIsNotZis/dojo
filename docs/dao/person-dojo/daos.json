@@ -138,12 +138,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       }
     },
     {
@@ -279,12 +279,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       }
     },
     {
@@ -396,11 +396,11 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "推断",
-        "price": "推断",
-        "off": "推断",
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "系统补",
+        "price": "系统补",
+        "off": "系统补",
         "provenance": "转述"
       }
     },
@@ -525,12 +525,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "记录",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "他的原话",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -642,12 +642,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "记录",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "他的原话",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -740,12 +740,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -838,12 +838,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -936,11 +936,11 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
+        "situation": "系统补",
+        "tension": "系统补",
         "move": "转述",
-        "price": "推断",
-        "off": "推断",
+        "price": "系统补",
+        "off": "系统补",
         "provenance": "转述"
       },
       "version": 1
@@ -1000,7 +1000,7 @@
           "axis": "库的规模",
           "value": "大到检索排不出",
           "then_kind": "withhold",
-          "then": "给一个默认顺序，并写明「按什么排的、这不是共识排序」；仍不做公开榜"
+          "then": "给一个默认顺序，并写明「按什么排的、这不是共识排序」；仍不做公开榜（这一格原先被我标成「系统补」，是我标错了：§2.8 自己就写了「仅当用户主动检索时，可按…给出默认阅读顺序」，那正是这条失效条件。）"
         }
       ],
       "axes": {
@@ -1042,12 +1042,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "他的原话",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -1159,12 +1159,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -1257,12 +1257,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -1374,12 +1374,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
       "version": 1
     },
@@ -1391,7 +1391,7 @@
       "one_line": "在一个人的判断只能来自他的实际经历时，宁可把问题裁到他跑过的那一段、没跑过的就问「你跑过吗」或自己跑一遍，也不拿「你觉得呢」去换一个不属于他的判断，代价是没跑过的部分永远没有他的判断、问得太窄会漏掉他想说的；当他是唯一能判断的人时，反过来——必须问他，并写明在等他的判断。",
       "situation": {
         "who": "一个要请人给判断的人，而那个人的判断只在跑过之后才算数",
-        "when": "这个人只回答他实际跑过的那一段，没跑过的事他会说「还没」",
+        "when": "这个人只回答他实际跑过的那一段，没跑过的事他会说「还没」——这只覆盖对行为与体验的判断；方向性的决定他是可以没跑就定的（2026-10-23 他一次答了三个大方向）。",
         "constraints": [
           "他不为没跑过的事背书",
           "有些判断只有他能给",
@@ -1446,6 +1446,13 @@
           "value": "只有他能判",
           "then_kind": "reverse",
           "then": "必须问他，并写明在等的是他的判断"
+        },
+        {
+          "when": "问的是方向性的决定，不是对行为的判断",
+          "axis": "问的是哪一类",
+          "value": "方向决定",
+          "then_kind": "reverse",
+          "then": "照问不误：方向是他的，不需要他先跑；但把他说的记成决定，不记成观察"
         }
       ],
       "axes": {
@@ -1456,9 +1463,20 @@
         "别人能不能替他判": [
           "能",
           "只有他能判"
+        ],
+        "问的是哪一类": [
+          "对行为的判断",
+          "方向决定"
         ]
       },
       "rule": [
+        {
+          "when": {
+            "问的是哪一类": "方向决定"
+          },
+          "kind": "reverse",
+          "action": "照问不误：方向是他的，不需要他先跑；但记成他的决定，不记成他的观察"
+        },
         {
           "when": {
             "别人能不能替他判": "只有他能判"
@@ -1499,14 +1517,24 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "记录",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "他的原话",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       },
-      "version": 1
+      "version": 2,
+      "revisions": [
+        {
+          "version": 2,
+          "at": "2026-10-23",
+          "on_version": 1,
+          "by": "scripts/dao_life.py record-check",
+          "because": "记录检查 rc-013 / rc-013p（收窄）：他一次答了三个方向性的决定，一个也没跑过；这条只覆盖对行为与体验的判断",
+          "what_changed": "情境多了一句适用范围；失效条件加一条（方向决定照问）；规则加一行；上一版的情境与代价说得太满"
+        }
+      ]
     }
   ]
 }

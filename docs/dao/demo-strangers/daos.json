@@ -135,12 +135,12 @@
         }
       ],
       "part_sources": {
-        "situation": "推断",
-        "tension": "推断",
-        "move": "推断",
-        "price": "推断",
-        "off": "推断",
-        "provenance": "记录"
+        "situation": "系统补",
+        "tension": "系统补",
+        "move": "系统补",
+        "price": "系统补",
+        "off": "系统补",
+        "provenance": "他的原话"
       }
     }
   ]
