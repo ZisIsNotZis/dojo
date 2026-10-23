@@ -10,14 +10,14 @@
 - **`m2f` 不跑**：person 跑过并给出判断，门就关了，再让模型跑一遍是拿模型的判断替换他的判断；2026-10-25T12:28Z 那个到点条件随之作废。若他以后把 trace 交来，它原样加进同一份 `person-2026-10-23.md`，不新开一份记录。
 - **person 2026-10-23 给的下一个方向是底层知识网络**，不是把 UX 再磨一轮：他说用户体验这一部分满意，要的是「严肃设计底层知识网络……一个真正的人类之间『道理』的数据库」。
 - **他当天答了提案（2026-10-23）**：单位换成「道」（旧卡只映射、不迁移、不删）；证据要，但检验由网络自己跑（他原话：用户已经抽身，提醒不是他的责任，是网络的；他以后可以质疑「你跑过模拟吗」）；首里程碑是「一条道的一生」。决定与改动后的设计在 `docs/proposal-knowledge-network.md` 的「状态」节与第二、五、七、十节。
-- **这个里程碑的第一个包已派发并跑完（2026-10-23，loan 之下）**：`K1 一条道的一生` 的第一片叫 `dao-life-1`，契约与验收行在本文 `## K1 一条道的一生：第一个包 dao-life-1` 一节，先写验收再动手；结果与残余风险写在同一节。它原先排在 M2 收尾之后；提前的理由与代价写在该节，M2 的五条验收一个字没改，`m2e` 仍欠着。
+- **这个里程碑已经跑完两片（2026-10-23，loan 之下）**：第一片 `dao-life-1` 把 loop 跑通，第二片把落地那一格放进世界、并用记录里唯一的第二个来源跑同一条 loop。契约与验收行在本文 `## K1 一条道的一生：第一个包 dao-life-1` 一节，两次都先写验收再动手；结果与残余风险写在同一节。K1 原先排在 M2 收尾之后；提前的理由与代价写在该节，M2 的五条验收一个字没改，`m2e` 仍欠着。
 - **张力收敛探针：person 同意了做，root_manager 收窄到三个相熟者（这是 root_manager 的推断：相熟者共享语境，会高估重合，所以三人不收敛已足以判负，三人收敛只说明值得去问陌生人）。**
   仪器与判分规则在 `docs/probe/tension-convergence.md`，笔记落 `docs/probe/notes/`，一条命令 `python3 scripts/tension_overlap.py docs/probe/notes` 出重合数；**还没跑，库里零笔记**，不占 M2、不占 K1。
 - **M2 里还缺的不是门，是两件要做的事**：`m2b` 缺一次真实模型判定（`classify` 现在报 `unavailable` 而不猜），`m2e` 缺整场跑一遍与把清单交给他过目；其余 M2 能力包已就位，但落地只代表能力就位，M2 不按通过记。实验 harness 仍要一个完整包位（见 `## 实验 harness`）。
 - **M2 作为里程碑仍未达成**：拦它的不再是 M1.5 的门（已由 person 那一局关闭），而是 `m2e` 没跑、person 没看过提炼清单。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
 - 派发状态一句话：`m2f` 不跑（门已由 person 关闭）；`m2a`/`m2c` 已就位，`m2b` 缺一次真实模型判定、`m2e` 缺整场跑；实验 harness 排队等一个完整包位（见 `## 实验 harness`）；M2 之外在跑的只有 K1 的第一片（`dao-life-1`，已跑完，见 `## K1 一条道的一生：第一个包 dao-life-1`）。
-- **本轮推进做了什么**：把 K1 的第一片做成能跑的东西——三层落盘（事件、道、观察/曝光）、一条命令（`scripts/dao_life.py`）出三格回执与一张道图，两条负控制钉住「对抗台不是只会说好」。三条道从 person 已有的记录里读出，落地那一格一条有弱观察、两条印「未跑」；0 次计量调用、0 次联系，提交范围看 `git log --oneline origin/master..HEAD`。
+- **本轮推进做了什么**：第二片给落地那一格找答案，并把第二个来源跑了一遍——`dojo-d-001` 拿到一条自验（弱一档）后从 `未检（2/3）` 变成 `检（3/3）`，`dojo-d-003` 仍是 `未检` 但写明了要什么；记录里没有第二个人，所以第二来源用模拟语料、标 `模拟`、跑同一条 loop，结果与 person 的三条道逐对无关、没有改动任何一条道，只带来一个 person 的图里没有的张力（开始摩擦）。`b-001` 仍 `待确认`，没有写进产品文档。0 次计量调用、0 次联系，提交范围看 `git log --oneline origin/master..HEAD`。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：`m2e` 没跑，用户没看过提炼清单。
 - **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
 - **证据块只写命令跑出来的东西**：作废的是一件具体的事——提交计数行由记忆生成而非由命令生成，因此同一命令在绑定修订上返回的数不是它印的数。此后任何证据块写之前先跑，数字从输出复制；命令保留，数不保留。
@@ -255,6 +255,45 @@ dao-life：3 条道（docs/dao/person-dojo）
 - **K1-12 对比可跑可读**：`python3 scripts/dao_life.py docs/dao/person-dojo --compare docs/dao/demo-strangers` 退出码 0，写出 `对比.md`，逐对给关系，并写明第二来源改没改任何道。
 - **K1-13 “待确认”不动**：`map.json` 里 `b-001` 仍是 `待确认`；`grep -rn "入口显式" docs/product.md docs/need.md` 无命中（测试钉住）。
 - **K1-14 一条命令、零计量调用**：`--check` 干净；全量测试绿。
+
+### 第二次推进的结果（2026-10-23，0 次计量调用）
+
+```sh
+$ python3 scripts/dao_life.py docs/dao/person-dojo --compare docs/dao/demo-strangers --at 2026-10-23T14:02:48Z
+dao-life：3 条道（docs/dao/person-dojo）
+  dojo-d-001  v1  验过（弱一档：自验） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）
+  dojo-d-002  v1  验过（弱：后续，非对照） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）
+  dojo-d-003  v1  自述（转述） · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）
+独立来源 1 组（不同的人 1 个；曝光账本 0 行）。曝光未知按「不独立」算：这里是一个人的道理，不是共识。
+dao-life：1 条道（docs/dao/demo-strangers）
+  demo-d-101  v1  模拟 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）
+来源是模拟材料（1 个来源 id，曝光账本 0 行）：它不是一个人的道理，也不是共识，只能用来测这张库装不装得下第二个来源。
+对比：3 对；同一张力 0 对；共有的张力 无；第二个来源带来的张力 ['开始摩擦']
+写入 docs/dao/person-dojo/receipts.json
+写入 docs/dao/person-dojo/道图.md
+写入 docs/dao/demo-strangers/receipts.json
+写入 docs/dao/demo-strangers/道图.md
+写入 docs/dao/person-dojo/对比.md
+```
+
+- **K1-9 过**：`dojo-d-001` 拿到了 `agent_self` 观察（写了 `applied_in`/`result`/`could_have_gone_otherwise`）；`dojo-d-003` 仍是 `未跑`，`needed` 写明了要一次「他付钱、价能算出来」的决定、为什么现在拿不到（loan、零调用）、谁能补；`dojo-d-002` 也写了一条把弱观察变强所需的对照。
+- **K1-10 过**：`python3 -m unittest discover -s tests -p 'test_dao.py'` → 11 项；其中 `test_self_verification_grounds_a_cell_only_with_the_three_fields` 删掉 `applied_in` 后落地这一格立刻回到 `未跑`，且拒的理由印在回执里。
+- **K1-11 过**：`python3 scripts/dao_life.py docs/dao/demo-strangers --check` 退出码 0；它的状态行以 `模拟` 开头，道图标题写「这不是一个人的道图」。
+- **K1-12 过**：上面那条 `--compare` 退出码 0，写出 `对比.md`：3 对全是「无关」，共有张力一个也没有；读法与限制都写在 `comparison.json` 里、分开标；对比只读，测试重跑前后两个 `daos.json` 字节相同。
+- **K1-13 过**：`map.json` 里 `b-001` 仍是 `待确认`；`grep -rn "入口显式" docs/product.md docs/need.md` → 0 命中；`test_the_pending_boundary_is_not_written_into_the_product_documents` 钉住这一条。
+- **K1-14 过**：`--check` 干净；`python3 -m unittest discover -s tests` → `Ran 144 tests ... OK`；`python3 -m compileall -q dojo tests` 无输出；0 次计量调用。
+
+**这一轮的两件事，一句话各说一次**
+
+- **落地那一格**：`dojo-d-001` 以前是 `自述 · 未检（2/3）`，现在是 `验过（弱一档：自验） · 检（3/3）`——本条道在第二片被真的用了一次（判断两个来源是否重合的人就是作者本人，于是按失效条件第二条把比较降级，而不是把「没有重合」写成发现）。`dojo-d-003` 仍 `未检`，要什么才能变已写进 `needed`：一次他付钱、价能算出来的决定。
+- **第二个来源**：记录里没有第二个人（demo 台词、seed 语料、m5 四场景、m1 讨论输入全是作者写的或脚本；`docs/evidence/m1-discuss/provenance.md` 原话 “they are not a participant sample”）。所以第二来源取模拟语料，标 `模拟`，跑同一条 loop：它与 person 的三条道**逐对无关**，没有改动任何一条道；它带来一个 person 的图里没有的张力（开始摩擦）——这是空白，不是一条能加进来的道。
+
+**残余风险（第二次推进）**
+
+- **自验是最弱的一档**：`dojo-d-001` 的 3/3 靠的是写它的人自己判它被用到了可以用；`needed` 里写着更强的观察（另一个人的后续会话，或一次对照）。把 3/3 当「已验真」读是误读。
+- **同一天的「晚于」是一条约定**：案例是日粒度，自验写到分才算晚于；这证明的是先后，不是因果距离。
+- **对比不可外推**：模拟语料由同一只手写，重合或不重合都只说明两份产出一致与否；词表只有四个张力词，任何「收敛」说法在这个尺度上不可测。
+- **独立评审仍欠**：K1 的契约要求交付前一次独立评审，本片没花（父级拥有那次启动）。
 
 ## 证据卫生
 

@@ -38,8 +38,8 @@ CLICHES = (
     "把握分寸",
 )
 OBSERVATION_KINDS = {
-    "later_session": ("他人的后续会话（弱：不是对照）", "验过（弱：后续，非对照）"),
-    "agent_self": ("自验（agent，弱一档）", "验过（弱一档：自验）"),
+    "later_session": ("他人的后续·弱（不是对照）", "验过（弱：后续，非对照）"),
+    "agent_self": ("自验·弱一档（agent）", "验过（弱一档：自验）"),
     "controlled": ("有意的对照（量过）", "量过"),
 }
 OBSERVATION_STRENGTH = {"agent_self": 1, "later_session": 2, "controlled": 3}
