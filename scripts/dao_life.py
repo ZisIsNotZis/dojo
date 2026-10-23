@@ -47,6 +47,9 @@ OBSERVATION_STRENGTH = {"agent_self": 1, "later_session": 2, "controlled": 3}
 VERDICT_WORD = {"pass": "过", "fail": "不过", "not_run": "未跑", "uncertain": "不确定"}
 ATTRIBUTION_CLASSES = ("person", "relayed", "synthetic", "unverified")
 SOURCE_WORD = {"person": "自述", "relayed": "自述（转述）", "synthetic": "模拟", "unverified": "传闻"}
+PART_NAMES = ("situation", "tension", "move", "price", "off", "provenance")
+PART_SOURCES = ("记录", "转述", "推断")
+REFUSAL_PARTS = ("情境", "张力", "动作", "代价", "失效", "归属", "重复")
 RECEIPT_PATHS = ("structure", "falsifiable", "field")
 
 
@@ -145,6 +148,14 @@ def check_structure(
         if item.get("axis") not in axes or item.get("value") not in (axes.get(item.get("axis")) or [])
     ]
     _add(checks, "每条失效条件都写成一个可改的轴与取值", bool(off) and not bad_axis, f"改不动的：{bad_axis}")
+    part_sources = dao.get("part_sources") or {}
+    undeclared = [name for name in PART_NAMES if part_sources.get(name) not in PART_SOURCES]
+    _add(
+        checks,
+        "六件各自写明了是从记录来、转述来，还是读出来的",
+        not undeclared,
+        f"没写的：{undeclared}；读法写在 part_sources 里，不写就等于把推断冒充成记录",
+    )
     _add(
         checks,
         "失效条件给出的是「反转」或「停」，不是一句劝告",
@@ -508,6 +519,29 @@ def render(
     add("## 这张图里有什么")
     add("")
     add(f"{len(daos)} 条道，每条六件套齐全；{len(daos)} 条都有自洽与可反驳两张回执，落地那一格 {len(landed)} 条有观察、{len(daos) - len(landed)} 条是「未跑」。")
+    if not synthetic:
+        library_failures, summary = check_library(data)
+        counts = summary["refusal_counts"]
+        add(
+            f"另有 {summary['refused']} 条材料写不成道（按缺的那一件：情境 {counts['情境']}、张力 {counts['张力']}、"
+            f"动作 {counts['动作']}、代价 {counts['代价']}、失效 {counts['失效']}、归属 {counts['归属']}、重复 {counts['重复']}），"
+            f"{summary['candidates']} 条候选，{summary['contradictions']} 对互相打架；它们都在「没进库的东西」一节。"
+        )
+        tally: dict[str, dict[str, int]] = {name: {} for name in PART_NAMES}
+        for dao in daos:
+            for name in PART_NAMES:
+                source = (dao.get("part_sources") or {}).get(name, "（没写）")
+                tally[name][source] = tally[name].get(source, 0) + 1
+        labels = {"situation": "情境", "tension": "张力", "move": "动作", "price": "代价", "off": "失效", "provenance": "归属"}
+        add(
+            "六件按来源合计："
+            + "；".join(
+                f"{labels[name]} " + "、".join(f"{source} {count}" for source, count in sorted(tally[name].items()))
+                for name in PART_NAMES
+            )
+            + "。"
+        )
+        add("这一行是这张图最该被读的一句话：他给得出「做什么」和「从哪来」，给不出「什么处境」「哪两个好处在打架」「谁付什么」——那些是我读出来的，标着「推断」。")
     add(groups["line"])
     add("提炼是这次会话的 manager 从记录里读出来的（凡读法处标「推断」），不是模型判定：这一包 0 次模型调用。")
     add("")
@@ -561,6 +595,16 @@ def render(
         add("")
         lines.extend(anchors)
         add("")
+        sources = dao.get("part_sources") or {}
+        add(
+            "六件的来源："
+            + "、".join(f"{label} {sources.get(name, '（没写）')}" for name, label in (
+                ("situation", "情境"), ("tension", "张力"), ("move", "动作"),
+                ("price", "代价"), ("off", "失效"), ("provenance", "归属"),
+            ))
+            + "（记录＝他从那句原话里写的；转述＝别人记下的他的话；推断＝提炼时读出来的）"
+        )
+        add("")
         add(f"回执：{state['line']}")
         add("")
         add(f"自洽 {VERDICT_WORD[receipt['structure']['verdict']]}（v{receipt['structure']['ran']['on_version']}，摘要 {receipt['structure']['ran']['on_digest']}）")
@@ -609,6 +653,41 @@ def render(
         add(f"你一句话就能确认或推翻：**{boundary['test_line']}**")
         add("")
         add(f"所有者：{boundary['owner']}；什么时候重开：{boundary['reopen']}；{boundary['where_not_written']}")
+        add("")
+
+    contradictions = data["map"].get("contradictions") or []
+    if contradictions:
+        add("## 同一份记录里互相打架的两条")
+        add("")
+        add("这不是错误，是数据：它说明这个人前后变了，或者两件事他都没说清。两条都留在库里，谁也没被删；裁决是他的，不是我的。")
+        add("")
+        for item in contradictions:
+            add(f"**{item['id']}**（{'、'.join(item['between'])}）在同一处卡住：{item['on']}。")
+            add("")
+            add(f"左边：{item['left']}")
+            add("")
+            add(f"右边：{item['right']}")
+            add("")
+            add(f"现在怎么读：{item['how_it_reads_now']}")
+            add("")
+            add(f"状态：{item['state']}　什么能定：{item['what_would_settle_it']}")
+            add("")
+
+    refusals = (data.get("refusals") or {}).get("items") or []
+    if refusals:
+        counts = check_library(data)[1]["refusal_counts"]
+        add("## 没进库的东西：写不成道的材料")
+        add("")
+        add(
+            "「候选」是六件写得全、但案例撑不住；这里不同——这里每一行都是六件里有一件从这份材料里根本写不出来。"
+            f"按缺的那一件数：情境 {counts['情境']}、张力 {counts['张力']}、动作 {counts['动作']}、"
+            f"代价 {counts['代价']}、失效 {counts['失效']}、归属 {counts['归属']}、重复 {counts['重复']}。"
+        )
+        add("")
+        add("| 材料 | 缺 | 为什么写不成 |")
+        add("|---|---|---|")
+        for item in refusals:
+            add(f"| {item['id']}：{item['material']} | {'、'.join(item['missing'])} | {item['why']} |")
         add("")
 
     candidates = data["map"].get("candidates") or []
@@ -998,6 +1077,15 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                         "exposure": "none-at-time",
                     }
                 ],
+                "part_sources": author.get("part_sources")
+                or {
+                    "situation": "推断",
+                    "tension": "记录",
+                    "move": "记录",
+                    "price": "推断",
+                    "off": "推断",
+                    "provenance": "记录",
+                },
             }
         )
         if author.get("needed"):
@@ -1039,9 +1127,86 @@ def load_library(root: Path) -> dict[str, Any]:
         "observations": load(root / "observations.json"),
         "exposures": load(root / "exposures.json"),
         "map": load(root / "map.json"),
+        "refusals": load(root / "refusals.json") if (root / "refusals.json").exists() else {"items": []},
         "root": str(root),
     }
     return data
+
+
+def within_library_relations(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Two entries in one library, judged by the substitution test's two keys only."""
+    relations = []
+    daos = data["daos"]["daos"]
+    for index, left in enumerate(daos):
+        for right in daos[index + 1:]:
+            if left.get("tension_key") != right.get("tension_key"):
+                continue
+            kind = "同一条" if left.get("move_key") == right.get("move_key") else "相反"
+            relations.append({"a": left["id"], "b": right["id"], "kind": kind, "on": left.get("tension_key")})
+    return relations
+
+
+def check_library(data: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """What a single entry cannot see: duplicates, self-contradictions, and what was refused."""
+    failures: list[str] = []
+    dao_ids = {dao["id"] for dao in data["daos"]["daos"]}
+    relations = within_library_relations(data)
+    contradictions = {
+        tuple(sorted(item.get("between") or [])): item for item in data["map"].get("contradictions") or []
+    }
+    for relation in relations:
+        if relation["kind"] == "同一条":
+            failures.append(
+                f"{relation['a']} 与 {relation['b']} 按替换试验是同一条（张力与方向都相同）：留一条，另一条退回 refusals"
+            )
+        elif tuple(sorted([relation["a"], relation["b"]])) not in contradictions:
+            failures.append(
+                f"{relation['a']} 与 {relation['b']} 在同一张力上方向相反，但没有写进 map.json 的 contradictions"
+            )
+    for pair, item in contradictions.items():
+        if len(pair) != 2 or any(dao_id not in dao_ids for dao_id in pair):
+            failures.append(f"contradictions 里的 {item.get('id')} 指的 {pair} 不是库里的一对道")
+        for key in ("on", "state", "what_would_settle_it"):
+            if not item.get(key):
+                failures.append(f"contradictions 的 {item.get('id')} 少了「{key}」")
+
+    refusals = data.get("refusals") or {}
+    items = refusals.get("items") or []
+    episodes_by_id = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+    real_source = any(
+        (episodes_by_id.get(item.get("episode")) or {}).get("attribution") in {"person", "relayed"}
+        for dao in data["daos"]["daos"]
+        for item in dao.get("provenance") or []
+    )
+    if not items and real_source:
+        failures.append("refusals.json 是空的：一份只收得进东西的库证明不了这个形状会挑")
+    for item in items:
+        if not item.get("why"):
+            failures.append(f"refusal {item.get('id')} 没写为什么写不成")
+        if not (item.get("source") or {}).get("path"):
+            failures.append(f"refusal {item.get('id')} 没写材料在哪")
+        missing = item.get("missing") or []
+        if not missing:
+            failures.append(f"refusal {item.get('id')} 没写缺哪一件：拒收的意义就在这一栏")
+        unknown = [name for name in missing if name not in REFUSAL_PARTS]
+        if unknown:
+            failures.append(f"refusal {item.get('id')} 缺的那件不在六件里：{unknown}")
+        if "重复" in missing and item.get("duplicate_of") not in dao_ids:
+            failures.append(f"refusal {item.get('id')} 说是重复，但没写它重复的是哪一条道")
+
+    counts: dict[str, int] = {name: 0 for name in REFUSAL_PARTS}
+    for item in items:
+        for name in item.get("missing") or []:
+            counts[name] = counts.get(name, 0) + 1
+    summary = {
+        "entered": len(data["daos"]["daos"]),
+        "refused": len(items),
+        "refusal_counts": counts,
+        "relations": relations,
+        "contradictions": len(contradictions),
+        "candidates": len(data["map"].get("candidates") or []),
+    }
+    return failures, summary
 
 
 def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -> list[str]:
@@ -1067,6 +1232,27 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
             failures.append(f"{dao['id']}：落地未跑，但没写「要什么才能给这一格一条观察」")
     for dao_id in needed - {dao["id"] for dao in data["daos"]["daos"]}:
         failures.append(f"needed 里有一条指向不存在的道：{dao_id}")
+    library_failures, summary = check_library(data)
+    failures += library_failures
+    counts = summary["refusal_counts"]
+    print(
+        "  入道 {entered} 条；拒收 {refused} 条（"
+        "情境 {situation} / 张力 {tension} / 动作 {move} / 代价 {price} / 失效 {off} / 归属 {provenance} / 重复 {dup}）；"
+        "候选 {candidates} 条；库内同张力 {same} 对同一条、{opp} 对相反".format(
+            entered=summary["entered"],
+            refused=summary["refused"],
+            candidates=summary["candidates"],
+            situation=counts.get("情境", 0),
+            tension=counts.get("张力", 0),
+            move=counts.get("动作", 0),
+            price=counts.get("代价", 0),
+            off=counts.get("失效", 0),
+            provenance=counts.get("归属", 0),
+            dup=counts.get("重复", 0),
+            same=len([r for r in summary["relations"] if r["kind"] == "同一条"]),
+            opp=len([r for r in summary["relations"] if r["kind"] == "相反"]),
+        )
+    )
     dao_ids = {dao["id"] for dao in data["daos"]["daos"]}
     for candidate in (data.get("map") or {}).get("candidates") or []:
         if candidate.get("id") in dao_ids:
@@ -1121,7 +1307,11 @@ def main(argv: list[str]) -> int:
         return 1
     try:
         data = load_library(root)
-        inputs = {name: digest(data[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}
+        inputs = {
+            name: digest(data[name])
+            for name in ("episodes", "daos", "observations", "exposures", "map", "refusals")
+            if name in data
+        }
         if data.get("note_sha256"):
             inputs["note"] = data["note_sha256"]
         receipts = run_bench(data, at, vocabulary)

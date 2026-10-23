@@ -1,7 +1,7 @@
 {
   "layer": "events",
   "owner": "dojo 的 manager",
-  "what": "一个人的具体经历：原话优先，出处写成路径与行号。这一层只记报告，不当成「这条道成立」的证据；它证明的是「这个人这样经历/相信」。",
+  "what": "一个人的具体经历：原话优先，出处写成路径与行号。这一层只记报告，不当成「这条道成立」的证据；它证明的是「这个人这样经历/相信」。原稿的每一节、每一句他答过的话，都按同一规矩落在这里。",
   "person": {
     "id": "p-dojo",
     "label": "本仓的使用者（person）"
@@ -19,9 +19,17 @@
       "attribution": "person",
       "attribution_note": "仓库根的 user 原稿，按 README 保留原样、不改写。",
       "quote": "当前 AI 只能访问互联网上公开、主流、已被文字化的信息，无法触及大量真实世界中的隐性经验、局部洞察与失败教训。",
-      "source": {"path": "idea.md", "ref": "§1 愿景（第 13 行）；全文 15 节，从「一句话定义」写到「开放问题」", "commit": "41d925a"},
+      "source": {
+        "path": "idea.md",
+        "ref": "§1 愿景（第 13 行）；全文 15 节，从「一句话定义」写到「开放问题」",
+        "commit": "41d925a"
+      },
       "observed_action": "他把整件事的完整形状先写出来（定义、原则、边界、数据模型、路线图、开放问题），写完才谈实现；这份草案此后没有改成实现规格。",
-      "conditions": {"shape_possible": "能", "asked_consecutively": "否", "who_asks": "对方在问"},
+      "conditions": {
+        "shape_possible": "能",
+        "asked_consecutively": "否",
+        "who_asks": "对方在问"
+      },
       "reading": "推断：从他的产出是「一份完整草案、五个抽象章节之后才到数据模型」读岀他先要形状；他没有这样说过。"
     },
     {
@@ -30,9 +38,17 @@
       "attribution": "unverified",
       "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。",
       "quote": "用户喜欢先看到完整方案，再讨论细节。用户不喜欢连续被追问。",
-      "source": {"path": "docs/evidence/m2.1-person-profile/person.md", "ref": "第 5–6 行", "commit": "628e9ff"},
+      "source": {
+        "path": "docs/evidence/m2.1-person-profile/person.md",
+        "ref": "第 5–6 行",
+        "commit": "628e9ff"
+      },
       "observed_action": "他把「先看完整方案、不要连续追问」写进人物档案，要求以后每场都照它办。",
-      "conditions": {"shape_possible": "能", "asked_consecutively": "否", "who_asks": "对方在问"},
+      "conditions": {
+        "shape_possible": "能",
+        "asked_consecutively": "否",
+        "who_asks": "对方在问"
+      },
       "reading": "推断：两条写的是偏好，不是一件发生过的事；它不参与独立性计算。"
     },
     {
@@ -41,9 +57,17 @@
       "attribution": "relayed",
       "attribution_note": "root 转达的一句话，本仓没有那一场的 trace。",
       "quote": "还没。",
-      "source": {"path": "mail/2026-10-23-answer-unconfirmed-and-model.md", "ref": "第 9 行", "commit": "8ed7cb5"},
+      "source": {
+        "path": "mail/2026-10-23-answer-unconfirmed-and-model.md",
+        "ref": "第 9 行",
+        "commit": "8ed7cb5"
+      },
       "observed_action": "他没有为那扇门做任何维护动作，门就那样开着；后来是他自己跑了一局才把门关上（同一天的另一条记录）。",
-      "conditions": {"check_keeper": "人", "check_kind": "结构或模拟可跑", "judge": "另一个独立方"},
+      "conditions": {
+        "check_keeper": "人",
+        "check_kind": "结构或模拟可跑",
+        "judge": "另一个独立方"
+      },
       "reading": "推断：「还没」是一句状态，不是一个动作；把它读成「他不肯为这扇门做维护」是管理者的读法。"
     },
     {
@@ -52,9 +76,17 @@
       "attribution": "person",
       "attribution_note": "原话，一字未改。",
       "quote": "it's not user confirm, user is already detached, he's not responsible for challenging, your underlying network is. He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that.",
-      "source": {"path": "docs/proposal-knowledge-network.md", "ref": "第 104 行；§10 第 2 条（第 272 行）", "commit": "4897660"},
+      "source": {
+        "path": "docs/proposal-knowledge-network.md",
+        "ref": "第 104 行；§10 第 2 条（第 272 行）",
+        "commit": "4897660"
+      },
       "observed_action": "他把检验退回给网络：「你的底层网络负责」；他自己只留一个权利——随时问一句「你跑过模拟吗」。",
-      "conditions": {"check_keeper": "人", "check_kind": "结构或模拟可跑", "judge": "另一个独立方"},
+      "conditions": {
+        "check_keeper": "人",
+        "check_kind": "结构或模拟可跑",
+        "judge": "另一个独立方"
+      },
       "reading": "原话是他的；把它读成「持续检查该由系统接走」是管理者的读法。"
     },
     {
@@ -63,9 +95,16 @@
       "attribution": "relayed",
       "attribution_note": "root 记的是他问的问题，不是他的原话；引号内是 root 的转述。",
       "quote": "person 问的是\"copilot 还有额度吗，还是用池子里别的模型\"。",
-      "source": {"path": "mail/2026-10-23-answer-unconfirmed-and-model.md", "ref": "第 19 行", "commit": "8ed7cb5"},
+      "source": {
+        "path": "mail/2026-10-23-answer-unconfirmed-and-model.md",
+        "ref": "第 19 行",
+        "commit": "8ed7cb5"
+      },
       "observed_action": "他先问额度和要不要换模型，拿到一次真调用换来的读数之后，才让那一局跑。",
-      "conditions": {"payer": "他的额度或钱", "price_known": "能算出且高于察觉阈值"},
+      "conditions": {
+        "payer": "他的额度或钱",
+        "price_known": "能算出且高于察觉阈值"
+      },
       "reading": "转述 + 推断：把他读成「要先知道价才同意」是管理者的读法。"
     },
     {
@@ -74,10 +113,209 @@
       "attribution": "person",
       "attribution_note": "原话，一字未改；判断来自他那一局的体验，不来自 trace 文件。",
       "quote": "finished experiencing the product… way better than last time, I'm satisfied with the user experience part.",
-      "source": {"path": "docs/evidence/m1.5-checkpoint/person-2026-10-23.md", "ref": "第 9 行", "commit": "d850cca"},
+      "source": {
+        "path": "docs/evidence/m1.5-checkpoint/person-2026-10-23.md",
+        "ref": "第 9 行",
+        "commit": "d850cca"
+      },
       "observed_action": "他跑完一局，判断体验满意，并且说比上一次好得多。",
-      "conditions": {},
+      "conditions": {
+        "他跑过吗": "跑过",
+        "别人能不能替他判": "能"
+      },
       "reading": "原话是他的判断；把它读成「把追问压住让他更愿意继续」是管理者的读法，而两版之间不只改了这一件。"
+    },
+    {
+      "id": "ep-idea-2-1",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "对外不展示作者，不建立公开的“人 → 观点”映射。内部可使用匿名 ID，仅用于贡献统计、防滥用与权重计算。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 1 道无名（第 29–30 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：对外不展示作者，内部只用匿名号做统计、防滥用与权重。",
+      "conditions": {
+        "谁在读": "陌生人",
+        "要用它追责": "否"
+      },
+      "reading": "记录：这是他写下的做法，不是从别处推的。"
+    },
+    {
+      "id": "ep-idea-2-2",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "平台不裁判真理。任何道，只要逻辑自洽、说得通、不重复，都可以存在。包括极端、反主流、邪道。用户自行判断是否接受。但法律红线是生存底线，违法内容必须限制。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 2 不保证正确，只保证可论（第 33–35 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：平台不裁判真理，只要自洽、说得通、不重复就能存在；但法律红线是底线。",
+      "conditions": {
+        "内容越过红线": "否",
+        "要当依据": "否"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-2-3",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "道场不是微博、论坛或搜索引擎。没有公开帖子流、没有排名、没有粉丝、没有点赞。用户通过自然语言与 AI 对话，AI 在后台匹配、诊断、补全、推演、合成道。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 3 对话即入口，无信息流（第 38–39 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：没有帖子流、排名、粉丝、点赞；入口是对话。",
+      "conditions": {
+        "库的规模": "几百条，检索排得出"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-2-4",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "只存储剥离了具体约束的核心方法论、指导原则、思想结构。具体案例、原始对话、个人经验用于提炼，提炼后不长期保留。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 4 纯道层，不存具体案例（第 42–43 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：只存剥离约束的方法论；案例用于提炼，之后不长期保留。",
+      "conditions": {
+        "要不要回头核": "不核"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-2-6",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "用户与 AI 的私人对话消耗自己的 token 或额度。公共道藏的维护、抽象、去重、传播，由捐赠的 token、API 额度、算力或资金支持。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 6 个人对话自付算力，公共维护靠捐赠（第 50–51 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：私人对话花自己的额度，公共维护靠捐赠的额度或算力。",
+      "conditions": {
+        "谁在付": "用的人自己",
+        "捐赠够不够": "够"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-2-7",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "后台不全量实时维护。只有新道入库、冲突、高引用、实践反馈等事件触发深度处理。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 7 事件驱动维护（第 54 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：后台不全量实时维护，只在事件上做深度处理。",
+      "conditions": {
+        "要回答的问题": "一条道上的一次改动"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-2-8",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "不设公开排行榜。仅当用户主动检索时，可按共识度、引用数、实践数等给出默认阅读顺序。这不是平台运营机制，只是检索呈现方式。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§2 核心原则 8 多视图，非排名（第 57–58 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：不设公开榜；检索时可以给默认阅读顺序，但那只是呈现方式。",
+      "conditions": {
+        "库的规模": "几百条，检索排得出"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-11-1",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "选择一个垂直领域，例如“旋转小火锅如何提高坪效”。拉 10～30 个正在做事、有真实问题的人。使用最简陋工具：群聊 + AI 助手 + 共享文档。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§11.1 第一步（第 227–229 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：先选一个垂直领域、拉 10～30 个正在做事的人、用最简陋的工具跑闭环。",
+      "conditions": {
+        "工具卡住人了吗": "没卡住",
+        "手上有什么": "只有群聊与文档"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-philosophy-evidence",
+      "at": "2026-10-21",
+      "attribution": "relayed",
+      "attribution_note": "philosophy.md 把这一条列在他明确说明的优先事项里；措辞是记录的整理，不是他的原话。",
+      "quote": "| 经验证据 | 经验报告可能伪造。核对时必须区分独立来源和重复传播；不能据此编造成功概率。 | 不以重复次数、引用或声称替代核验。 |",
+      "source": {
+        "path": "docs/philosophy.md",
+        "ref": "经验证据 一行（第 11 行）",
+        "commit": "a4d438c"
+      },
+      "observed_action": "记录下来的优先事项：核对时要区分独立来源与重复传播，不拿重复次数、引用或声称替代核验。",
+      "conditions": {
+        "曝光与同源记全了吗": "记全了"
+      },
+      "reading": "转述：这是他确认过的优先事项，措辞由记录整理。"
+    },
+    {
+      "id": "ep-idea-8-identity",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "内部使用匿名 ID，仅用于防滥用、限流、贡献统计。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§8 身份、贡献与权重（第 192 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：对外的名字拿掉，内部的号只用来防滥用、限流与统计。",
+      "conditions": {
+        "谁在读": "陌生人",
+        "要用它追责": "否"
+      },
+      "reading": "记录：这是他写下的做法。"
+    },
+    {
+      "id": "ep-idea-8-weight",
+      "at": "2026-10-15",
+      "attribution": "person",
+      "attribution_note": "他本人的原稿，按 README 保留原样。",
+      "quote": "权重来源：被合并次数、被引用数、跨域采纳、实践反馈。",
+      "source": {
+        "path": "idea.md",
+        "ref": "§8 身份、贡献与权重（第 193 行）",
+        "commit": "41d925a"
+      },
+      "observed_action": "他写下：权重来自被合并次数、被引用数、跨域采纳与实践反馈。",
+      "conditions": {
+        "从哪条信号取权重": "重复与引用次数"
+      },
+      "reading": "记录：这是他写下的做法。"
     }
   ]
 }

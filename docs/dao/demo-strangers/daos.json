@@ -14,13 +14,26 @@
       "situation": {
         "who": "一个想靠重复行为维持某个状态的人（房间整洁、按点写东西），动机不足以单独支撑",
         "when": "这个行为会重复发生，而正确动作的准备太麻烦；行为本身不构成能力练习",
-        "constraints": ["环境由自己控制", "行为会重复发生", "行为本身没有训练价值"],
-        "domain": ["日常重复行为", "工具与流程"],
-        "covers": ["ep-demo-m02", "ep-demo-m03"]
+        "constraints": [
+          "环境由自己控制",
+          "行为会重复发生",
+          "行为本身没有训练价值"
+        ],
+        "domain": [
+          "日常重复行为",
+          "工具与流程"
+        ],
+        "covers": [
+          "ep-demo-m02",
+          "ep-demo-m03"
+        ]
       },
       "tension": {
         "name": "省力 vs 练习",
-        "sides": ["更容易开始", "在困难里练出来的能力"],
+        "sides": [
+          "更容易开始",
+          "在困难里练出来的能力"
+        ],
         "why": "降低摩擦让人更容易开始，也把「在困难里坚持」那部分能力从流程里拿走了；两样不能同时拿满。"
       },
       "move": {
@@ -30,28 +43,105 @@
         "magnitude": "只减到「能开始」为止；难的、有练习价值的那一步保留"
       },
       "price": [
-        {"what": "一次性重设环境与归位路径", "unit": "时间", "who": "他"},
-        {"what": "失去在困难里练出来的那部分能力", "unit": "能力", "who": "他"},
-        {"what": "别人可能找不到东西", "unit": "关系", "who": "别人"}
+        {
+          "what": "一次性重设环境与归位路径",
+          "unit": "时间",
+          "who": "他"
+        },
+        {
+          "what": "失去在困难里练出来的那部分能力",
+          "unit": "能力",
+          "who": "他"
+        },
+        {
+          "what": "别人可能找不到东西",
+          "unit": "关系",
+          "who": "别人"
+        }
       ],
       "off": [
-        {"when": "这个行为本身的价值就是练习（体能、专注、手艺）", "axis": "value_is_practice", "value": "是练习", "then_kind": "reverse", "then": "保留有意义的难度，只去掉与目标无关的无谓摩擦"},
-        {"when": "摩擦本身是安全检查或学习步骤", "axis": "friction_role", "value": "安全检查或学习步骤", "then_kind": "reverse", "then": "不降这一步；降了等于去掉一次检查"}
+        {
+          "when": "这个行为本身的价值就是练习（体能、专注、手艺）",
+          "axis": "value_is_practice",
+          "value": "是练习",
+          "then_kind": "reverse",
+          "then": "保留有意义的难度，只去掉与目标无关的无谓摩擦"
+        },
+        {
+          "when": "摩擦本身是安全检查或学习步骤",
+          "axis": "friction_role",
+          "value": "安全检查或学习步骤",
+          "then_kind": "reverse",
+          "then": "不降这一步；降了等于去掉一次检查"
+        }
       ],
       "axes": {
-        "value_is_practice": ["否", "是练习"],
-        "friction_role": ["只是麻烦", "安全检查或学习步骤"]
+        "value_is_practice": [
+          "否",
+          "是练习"
+        ],
+        "friction_role": [
+          "只是麻烦",
+          "安全检查或学习步骤"
+        ]
       },
       "rule": [
-        {"when": {"value_is_practice": "是练习"}, "kind": "reverse", "action": "保留有意义的难度，只去掉与目标无关的无谓摩擦"},
-        {"when": {"friction_role": "安全检查或学习步骤"}, "kind": "reverse", "action": "不降这一步；降了等于去掉一次检查"},
-        {"when": {"value_is_practice": "否", "friction_role": "只是麻烦"}, "kind": "apply", "action": "把摩擦降在开始这一侧：减少与目标无关的步骤，核心动作的难度不动"}
+        {
+          "when": {
+            "value_is_practice": "是练习"
+          },
+          "kind": "reverse",
+          "action": "保留有意义的难度，只去掉与目标无关的无谓摩擦"
+        },
+        {
+          "when": {
+            "friction_role": "安全检查或学习步骤"
+          },
+          "kind": "reverse",
+          "action": "不降这一步；降了等于去掉一次检查"
+        },
+        {
+          "when": {
+            "value_is_practice": "否",
+            "friction_role": "只是麻烦"
+          },
+          "kind": "apply",
+          "action": "把摩擦降在开始这一侧：减少与目标无关的步骤，核心动作的难度不动"
+        }
       ],
       "provenance": [
-        {"person": "synthetic-demo", "episode": "ep-demo-m02", "status": "推得", "learned_from": "未记录", "exposure": "none-at-time"},
-        {"person": "synthetic-demo", "episode": "ep-demo-m03", "status": "推得", "learned_from": "未记录", "exposure": "none-at-time", "note": "同一张道的另一条条件路线"},
-        {"person": "synthetic-demo", "episode": "ep-demo-m04", "status": "传闻", "learned_from": "未记录", "exposure": "none-at-time", "note": "模拟角色的一句自述，只能旁证"}
-      ]
+        {
+          "person": "synthetic-demo",
+          "episode": "ep-demo-m02",
+          "status": "推得",
+          "learned_from": "未记录",
+          "exposure": "none-at-time"
+        },
+        {
+          "person": "synthetic-demo",
+          "episode": "ep-demo-m03",
+          "status": "推得",
+          "learned_from": "未记录",
+          "exposure": "none-at-time",
+          "note": "同一张道的另一条条件路线"
+        },
+        {
+          "person": "synthetic-demo",
+          "episode": "ep-demo-m04",
+          "status": "传闻",
+          "learned_from": "未记录",
+          "exposure": "none-at-time",
+          "note": "模拟角色的一句自述，只能旁证"
+        }
+      ],
+      "part_sources": {
+        "situation": "推断",
+        "tension": "推断",
+        "move": "推断",
+        "price": "推断",
+        "off": "推断",
+        "provenance": "记录"
+      }
     }
   ]
 }

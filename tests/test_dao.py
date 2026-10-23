@@ -20,7 +20,7 @@ dao_life = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(dao_life)
 
 AT = "2026-10-23T22:00:00Z"
-LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json")
+LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json")
 
 
 class DaoLifeTests(unittest.TestCase):
@@ -51,6 +51,7 @@ class DaoLifeTests(unittest.TestCase):
             "observations": self.read("observations.json", library),
             "exposures": self.read("exposures.json", library),
             "map": self.read("map.json", library),
+            "refusals": self.read("refusals.json", library),
             "root": str(self.dir / library),
         }
         return data
@@ -63,16 +64,76 @@ class DaoLifeTests(unittest.TestCase):
         return dao_life.main(argv)
 
     # --- the real library ------------------------------------------------
-    def test_person_library_passes_both_network_checks_and_marks_every_landing_weak(self):
+    def test_person_library_passes_both_network_checks_on_every_entry(self):
         receipts = self.bench()
-        self.assertEqual(len(receipts), 3)
+        self.assertEqual(len(receipts), 13)
         for dao_id, receipt in receipts.items():
             self.assertEqual(receipt["structure"]["verdict"], "pass", (dao_id, receipt["structure"]["failures"]))
             self.assertEqual(receipt["falsifiable"]["verdict"], "pass", (dao_id, receipt["falsifiable"]["notes"]))
-            self.assertEqual(receipt["field"]["verdict"], "pass", dao_id)
-            self.assertIn("弱", receipt["field"]["strength"], dao_id)
-        self.assertEqual(receipts["dojo-d-001"]["field"]["observation"]["kind"], "agent_self")
-        self.assertEqual(receipts["dojo-d-003"]["field"]["observation"]["kind"], "later_session")
+        for dao_id in ("dojo-d-001", "dojo-d-002", "dojo-d-003"):
+            self.assertEqual(receipts[dao_id]["field"]["verdict"], "pass", dao_id)
+            self.assertIn("弱", receipts[dao_id]["field"]["strength"], dao_id)
+        unrun = [dao_id for dao_id, receipt in receipts.items() if receipt["field"]["verdict"] == "not_run"]
+        self.assertEqual(len(unrun), 10)
+
+    def test_every_unrun_entry_states_what_would_ground_it(self):
+        data = self.dossiers()
+        needed = {item["dao"] for item in data["observations"]["needed"]}
+        receipts = self.bench()
+        for dao in data["daos"]["daos"]:
+            if receipts[dao["id"]]["field"]["verdict"] == "not_run":
+                self.assertIn(dao["id"], needed)
+
+    def test_the_library_shows_what_it_refused_and_by_which_part(self):
+        data = self.dossiers()
+        failures, summary = dao_life.check_library(data)
+        self.assertEqual(failures, [])
+        self.assertEqual(summary["entered"], 13)
+        self.assertEqual(summary["refused"], 9)
+        self.assertEqual(summary["refusal_counts"]["张力"], 4)
+        self.assertEqual(summary["refusal_counts"]["重复"], 1)
+        parts = {"情境", "张力", "动作", "代价", "失效", "归属", "重复"}
+        for item in data["refusals"]["items"]:
+            self.assertTrue(set(item["missing"]) <= parts, item["id"])
+            self.assertTrue(item["why"])
+            self.assertTrue(item["source"]["path"])
+        page = dao_life.render(data, self.bench(), AT, {}, self.vocabulary())
+        self.assertIn("没进库的东西：写不成道的材料", page)
+        self.assertIn("按缺的那一件数", page)
+        self.assertIn("六件按来源合计", page)
+        self.assertIn("情境 推断 13", page)
+
+    def test_a_refusal_without_its_missing_part_is_refused(self):
+        data = self.read("refusals.json")
+        del data["items"][0]["missing"]
+        self.write("refusals.json", data)
+        self.assertEqual(self.run_command(), 1)
+
+    def test_a_duplicate_pair_inside_one_library_is_refused(self):
+        data = self.dossiers()
+        dao = copy.deepcopy(data["daos"]["daos"][0])
+        dao["id"] = "dojo-d-999"
+        dao["version"] = 1
+        data["daos"]["daos"] = data["daos"]["daos"] + [dao]
+        failures, summary = dao_life.check_library(data)
+        self.assertTrue(summary["relations"])
+        self.assertTrue(any("同一条" in line for line in failures), failures)
+
+    def test_two_entries_that_contradict_must_be_registered(self):
+        data = self.dossiers()
+        failures, summary = dao_life.check_library(data)
+        self.assertEqual([r["kind"] for r in summary["relations"]], ["相反"])
+        self.assertEqual(failures, [])
+        data["map"]["contradictions"] = []
+        failures, _ = dao_life.check_library(data)
+        self.assertTrue(any("contradictions" in line for line in failures), failures)
+
+    def test_a_dao_without_declared_part_sources_is_refused(self):
+        data = self.dossiers()
+        del data["daos"]["daos"][4]["part_sources"]
+        receipt = self.bench(data)[data["daos"]["daos"][4]["id"]]["structure"]
+        self.assertEqual(receipt["verdict"], "fail")
+        self.assertTrue(any("part_sources" in item or "六件各自写明" in item for item in receipt["failures"]), receipt["failures"])
 
     def test_each_falsifiable_receipt_carries_two_situations_two_actions_and_a_conclusion(self):
         data = self.dossiers()
@@ -199,8 +260,11 @@ class DaoLifeTests(unittest.TestCase):
         episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
         for dao in data["daos"]["daos"]:
             line = dao_life.status_of(dao, receipts[dao["id"]], episodes)["line"]
-            self.assertIn("检（3/3", line, line)
-            self.assertIn("弱", line, line)
+            if dao["id"] in {"dojo-d-001", "dojo-d-002", "dojo-d-003"}:
+                self.assertIn("检（3/3", line, line)
+                self.assertIn("弱", line, line)
+            else:
+                self.assertIn("未检（2/3", line, line)
 
     def test_the_dao_the_three_suggest_is_named_but_not_counted(self):
         data = self.dossiers()

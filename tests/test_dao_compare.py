@@ -20,7 +20,7 @@ SPEC.loader.exec_module(dao_life)
 
 AT = "2026-10-23T22:00:00Z"
 LIBRARIES = ("person-dojo", "demo-strangers")
-LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json")
+LIBRARY_FILES = ("episodes.json", "daos.json", "observations.json", "exposures.json", "map.json", "refusals.json")
 
 
 class DaoCompareTests(unittest.TestCase):
@@ -31,7 +31,8 @@ class DaoCompareTests(unittest.TestCase):
         for name in LIBRARIES:
             (self.dir / name).mkdir()
             for file_name in LIBRARY_FILES:
-                shutil.copy(DAO / name / file_name, self.dir / name / file_name)
+                if (DAO / name / file_name).exists():
+                    shutil.copy(DAO / name / file_name, self.dir / name / file_name)
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -52,6 +53,7 @@ class DaoCompareTests(unittest.TestCase):
             "observations": self.read("observations.json", library),
             "exposures": self.read("exposures.json", library),
             "map": self.read("map.json", library),
+            "refusals": self.read("refusals.json", library) if (self.dir / library / "refusals.json").exists() else {"items": []},
             "root": str(self.dir / library),
         }
 
