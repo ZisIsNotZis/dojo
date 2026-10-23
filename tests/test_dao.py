@@ -63,17 +63,16 @@ class DaoLifeTests(unittest.TestCase):
         return dao_life.main(argv)
 
     # --- the real library ------------------------------------------------
-    def test_person_library_passes_both_network_checks_and_keeps_its_unrun_cell(self):
+    def test_person_library_passes_both_network_checks_and_marks_every_landing_weak(self):
         receipts = self.bench()
         self.assertEqual(len(receipts), 3)
         for dao_id, receipt in receipts.items():
             self.assertEqual(receipt["structure"]["verdict"], "pass", (dao_id, receipt["structure"]["failures"]))
             self.assertEqual(receipt["falsifiable"]["verdict"], "pass", (dao_id, receipt["falsifiable"]["notes"]))
-        self.assertEqual(receipts["dojo-d-001"]["field"]["verdict"], "pass")
+            self.assertEqual(receipt["field"]["verdict"], "pass", dao_id)
+            self.assertIn("弱", receipt["field"]["strength"], dao_id)
         self.assertEqual(receipts["dojo-d-001"]["field"]["observation"]["kind"], "agent_self")
-        self.assertIn("弱", receipts["dojo-d-001"]["field"]["strength"])
-        self.assertEqual(receipts["dojo-d-003"]["field"]["verdict"], "not_run")
-        self.assertIsNone(receipts["dojo-d-003"]["field"]["observation"])
+        self.assertEqual(receipts["dojo-d-003"]["field"]["observation"]["kind"], "later_session")
 
     def test_each_falsifiable_receipt_carries_two_situations_two_actions_and_a_conclusion(self):
         data = self.dossiers()
@@ -189,6 +188,42 @@ class DaoLifeTests(unittest.TestCase):
         self.assertIn("这张图是一个人的", page)
         self.assertIn("人类的道", page)
         self.assertNotIn("已经是人类的道", page)
+
+    # --- depth on the first person ---------------------------------------
+    def test_every_entry_that_was_unchecked_has_an_answer_now(self):
+        receipts = self.bench()
+        for dao_id in ("dojo-d-001", "dojo-d-002", "dojo-d-003"):
+            self.assertEqual(receipts[dao_id]["field"]["verdict"], "pass", dao_id)
+            self.assertIn("弱", receipts[dao_id]["field"]["strength"], dao_id)
+        data = self.dossiers()
+        episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+        for dao in data["daos"]["daos"]:
+            line = dao_life.status_of(dao, receipts[dao["id"]], episodes)["line"]
+            self.assertIn("检（3/3", line, line)
+            self.assertIn("弱", line, line)
+
+    def test_the_dao_the_three_suggest_is_named_but_not_counted(self):
+        data = self.dossiers()
+        dao_ids = {dao["id"] for dao in data["daos"]["daos"]}
+        candidates = data["map"]["candidates"]
+        self.assertTrue(candidates)
+        for candidate in candidates:
+            self.assertNotIn(candidate["id"], dao_ids)
+            for source in candidate["suggested_by"]:
+                self.assertIn(source, dao_ids)
+            self.assertTrue(candidate["why_not_entered"])
+            self.assertTrue(candidate["what_would_support_it"])
+        page = dao_life.render(data, self.bench(), AT, {}, self.vocabulary())
+        self.assertIn("候选（还不成立，所以没进库）", page)
+        self.assertIn(candidates[0]["id"], page)
+        self.assertIn("3 条道", page)
+
+    def test_a_candidate_without_its_missing_part_is_refused(self):
+        data = self.read("map.json")
+        del data["candidates"][0]["why_not_entered"]
+        self.write("map.json", data)
+        self.assertEqual(self.run_command(), 1)
+        self.assertEqual(sorted(path.name for path in (self.dir / "person-dojo").iterdir() if path.name not in set(LIBRARY_FILES)), [])
 
     # --- the pending line stays pending ---------------------------------
     def test_the_pending_boundary_is_not_written_into_the_product_documents(self):

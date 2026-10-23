@@ -464,11 +464,31 @@
         },
         "field": {
           "kind": "field",
-          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
-          "observation": null,
-          "ran": null,
+          "note": "观察晚于案例，且不是被问出来的；它证明的是一条相符或相悖的观察存在，不是这条道为真。",
+          "observation": {
+            "at": "2026-10-23T13:11:00Z",
+            "at_basis": "三条答复记在 proposal-knowledge-network.md §10，提交 4897660（2026-10-23 21:11 +0800 = 13:11Z）；询价那一件在邮件 8ed7cb5（20:23 +0800 = 12:23Z）。先后由这两次提交定，不凭回忆。",
+            "confound": "他可能没读那张价表；三个决定本来也不贵，价不会改变答案；「没再问」不等于「因为看见了价」。",
+            "dao": "dojo-d-003",
+            "elicited": false,
+            "episode": "ep-2026-10-23-quota",
+            "id": "ob-2026-10-23-price-beside",
+            "kind": "later_session",
+            "matched": true,
+            "note": "第九节的价表（人时、机时、调用、付款人）写在三个决定旁边，之后他把三条一次答完，没有再问价——这一条只说明「价在旁」与「答一次」同时发生过。",
+            "person": "p-dojo",
+            "prediction": "把价与上限写在决定旁边之后，他会把决定一次答完，不再为价多问一轮。",
+            "strength_note": "不是一场对话，是一次书面答复的记录；比会话弱一点，但同样是自然出现的，不是被追问出来的。"
+          },
+          "ran": {
+            "at": "2026-10-23T14:02:48Z",
+            "by": "scripts/dao_life.py/field-v1",
+            "on_digest": "a4b0c7e232c3",
+            "on_version": 1
+          },
           "rejected": [],
-          "verdict": "not_run"
+          "strength": "他人的后续·弱（不是对照）",
+          "verdict": "pass"
         },
         "structure": {
           "checks": [
@@ -581,13 +601,13 @@
           ],
           [
             "落地",
-            "not_run"
+            "pass"
           ]
         ],
-        "count": 2,
-        "line": "自述（转述） · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
-        "mark": "未检",
-        "word": "自述（转述）"
+        "count": 3,
+        "line": "验过（弱：后续，非对照） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "mark": "检",
+        "word": "验过（弱：后续，非对照）"
       },
       "version": 1
     }
@@ -596,8 +616,8 @@
     "daos": "d3cbf3617dcb1bdfa3a0da486a067b1d321a3f1ecd99af17fe866b8516a0903c",
     "episodes": "2c6582b0bc3e2fc1db9cb01cda20829bc17bb88fa2213aca009dfa9b56550e40",
     "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
-    "map": "2d8f95d2e6d14eafe466b36acf85f1c68d6cfa7f544076ca8315507fc489f982",
-    "observations": "90ead6a733be953a365b5419f8b7c616c33e4be081ed682a132107c0ffcbf284"
+    "map": "a948cf46e8d67d3e0e31e719384da8f024afb230420844dbf6877f2787790c78",
+    "observations": "5994e9469b86f38333b0d8127ad3588e9f4343bab15aeb3e2fefd58a26251700"
   },
   "layer": "checks"
 }
