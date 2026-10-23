@@ -13,7 +13,7 @@
 - **M2 作为里程碑仍未达成**：拦它的不再是 M1.5 的门（已由 person 那一局关闭），而是 `m2e` 没跑、person 没看过提炼清单。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
 - 派发状态一句话：`m2f` 不跑（门已由 person 关闭）；`m2a`/`m2c` 已就位，`m2b` 缺一次真实模型判定、`m2e` 缺整场跑；实验 harness 排队等一个完整包位（见 `## 实验 harness`）；M2 之外无在跑工作包，下一件大事是 person 判 `docs/proposal-knowledge-network.md`。
-- **本轮推进做了什么**：把 person 2026-10-23 的检查点判断按「判断来自他的会话、不来自 trace」落盘（`docs/evidence/m1.5-checkpoint/person-2026-10-23.md`），据此关掉 `m2f` 并改掉本页与目录 README 里那条等待窗；同时写出他当天要的底层知识网络提案（`docs/proposal-knowledge-network.md`），只提案、不动 M2/M3/M4 的边界。本轮的机器时间里没有一次计量调用。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
+- **本轮推进做了什么**：把 person 2026-10-23 的检查点判断按「判断来自他的会话、不来自 trace」落盘（`docs/evidence/m1.5-checkpoint/person-2026-10-23.md`），据此关掉 `m2f` 并改掉本页与目录 README 里那条等待窗；同时写出他当天要的底层知识网络提案（`docs/proposal-knowledge-network.md`），只提案、不动 M2/M3/M4 的边界。本轮有一次小的计量支出：一个检索子代理读了前人项目的原始页面（≤ ¥2），没有给 person 写任何模型回答。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：`m2e` 没跑，用户没看过提炼清单。
 - **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
 - **证据块只写命令跑出来的东西**：作废的是一件具体的事——提交计数行由记忆生成而非由命令生成，因此同一命令在绑定修订上返回的数不是它印的数。此后任何证据块写之前先跑，数字从输出复制；命令保留，数不保留。
