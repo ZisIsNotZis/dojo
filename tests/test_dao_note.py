@@ -126,6 +126,11 @@ class NoteIngestTests(unittest.TestCase):
             dao_life.load_library(self.session)
         self.assertIn("extraction.json", str(caught.exception))
 
+    def test_a_missing_vocabulary_is_refused_not_crashed(self):
+        (self.dir / "vocabulary.json").unlink()
+        self.assertEqual(self.run_command(), 1)
+        self.assertEqual(self.written(), [])
+
     def test_an_extraction_without_a_source_class_is_refused(self):
         value = self.extraction()
         del value["attribution"]

@@ -1112,7 +1112,13 @@ def main(argv: list[str]) -> int:
         print(f"不认识的参数：{token}")
         return 2
 
-    vocabulary = load(vocabulary_path or (root.parent / "vocabulary.json"))
+    vocabulary_file = vocabulary_path or (root.parent / "vocabulary.json")
+    try:
+        vocabulary = load(vocabulary_file)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"拒收（{root.parent}）：词表读不出来：{error}")
+        print("词表默认取数据目录上一层的 vocabulary.json，可用 --vocabulary 指定。没有写任何文件。")
+        return 1
     try:
         data = load_library(root)
         inputs = {name: digest(data[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}

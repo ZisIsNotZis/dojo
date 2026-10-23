@@ -69,6 +69,7 @@ person 的答复只有一句"ok"。
 - 文件头四行必须写：`person:`、`date:`、`minutes:`、`sample:`（`acquaintances` 或 `strangers`）。
 - 正文两节：`## 逐字`（照第 1 节记）和 `## 张力`（照第 2 节写）。
 - 合并登记：`docs/probe/notes/merges.md`，一行一条 `A ↔ B = C ↔ D`，后面写谁判的、为什么。
+- **笔记写完之后怎么进库**：把 `p1.md` 放一个目录、旁边放一份提炼（`extraction.json`），`python3 scripts/dao_life.py <目录>` 会把它跑成一条带回执的道；路径、拒收条件与例子见 `docs/dao/README.md`。这一步在笔记本子之外，不改本页任何规则。
 - **一条命令**（不调模型，纯本地计算）：
 
 ```sh
