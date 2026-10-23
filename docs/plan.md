@@ -6,10 +6,12 @@
 
 - **下一个里程碑是 M2**，由 root 于 2026-10-21 判定并接受；assent：agreed。依据：commit `7753d73` 里的 `mail/2026-10-21-answers.md`（该文件按 `inbox/README.md` 的读后即删约定已删除，git 历史里仍在）。M2 的边界与验收以本页 `## M2` 五条为准，不另立编号。
 - **M2 的独立评审已到，判定为 fail**：在 `939bf90` 上五条验收只有 ⑤ 成立，且 ⑤ 在基线 `621bf26` 就已存在，因此不能算那一轮的推进。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict.md`，绑定 `939bf90`，只在那个修订上可复核；此后代码一动其命令与命中数即过期，须重跑而非引用。它同时指出：M2 五条当时**没有一条有验收命令**，所以"98 项测试通过"对 M2 什么都证明不了。
-- **M2 作为里程碑仍未达成，门仍在。** 入口条件是用户对 M1 / M1.5 用户检查点的确认；该问题在用户手里，仓库内没有可复核的落盘记录，只能等，不能代替他答。**不依赖该门的 M2 能力包已按 root 2026-10-21 的契约落地**（见 `## 不依赖门的 M2 能力包`）：写代码、带验收命令，但不宣布 M2 通过，不把提炼清单交用户过目，不开始依赖 M2 的 M3。
+- **M1.5 的状态是「未确认」，既不是通过也不是否决**：root 2026-10-23 转达 person 的话「还没。」，原文在 `mail/2026-10-23-answer-unconfirmed-and-model.md`（`8ed7cb5`）。M1 与 M1.5 的用户检查点因此仍开着，本页不签它们，也不把「已确认」当成已到手的东西来引用。
+- **M2 的进门条件就是把 M1.5 的检查点重跑一遍**：M2 的第一个包是 `m2f checkpoint-rerun`（见 `## M2 的工作包与依赖`），它跑一局、留 trace、把路径写进 `docs/evidence/m1.5-checkpoint/` 的记录；这一局可以由模型跑，但「person 亲手跑过」仍然只有 person 能给，重跑只保证 M2 不盖在空气上。
+- **M2 作为里程碑仍未达成**，但拦它的不再是「person 先确认 M1.5」这一条等待（root 2026-10-23 把它改成进门条件：先跑 `m2f`）。`m2e` 没跑、person 没看过提炼清单之前，M2 不按通过记。
 - `docs/evidence/m2.0-stance-search` 与 `m2.1-person-profile` 是 M2 伞下的证据目录，不是里程碑，也不是对 M2 的重新编号；assent：assumed（root，2026-10-21）。
-- 派发状态一句话：M2 待门；M2 之外无在跑工作包。
-- **本轮推进做了什么**：上一轮是 `plan-truthtelling`、`scratch-retire`、`m2-prep`，零行代码，评审据此判 M2 fail；本轮是不依赖门的 M2 能力包加两个缺陷修复，每条带命令，见 `## 不依赖门的 M2 能力包`。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
+- 派发状态一句话：M2 等 `m2f` 跑完（未派发，它要花模型钱）；M2 之外无在跑工作包。
+- **本轮推进做了什么**：这一轮只有三件事——把 root 2026-10-23 的答复落盘（`8ed7cb5`）、让 trace 每轮记下这一局用的模型（`605cfd7`）、把 M2 的进门条件写成 `m2f` 并把 person 亲手玩的那一条命令写进本页。零行 M2 代码，不关 M1/M1.5。提交范围看 `git log --oneline origin/master..HEAD`，未推送。
 - **M2 五条现在各自的判定依据**：① 仍不可判（没有提炼结果可抽，`classify` 报 `unavailable`）；② 有实现与命令（`broadcast` 拒收单一会话来源，`export --mode c` 同样拒收）；③ 有实现与命令（`add` 拒绝重复内容，不产生新版本）；④ 有实现与命令（`pipeline` 重跑写 0 条事件）；⑤ 仍是已存在的存储能力，判定依据照旧是 `tests/test_storage.py` 的那条测试。①②③④⑤ 仍**不构成 M2 通过**：门没过，`m2e` 没跑，用户没看过提炼清单。
 - **第二轮独立评审判 fail（三处），三处已关**：① 隔离守卫读「没有任何独立性组」的卡时把空集当成“非单一会话”而放行；② `test_live.py` 的扫描范围比它声称的窄（`search.py` 发 HTTP 却不被扫）；③ 上一份报告的证据行凭记忆写了提交计数，而命令不返回那个数。原文在 `docs/evidence/reviews/2026-10-21-advance-review-verdict-d915520.md`，绑定 `d915520`，只在那个修订上可复核。三处的复现与复跑见本页 `## 不依赖门的 M2 能力包` 的 `isolation-guard` 行与 `## 证据卫生`。
 - **证据块只写命令跑出来的东西**：作废的是一件具体的事——提交计数行由记忆生成而非由命令生成，因此同一命令在绑定修订上返回的数不是它印的数。此后任何证据块写之前先跑，数字从输出复制；命令保留，数不保留。
@@ -37,6 +39,14 @@
 | 单个里程碑模型调用总量 | ≤ 40 次 |
 
 `discuss` 使用 `DOJO_LLM_REASONING` 控制推理等级，默认 `medium`，允许 `low`、`medium`、`high`；模型调用成本由推理等级控制，不通过降低 `max_tokens` 控成本。若端点以 HTTP 400 明确拒绝该字段，本场改为不带字段重试一次并记录降级。
+
+## 模型与额度（2026-10-23 的读数）
+
+- **默认就用 `github_copilot/gpt-6-luna`**（`dojo/live.py:18` 的 `DEFAULT_MODEL`，即端点公布的下划线写法），不在 person 亲手玩的一局上省额度。
+- **掉配额或 429 时的备用池子，不改代码**，用 `DOJO_LLM_MODEL` 覆盖即可：`siemens/deepseek-v4.1-flash`（内网、最便宜）、`volcengine/kimi-k3`、`volcengine/glm-5.3-flash`，都经 `127.0.0.1:4000`。
+- **换模型必须写进那一局的记录**：trace 的每一轮与 `session_end` 现在带 `model` 字段（`605cfd7`），换的理由与花费写在该局证据目录的 `provenance.md`；换过模型的局不能与旧局直接比读数。
+- **读数出自 root 2026-10-23 的一次真调用**：`gpt-6-luna` 经 `api.business.githubcopilot.com/responses` 返回 HTTP 200，回显用量 12 input + 5 output token = `total_nano_aiu: 370000`（0.00037 AIU）；座位 `copilot_standalone_seat_quota`，`limited_user_quotas: null`，token 每天轮转。这是那一天的读数，不是今天的；本仓没有复探，复探要花模型钱。
+- **换算从收据本身来**：input 10 AIU/1M、output 50 AIU/1M，所以一场几百轮、几万 token 的会话是 AIU 的零头，咬人的是整夜连跑多局。
 
 ## M1 `discuss`：零结构负担的对齐式对话
 
@@ -113,11 +123,14 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 
 | 包 | 结果 | 验收 | 已有 / 缺 |
 |---|---|---|---|
+| `m2f checkpoint-rerun`（M2 的第一个包，进门条件） | 跑完一局 `discuss`，trace 落盘，路径与该局的模型、请求数写进 `docs/evidence/m1.5-checkpoint/rerun-<日期>.md`；这一局不签 M1.5，只证明 M2 起步时脚下有东西 | M1.5 ①②③ 在重跑范围内可观察的部分 | 缺：本轮的跑与记录 |
 | `m2a pipe-core` | 会话结束触发一次有序 pass 运行；每个 pass 见到"已处理到版本 N"；同一会话重跑不产生第二份事件 | ④ | 运行器、pass 顺序与幂等标记已落地（`pipe-core`）；仍缺的是**会话末自动触发**：`discuss` 结尾只写一条 `session_end` 轨迹事件，现在要先手动跑 `pipeline --session` |
 | `m2b classify` | 每条 draft 卡带上 `kind` | ① | 部分：`store.add(..., kind=...)` 已收 kind，缺的是自动判定与抽检输出 |
 | `m2c locate` | 透明检索给出 新 / 变体 / 重复 三分类，重复不改版本 | ③ | 已落地（`duplicate-content` 与 `pipe-core` 的 locate pass）：`add` 按内容拒绝重复且不写版本，locate pass 对每张卡给出 新/变体/重复 的提议。三分类目前只在管线里可见，尚未接成一条给用户看的提炼清单 |
 | `m2d challenge` | 成立的挑战把卡置为 `challenged` 并保留旧版本 | ⑤ | **已有**：`Store.challenge` 已置 `challenged` 且快照只增不改，由 `tests/test_storage.py` 的 `test_challenge_revision_and_alias_link_versions_preserve_sources` 覆盖；`challenge` pass 现在会提议（同一批词、肯定/否定相反）；缺的是"谁来执行提议"，因为 pass 按设计只提议不调用 |
 | `m2e integrate` | 整场会话跑完的结论清单，用户过目；单会话来源不入广播 | ①②③④⑤ | **缺**：整场跑一遍、结论清单、测试报告 |
+
+`m2f checkpoint-rerun` 的验收用一条命令读：`python3 -c "import json,sys;rows=[json.loads(l) for l in open(sys.argv[1])];print(len(rows), rows[-1]['event'], {r['model'] for r in rows})" <trace.jsonl>`——行数、末行 `session_end` 与模型集合就是它的验收；跑完还要在 `docs/evidence/m1.5-checkpoint/` 里留下日期、trace 路径、请求数与换模型（如有）的理由。
 
 由此得出 M2 的真实风险面：五条验收中只有 ⑤ 是已完成的存储能力，④ 是新脚手架，①③ 是新增判定；“已有能力用得上”这一点已在本页落地（2026-10-21 读 `dojo/storage.py:345` 与对应测试确认），不是推测。2026-10-21 之后 `m2a` 与 `m2c` 的实现已在不依赖门的那一轮落地，本表的"已有 / 缺"一列按那一轮改写。
 
@@ -155,7 +168,7 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 - 已实现：`add/confirm/search/merge/revoke/challenge/revise` 等账本操作、三幕预设 Demo、离线回放 `compare`、实时 `chat`、`discuss`（含搜索工具与人物档案）。
 - 标准库测试：`python3 -m unittest discover -s tests` —— 通过与否、多少项，只看这条命令的输出，不在这里存数字（会过期）。
 - 反奉承已有部分证据：`docs/evidence/m5-sycophancy`（四场对抗场景 A–D，结论"在四场捕获的序列里不让步"，代码 `b78c41a`）。它**不覆盖** M5 验收 ④ 那条"用户用真实文本反对而模型误报 `user_stance=accept`"，且跑在搜索、人物档案、推理等级变更之前（仍是 20 秒超时时代），因此按过期证据读，不能当 M5 的验收通过。`docs/product.md` 的"未做的负控制"一句仍成立。
-- `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行。
+- `discuss` 现在：行编辑、隐形记录（达成即静默写、中途无任何记录提示）、失败可诊断与自动重试、会话可续跑、外部搜索（DeepSeek Search API，带回页面正文）、本地人物档案 `<数据库目录>/person.md`（`--no-profile` 可关）、推理等级默认 `medium`、`--verbose` 把请求与检索进度写到 stderr、检索在对话中可见、`## 计算交接单` 落盘供外部执行器（pi）运行、trace 每轮与 `session_end` 带这一局用的 `model`。
 - 已修缺陷：`dojo/live.py` 的 `DEFAULT_MODEL` 曾是 `github-copilot/gpt-6-luna`（连字符），而本机端点公布的名字是 `github_copilot/gpt-6-luna`（下划线），不设 `DOJO_LLM_MODEL` 时每次请求都 HTTP 400。默认值改为端点公布的写法，`docs/demo-guide.md` 同步；`tests/test_live.py` 钉住默认值，并让任何**发 HTTP 请求的模块**里出现连字符写法直接失败。`compare.py` 与 `demo.py` 仍保留连字符是有意的：前者打印的是 Pi 子代理侧消费的模型名，后者复现冻结包原文，两者都不是 HTTP model id。端点的模型列表仍是外部配置，本仓不探测、不替换。
 - 已修缺陷：模型请求超时原为硬编码 20 秒，实测一次包含 8 条检索结果的续轮请求在 low 推理下超过 20 秒，连续两次超时就会把可用的回答判成"端点故障"并终止会话。现在默认 60 秒并可用 `DOJO_LLM_TIMEOUT` 覆盖；`--verbose` 暴露每次请求耗时，供判断该值是否仍偏短。
 - 上限原则（用户定）：不用 token 或长度上限换质量，保持足够大；成本由推理等级控制。
@@ -166,8 +179,9 @@ M1–M5 全部交付并经用户检查后，才进入自动推进阶段；届时
 ## 恢复入口
 
 - **怎么开始**：`python3 -m dojo --db /tmp/play.sqlite3 discuss`。续跑加 `--resume <轨迹>`，关人物档案加 `--no-profile`，看请求进度加 `--verbose`。端点须显式配置（见 `README.md`），不配置就不联网。
-- **怎么继续规划**：先看本页 `## 当前推进状态`；门未过时不要开 M2 的包。
+- **person 想亲手玩一局时的那一条命令**：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=/tmp/dojo-play python3 -m dojo --db /tmp/dojo-play/dojo.sqlite3 discuss`——trace 落在 `/tmp/dojo-play/discuss-<32位十六进制>.jsonl`，玩完把 `ls -t /tmp/dojo-play/*.jsonl | head -1` 打出来的那一行发回来就行（2026-10-23 用回环桩服务实际跑过这条命令：轨迹目录 0700、文件 0600、末行 `session_end` 带 `model`）。
+- **怎么继续规划**：先看本页 `## 当前推进状态`；M2 的包从 `m2f checkpoint-rerun` 开始，它没跑完时其他 M2 包不开。
 - **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
-- **证据在哪**：`docs/evidence/m1*`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。
-- **写给谁**：两层之间的消息走 `inbox/`（2026-10-21 由 `mail/` 改名）：落到本项目的消息躺在 `inbox/`，四行头 `kind`/`from`/`spend`/`id`，形状见 `inbox/README.md`。
+- **证据在哪**：`docs/evidence/m1*`、`m1.5-checkpoint`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。
+- **写给谁**：两层之间的消息走 `inbox/`（2026-10-21 由 `mail/` 改名）：落到本项目的消息躺在 `inbox/`，四行头 `kind`/`from`/`spend`/`id`，形状见 `inbox/README.md`。root 2026-10-23 的答复落在旧名 `mail/` 下，已原样提交保留（`8ed7cb5`），本轮的回信也写在 `mail/` 里以接回那条线。
 
