@@ -9,6 +9,7 @@
 | `product.md` | 产品层：行为、质量维度、非目标（当前产品方向的唯一入口） |
 | `design.md` | 架构与方法层：不变量、模块、管线、防风暴与防污染 |
 | `plan.md` | 计划层：里程碑、验收、预算、交付契约 |
+| `proposal-knowledge-network.md` | 未经同意的提案：把单位从「卡」换成「道」、证据靠事前字据、首里程碑是「一条道的一生」；它不改 M2/M3 的边界 |
 | `philosophy.md` | 用户已确认的优先事项与可撤销的 POC 设计选择 |
 | `current-demo-direction.md` | 已实现三幕 Demo 的说明（不再是产品方向入口） |
 | `cli-guide.md` | 当前 CLI 每个命令的用法与限制 |
