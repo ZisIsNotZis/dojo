@@ -1,0 +1,534 @@
+{
+  "at": "2026-10-23T13:43:02Z",
+  "bench": "scripts/dao_life.py",
+  "bench_version": 1,
+  "daos": {
+    "dojo-d-001": {
+      "digest": "3ac1d2d35096c7390da169e738084437b17273e760e079f5fcc503acdd36cd8d",
+      "id": "dojo-d-001",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "把持续检查搬进系统：自己写预测、自己跑、自己留回执；人这一侧只留「随时可推翻」",
+              "action_kind": "apply",
+              "recorded": "他把检验退回给网络：「你的底层网络负责」；他自己只留一个权利——随时问一句「你跑过模拟吗」。",
+              "side": "域内（案例 ep-2026-10-23-detach）",
+              "situation": {
+                "check_keeper": "人",
+                "check_kind": "结构或模拟可跑",
+                "judge": "另一个独立方"
+              }
+            },
+            {
+              "action": "那一格印未检，并把它降回自述；不拿人的记忆或「他说过很多次」顶替",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（check_kind=必须等世界里发生）",
+              "situation": {
+                "check_keeper": "人",
+                "check_kind": "必须等世界里发生",
+                "judge": "另一个独立方"
+              },
+              "when": "需要的检查必须发生在世界里（这条道要等「后来真的用了吗」）"
+            },
+            {
+              "action": "换一个独立的一方来跑，并把「谁跑的」写进回执",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（judge=与被检查的同一个人）",
+              "situation": {
+                "check_keeper": "人",
+                "check_kind": "结构或模拟可跑",
+                "judge": "与被检查的同一个人"
+              },
+              "when": "检查者与被检查者是同一个作者（自己判自己的活）"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "3ac1d2d35096",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '可推翻 vs 检查真的发生'，张力叫 '可推翻 vs 检查真的发生'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "晚了：[]",
+              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "3ac1d2d35096",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    },
+    "dojo-d-002": {
+      "digest": "87499544bfb44e2f39a34a4fdffa91b93f2468c66df2754353a47f90a0b11617",
+      "id": "dojo-d-002",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "先给完整形状（目的、边界、价、什么时候停），把追问压到一轮一个",
+              "action_kind": "apply",
+              "recorded": "他把整件事的完整形状先写出来（定义、原则、边界、数据模型、路线图、开放问题），写完才谈实现；这份草案此后没有改成实现规格。",
+              "side": "域内（案例 ep-2026-10-15-draft）",
+              "situation": {
+                "asked_consecutively": "否",
+                "shape_possible": "能",
+                "who_asks": "对方在问"
+              }
+            },
+            {
+              "action": "给「待测清单 + 停止点」，不假装完整的形状",
+              "action_kind": "withhold",
+              "differs_from_inside": true,
+              "expected_kind": "withhold",
+              "side": "越界（shape_possible=要实测数据才能给）",
+              "situation": {
+                "asked_consecutively": "否",
+                "shape_possible": "要实测数据才能给",
+                "who_asks": "对方在问"
+              },
+              "when": "形状在不知细节时给不出（安全关键、阈值要实测）"
+            },
+            {
+              "action": "反过来逐个回答细节；这时追问是他在要，不是在被追",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（who_asks=他在问）",
+              "situation": {
+                "asked_consecutively": "否",
+                "shape_possible": "能",
+                "who_asks": "他在问"
+              },
+              "when": "他开始反过来追问细节"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "87499544bfb4",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "观察晚于案例，且不是被问出来的；它证明的是一条相符或相悖的观察存在，不是这条道为真。",
+          "observation": {
+            "at": "2026-10-23",
+            "confound": "两版之间还改了静默入库、轨迹、检索与超时；「比上次好」不能只归给追问变少。",
+            "dao": "dojo-d-002",
+            "elicited": false,
+            "episode": "ep-2026-10-23-ux",
+            "id": "ob-2026-10-23-ux",
+            "kind": "later_session",
+            "matched": true,
+            "note": "这条判断在他读到这张图之前就有，不是被本包问出来的；它比「他说过很多次」强，比一次对照弱。",
+            "person": "p-dojo",
+            "prediction": "把追问压住、把形状一次给全，他会更愿意继续，并说得出满意。"
+          },
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/field-v1",
+            "on_digest": "87499544bfb4",
+            "on_version": 1
+          },
+          "strength": "他人的后续会话（弱：不是对照）",
+          "verdict": "pass"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '完整形状 vs 细节追问'，张力叫 '完整形状 vs 细节追问'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "晚了：[]",
+              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "87499544bfb4",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "pass"
+          ]
+        ],
+        "count": 3,
+        "line": "验过（弱：后续，非对照） · 检（3/3：自洽 过 / 可反驳 过 / 落地 过）",
+        "mark": "检",
+        "word": "验过（弱：后续，非对照）"
+      },
+      "version": 1
+    },
+    "dojo-d-003": {
+      "digest": "23e4506191dcde039ee49c7ee4f63bd25060a90ffecdf2f83b49d1b120451b12",
+      "id": "dojo-d-003",
+      "receipts": {
+        "falsifiable": {
+          "cases": [
+            {
+              "action": "把价与上限写在决定旁一行（单位、数字、谁付），一次决定给完",
+              "action_kind": "apply",
+              "recorded": "他先问额度和要不要换模型，拿到一次真调用换来的读数之后，才让那一局跑。",
+              "side": "域内（案例 ep-2026-10-23-quota）",
+              "situation": {
+                "payer": "他的额度或钱",
+                "price_known": "能算出且高于察觉阈值"
+              }
+            },
+            {
+              "action": "直接做，不问价，留撤销",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（price_known=低于察觉阈值或算不出）",
+              "situation": {
+                "payer": "他的额度或钱",
+                "price_known": "低于察觉阈值或算不出"
+              },
+              "when": "价低于察觉阈值（几分钱、几秒）"
+            },
+            {
+              "action": "只在报告里写用了多少机器时间，不把价放进他的决定",
+              "action_kind": "reverse",
+              "differs_from_inside": true,
+              "expected_kind": "reverse",
+              "side": "越界（payer=系统的机器时间）",
+              "situation": {
+                "payer": "系统的机器时间",
+                "price_known": "能算出且高于察觉阈值"
+              },
+              "when": "花的是系统的机器时间，不是他的额度"
+            }
+          ],
+          "kind": "falsifiable",
+          "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
+          "notes": [],
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/simulate-v1",
+            "on_digest": "23e4506191dc",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        },
+        "field": {
+          "kind": "field",
+          "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
+          "observation": null,
+          "ran": null,
+          "verdict": "not_run"
+        },
+        "structure": {
+          "checks": [
+            {
+              "detail": "",
+              "name": "情境三件都有",
+              "ok": true
+            },
+            {
+              "detail": "读了 2 侧",
+              "name": "张力正好两侧",
+              "ok": true
+            },
+            {
+              "detail": "动作挂在 '先问价 vs 先跑起来'，张力叫 '先问价 vs 先跑起来'",
+              "name": "动作落在它自己命名的张力上",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "动作有方向与作用点",
+              "ok": true
+            },
+            {
+              "detail": "单位闭集是 ('时间', '关系', '机会', '能力')",
+              "name": "代价至少一条，且每条写得出一条真正花掉的资源",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件至少一条",
+              "ok": true
+            },
+            {
+              "detail": "改不动的：[]",
+              "name": "每条失效条件都写成一个可改的轴与取值",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "失效条件给出的是「反转」或「停」，不是一句劝告",
+              "ok": true
+            },
+            {
+              "detail": "命中：[]",
+              "name": "没有抽掉一句就通不过的套话",
+              "ok": true
+            },
+            {
+              "detail": "缺：[]",
+              "name": "案例在事件层里存在",
+              "ok": true
+            },
+            {
+              "detail": "悬空：[]",
+              "name": "归属边指向真实事件",
+              "ok": true
+            },
+            {
+              "detail": "署名未核的那条只能当旁证，不能是唯一支撑",
+              "name": "至少一条出处不是署名未核",
+              "ok": true
+            },
+            {
+              "detail": "",
+              "name": "规则只改它自己声明的轴",
+              "ok": true
+            },
+            {
+              "detail": "晚了：[]",
+              "name": "没有 2026-10-23 之后的 person 输入（第一场之后不再要他补）",
+              "ok": true
+            }
+          ],
+          "failures": [],
+          "kind": "structure",
+          "ran": {
+            "at": "2026-10-23T13:43:02Z",
+            "by": "scripts/dao_life.py/structure-v1",
+            "on_digest": "23e4506191dc",
+            "on_version": 1
+          },
+          "verdict": "pass"
+        }
+      },
+      "status": {
+        "cells": [
+          [
+            "自洽",
+            "pass"
+          ],
+          [
+            "可反驳",
+            "pass"
+          ],
+          [
+            "落地",
+            "not_run"
+          ]
+        ],
+        "count": 2,
+        "line": "自述 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+        "mark": "未检",
+        "word": "自述"
+      },
+      "version": 1
+    }
+  },
+  "inputs": {
+    "daos": "01f3fc70d9bbf89c8853dff6b9124071ed38d47ef33b5f926071eb656113779e",
+    "episodes": "2c6582b0bc3e2fc1db9cb01cda20829bc17bb88fa2213aca009dfa9b56550e40",
+    "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
+    "map": "2d8f95d2e6d14eafe466b36acf85f1c68d6cfa7f544076ca8315507fc489f982",
+    "observations": "cb68bd094b968ae2fac83f3194d566f723514ff3a9e5341cf2f4aab8d2caf7c9"
+  },
+  "layer": "checks"
+}
