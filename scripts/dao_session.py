@@ -2,6 +2,7 @@
 """Export a completed discuss JSONL trace as a probe note and provenance record."""
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -20,8 +21,10 @@ class Refusal(ValueError):
 def load_trace(path: Path, person: str, sample: str):
     if sample not in {"acquaintances", "strangers"}: raise Refusal("sample: 只能是 acquaintances 或 strangers")
     if not person.strip(): raise Refusal("person: 不得为空")
-    try: raw = path.read_text(encoding="utf-8")
-    except OSError as e: raise Refusal(f"trace: {e}") from None
+    try:
+        trace_bytes = path.read_bytes()
+        raw = trace_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e: raise Refusal(f"trace: {e}") from None
     if not raw.strip(): raise Refusal("empty trace: 轨迹为空")
     try: rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
     except json.JSONDecodeError as e: raise Refusal(f"trace JSON: 第 {e.lineno} 行格式错误") from None
@@ -60,11 +63,18 @@ def load_trace(path: Path, person: str, sample: str):
             raise Refusal('张力: 回答含「|」或引号，原话字段无法逐字承载')
         bypart[p] = promoted[-1]
     tension = bypart["张力"]["answer"]
-    sides = [s.strip() for s in re.split(r"\s*(?:↔|⇄|<->| vs\. | versus )\s*", tension, maxsplit=1)]
-    if len(sides) != 2 or not all(sides): raise Refusal("张力: 缺少可识别的第一边或第二边（需 A ↔ B）")
+    raw_sides = re.split(r"\s*(?:↔|⇄|<->| vs\. | versus )\s*", tension)
+    if len(raw_sides) == 1:
+        raise Refusal("张力: 缺少左侧和右侧的分隔表达（需 A ↔ B）")
+    if len(raw_sides) != 2:
+        raise Refusal("张力: 左右侧超过两边（需正好 A ↔ B）")
+    sides = [side.strip() for side in raw_sides]
+    missing_sides = [label for label, side in zip(("左侧", "右侧"), sides) if not side]
+    if missing_sides:
+        raise Refusal(f"张力: {'、'.join(missing_sides)}为空")
     rounds = [r for r in rows if isinstance(r.get("user"), str)]
     # Elicitation answers are the trace's explicit verbatim user-input fields.
-    inputs = rounds + [r for r in elicits if isinstance(r.get("answer"), str) and r.get("answer")]
+    inputs = rounds + [r for r in elicits if isinstance(r.get("answer"), str)]
     if not inputs: raise Refusal("逐字: 轨迹没有用户输入")
     for r in inputs:
         if not r.get("at"): raise Refusal("timestamp: 用户输入记录缺 at")
@@ -85,9 +95,6 @@ def load_trace(path: Path, person: str, sample: str):
         answer=r["answer"]
         if not any(answer in text for text in texts) or (isinstance(r.get("user"), str) and answer not in r["user"]):
             raise Refusal(f"逐字: {part} 回答不是该轨迹 user 输入的逐字子串")
-    for side in sides:
-        if not any(side in bypart["张力"]["answer"] for _ in [0]):
-            raise Refusal(f"张力: 缺少逐字侧 {side!r}")
     tension_event=bypart["张力"]
     anchor=next((m for m,t in offsets if tension_event["answer"] in t), offsets[0][0])
     sid=Path(path).stem
@@ -104,7 +111,7 @@ def load_trace(path: Path, person: str, sample: str):
             _parse_note(note_path)
     except NoteError as exc:
         raise Refusal(f"note.md: {exc}") from None
-    session={"session_id":sid,"person":person,"date":date,"minutes":minutes,"sample":sample,"card_id":card,"tensions":[{"id":f"{person}-T1","pair":f"{sides[0]} ↔ {sides[1]}","parts":{KEYS[p]:{"promoted":True,"answer":bypart[p]["answer"]} for p in PARTS}}]}
+    session={"session_id":sid,"person":person,"date":date,"minutes":minutes,"sample":sample,"card_id":card,"trace_sha256":hashlib.sha256(trace_bytes).hexdigest(),"note_sha256":hashlib.sha256(note_text.encode("utf-8")).hexdigest(),"tensions":[{"id":f"{person}-T1","pair":f"{sides[0]} ↔ {sides[1]}","parts":{KEYS[p]:{"promoted":True,"answer":bypart[p]["answer"]} for p in PARTS}}]}
     return note_text, session
 
 def main(argv=None):
@@ -119,6 +126,8 @@ def main(argv=None):
             (args.out/"note.md").write_text(note,encoding="utf-8")
             (args.out/"session.json").write_text(json.dumps(session,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         print("OK" if args.check else f"写入 {args.out}/note.md 与 session.json")
+        if not args.check:
+            print(f"下一步：补齐 {args.out}/extraction.json，再运行 python3 scripts/dao_life.py {args.out} --vocabulary docs/dao/vocabulary.json --check")
         return 0
     except Refusal as e:
         print(str(e),file=sys.stderr); return 2

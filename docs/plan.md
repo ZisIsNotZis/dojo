@@ -8,8 +8,8 @@
 - **路线**：M1、M1.5 已交付（M1.5 的体验判断由 person 2026-10-23 亲自给出，记录在 `docs/evidence/m1.5-checkpoint/person-2026-10-23.md`）；M2 仍未达成——`m2b` 缺一次真实模型判定、`m2e` 缺整场提炼清单，person 没看过清单；K1 按 person 2026-10-23 的三条答复提前插入，七片已跑完，契约、结果与残余风险在 `## K1 一条道的一生：第一个包 dao-life-1` 一节。两块证据目录 `m2.0-stance-search`/`m2.1-person-profile` 是 M2 伞下的，不是里程碑。
 - **K1 的现状（事实，不是计划）**：13 条道，全部 `合写`（情境、张力、代价 13/13 是系统补）；落地 3/13（全是弱观察，无对照）；晋升 0 条；记录检查 26 条（确认 9 / 部分 9 / 收窄 2 / 推翻 0 / 未表态 6）；`con-001` 是一对方向相反的道，留着等 person 一句话。
 - **还在外面的两件事**：张力收敛探针 person 已同意做，仪器在 `docs/probe/tension-convergence.md`，**零笔记**；第二个真人的材料仍为零（`demo-strangers` 是模拟语料，不算人）。
-- **K1 契约还欠两件**：① 独立评审（本页「执行契约」要求、前七片都没花）——本轮派发，verdict 落 `docs/evidence/reviews/`；② A2 要 person 就 `con-001` 说一句确认或推翻——这是 `need_user_review`，页面是 `docs/dao/person-dojo/道图.md`，测试替不了。
-- **本轮推进（第八片）**：把一场真的 `discuss` 会话接进同一条 loop（会话 → 探针笔记）——已建、已跑通，结果与残余风险见 `### 第八次推进`。这是「一条道的一生」原先唯一断在纸面的一步：四句问法已经在会话里问，会话产物进不了 `dao_life.py`。
+- **K1 契约还欠两件**：① 独立评审已做（绑定 `90d6db5`，判 K1 fail 的四条见 `### 第八次推进` 的「独立评审」小节），它找出的 K2 四处已关，第二次评审只核这四处；② A2 要 person 就 `con-001` 说一句确认或推翻——这是 `need_user_review`，页面是 `docs/dao/person-dojo/道图.md`，测试替不了。A4（第二个真人的曝光场景）与 A5（抽身后的产物由人判）同样要人；A7 的历史花费只能由执行者自报。
+- **本轮推进（第八片）**：把一场真的 `discuss` 会话接进同一条 loop（会话 → 探针笔记）——已建、已跑通，评审找出的四处已关，结果与残余风险见 `### 第八次推进`。
 - **明确没写进路线的东西**：从会话到 `extraction.json`（动作落点、代价单位、规则表）仍是人写，模型提炼（`m2b`/`m2e`）与这条线怎么接，等第八片的事实再定；不先写远路。
 - **证据与预算**：证据块的数字先跑命令再抄；本轮预算照 `## 预算`（每里程碑执行子代理 ≤2、独立评审 ≤2 轮、dojo 模型调用 ≤40），第八片预计 0 次 dojo 模型调用。
 - **历史留档**：M2 的两次独立评审判 fail 与三处关闭、`m2f` 不跑的理由、M2 五条各自的判定依据，都还记在本页原来的位置（`## M2`、`## 不依赖门的 M2 能力包`、`## 证据卫生`）；K1 七片的逐次契约与结果在 K1 一节。不在这里复述。
@@ -640,7 +640,7 @@ $ python3 scripts/dao_life.py /tmp/note-bad --check     # 这一份把 note.md �
 - **不调模型**：0 次计量调用、不连数据库、不改 `discuss` 行为、不改探针格式（`docs/probe/tension-convergence.md` 与 `_parse_note` 是唯一格式）。
 - **不替被访者补话**：`## 逐字` 的每一行必须是轨迹里用户输入的逐字子串；引不出来就拒收，不润色、不概括。
 - **不把证据抬高**：`session.json` 说哪几件是他的，`part_sources` 就只能是那几件；`extraction.json` 把没晋升的一件写成 `他的原话` 时，命令判不过并说出冲突（这条检查必须真的会失败）。
-- **不改 13 条**：`docs/dao/person-dojo/daos.json` 字节不变；`live-session-1.md` 那套 harness 手搓流程不算真会话，新命令的输入是 `discuss` 的 JSONL 轨迹。
+- **不改 13 条的道内容**：`docs/dao/person-dojo/daos.json` 的六件与回执不动；评审抓到归属状态与 episode 来源不符时，只改那一处状态并重出回执（见结果节的评审小节）。`live-session-1.md` 那套 harness 手搓流程不算真会话，新命令的输入是 `discuss` 的 JSONL 轨迹。
 
 **验收（每条可观察，带命令）**
 - **K2-1 一条命令跑通**：`python3 scripts/dao_session.py --trace <trace.jsonl> --out <dir> --person <id> --sample acquaintances` 在一条脚本化会话的轨迹上退出 0，写出 `<dir>/note.md` 与 `<dir>/session.json`；随后 `python3 scripts/dao_life.py <dir> --check` 在配好的 `extraction.json` 上退出 0。
@@ -648,7 +648,7 @@ $ python3 scripts/dao_life.py /tmp/note-bad --check     # 这一份把 note.md �
 - **K2-3 只收他答到的张力**：`## 张力` 每条 `A ↔ B` 的两边都是他「张力」那一件回答里的逐字片段；答不出两边时退出非 0，打印缺哪一边，盘上不写 `note.md`（测试钉住）。
 - **K2-4 未答不填**：一件没答（`promoted` 不含它）时，命令不写笔记并具名说缺哪一件；空轨迹、缺 `session_end`、没有 elicitation 记录各拒一次（测试钉住）。
 - **K2-5 作者不被抬高**：用导出笔记建的条目，他在会话里答到的件是 `他的原话`，其余件仍是 `系统补`，六件全是他时词才是 `自述`，否则 `合写`（测试钉住封顶）；把没晋升的一件在 `extraction.json` 里写成 `他的原话` 时判不过（负控制，测试钉住）。
-- **K2-6 不回归**：全量测试绿；`docs/dao/person-dojo/daos.json` 字节不变；`--check` 干净；0 次计量调用。
+- **K2-6 不回归**：全量测试绿；`docs/dao/person-dojo/daos.json` 的六件不变（归属状态纠错除外，见结果节）；`--check` 干净；0 次计量调用。
 
 **停止点**：K2-1 到 K2-6 全可判，或两小时到；做不到的一半写成未跑，不硬磨。
 
@@ -661,30 +661,48 @@ $ python3 scripts/dao_life.py /tmp/note-bad --check     # 这一份把 note.md �
 ```sh
 $ python3 scripts/dao_session.py --trace <真 discuss 轨迹> --out /tmp/lib --person p-demo --sample acquaintances
 写入 /tmp/lib/note.md 与 session.json
-$ python3 scripts/dao_life.py /tmp/lib --check
+下一步：补齐 /tmp/lib/extraction.json，再运行 python3 scripts/dao_life.py /tmp/lib --vocabulary docs/dao/vocabulary.json --check
+$ python3 scripts/dao_life.py /tmp/lib --vocabulary docs/dao/vocabulary.json --check
   dao-p-demo-T1  v1  模拟 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）
   作者：他的 1；记录检查 0 条（确认 0 / 部分 0 / 收窄 0 / 推翻 0 / 未表态 0）；晋升 0 条
 --check：不写盘
 $ python3 -m unittest discover -s tests
-Ran 203 tests ... OK
+Ran 207 tests ... OK
 $ sha256sum docs/dao/person-dojo/daos.json
-2ec777230989d81bd616c042e861f4bf14cdfd7f92c09517f03c1e7319e01acc
+087538d2a6f3aeefd6b009afdfc9ab82450d5159bdb9bf81e15f9062b00f0c0b
 ```
 
-- **K2-1 过**：真会话轨迹导出 `note.md` 与 `session.json`；配好 `extraction.json` 后 `dao_life.py --check` 退出 0。上面是 2026-10-27 用 `run_discuss` + `ScriptedHost` 跑出的真轨迹复跑的一遍。
-- **K2-2 过**：`note.md` 的逐字行由测试逐条核对到轨迹输入；时间戳取轨迹的 `at`（这场脚本化会话全在 00:00，运行得比一分钟快，照实写）。
-- **K2-3 过**：两边必须出现在他「张力」那一件的回答里；答不出两边、或藏着无法逐字承载的 `|`、引号、换行时，退出非 0 并说出是哪一件，盘上不写。
+- **K2-1 过**：真会话轨迹导出 `note.md` 与 `session.json`；配好 `extraction.json` 并用 `--vocabulary docs/dao/vocabulary.json` 后 `dao_life.py --check` 退出 0。上面是靠 `run_discuss` + `ScriptedHost` 跑出的真轨迹复跑的一遍（无模型调用）。
+- **K2-2 过**：从轨迹独立算出应有逐字行（轮次 `user` + elicitation `answer`，按 `at` 排序），与 note 的 `## 逐字` 逐行相等；时间戳不递减。
+- **K2-3 过**：两边必须出现在他「张力」那一件的回答里，拒绝时说出缺左/右哪一边；答不出两边、或藏着无法逐字承载的 `|`、引号、换行时，退出非 0 并说出是哪一件，盘上不写。
 - **K2-4 过**：真会话漏答「代价」两轮时按名拒收且不建目录；空轨迹、缺 `session_end`、没有 elicitation、elicitation 前没有已写入的结论，各拒一次。
-- **K2-5 过**：`session.json` 说哪几件晋升了，`part_sources` 就是那几件；`extraction.json` 把没晋升的一件写成「他的原话」时判不过（负控制：作者冲突）。六件全是他时才到 `自述`。
-- **K2-6 过**：全量 203 项测试绿；`--check` 干净；13 条 `daos.json` 字节不变（哈希同上）；0 次计量调用。
+- **K2-5 过（只到会话能证明的那一步）**：`session.json` 带 `trace_sha256` 与 `note_sha256`；建库时 note 摘要必须对得上，晋升的每一件必须在 note 的逐字里逐字出现；extraction 声称四件里的哪一件是他的而会话没晋升，判「作者冲突」；声称动作是他的时，方向必须逐字出现在会话写下的方向里。复现：改 `session.json` 的回答 → `代价 的回答不在笔记逐字里`；改 note → `note_sha256 与当前 note.md 不匹配`；改写动作方向 → `动作方向不在笔记方向里`。摘要不是防篡改：伪造一对互相匹配的 note/session 仍可过——库本来就不是防伪记录，这一点写在 `docs/dao/README.md`。
+- **K2-6 过**：全量 207 项测试绿；`--check` 干净；13 条道的**内容**没改，只有四条 `provenance.status` 按 episode 来源纠正（评审 #9，见下），因此哈希从 `2ec777…` 变成 `087538…`；0 次计量调用。
+
+#### 独立评审与它关掉的四处（2026-10-27）
+
+独立评审绑定 `90d6db5`，原文与复现在 `docs/evidence/reviews/2026-10-27-k1-acceptance.md`。判 K1 fail（A2/A4/A5 要人判、A7 的花费不可独立审计），判 K2 fail（四处）。四处已关，第二次评审只核这四处：
+
+- **作者能被子文件伪造** → `session.json` 现在带 trace/note 摘要，晋升件必须在 note 逐字里，动作方向必须在会话方向里；三种篡改各有一条复现（上面 K2-5）。
+- **K2-2 的逐字测试是松的** → 改成独立计算整段逐字、逐行相等，时间戳不递减。
+- **K2-3 的边检查是同义反复** → 删掉；缺边时具名说是左还是右。
+- **K2-1 的文档命令跑不通**（临时目录没有词表） → 命令和输出都补上 `--vocabulary docs/dao/vocabulary.json`，并加一条 CLI 子进程测试。
+
+同时按评审关掉的两处数据/文档缺陷：
+
+- **归属曾被写成他的话**：`ep-2026-10-18-pref`（unverified）、`ep-2026-10-23-quota`、`ep-philosophy-evidence`、`ep-2026-10-23-gate-wait`（都是 relayed）在四条道的 `provenance` 里曾被写成 `自述 · 亲历`。现在渲染状态由 episode 的 `attribution` 派生，数据也改成 `未核/转述 · 未记录`，测试钉住「存储状态 = 派生状态」（负控制会失败）；道图把 relayed 的 `attribution_note` 印在原话旁。
+- **词表计数过时**：`docs/dao/README.md` 的「八个词」「四个张力词」与 `proposal` 的「五到十个」按实际改成 13 个张力词 / 14 个动作词。
+
+**还没关的（要人）**：A2 要 person 就 `con-001` 说一句；A4 要第二个真人的曝光场景；A5 要人对抽身后的产物给判断；A7 的历史花费只能由执行者自报，不可独立审计。因此 **K1 不按通过记**，本轮把它作为 `need_user_review` 交出去。
 
 **残余风险（第八次推进）**
 
 - **一场只出一条**：`discuss` 只在**第一条**写入的结论之后问四件（`elicitation["started"]` 之后不再问），所以一场会话最多导出一条张力；第二条结论写了也没有四件。这是会话那边的设计，不是导出器的：要让一场出多条，得先改 `discuss` 的提问节奏，这一片没做。
 - **提炼仍是人写的**：`extraction.json` 的动作落点、代价单位、规则表没有自动化；导出器只保证作者不越权，不保证道写得对。
 - **格式会拒人**：真人的回答里出现 `|`、引号或换行时，探针格式无法逐字承载，命令只能拒收。这是诚实，但意味着真跑时会有笔记写不出来；拒收理由要读得懂，否则人会以为工具坏了。
-- **逐字的校验有一半是同义反复**：elicitation 的回答只存在于它自己的记录里，没有第二处可对；能对的是会话轮次。伪造一条自洽的 elicitation 记录不会被这条检查抓住——这是轨迹自身的边界，已写在这里。
-- **独立评审仍欠**：K1 的契约要求交付前一次独立评审；本片完成后与 K1 一起送评，verdict 落在 `docs/evidence/reviews/`。
+- **摘要是校验和，不是签名**：改 note 会被抓住，改 note 同时重算 `note_sha256` 就抓不住；`trace_sha256` 也无法在库里重算（轨迹不在库目录）。它防的是不一致的编辑，不是伪造。
+- **测试里有六条未关闭连接的 `ResourceWarning`**（`dojo/discuss.py:818` 一带，测试退出码仍为 0）：这是债，下一片碰 `discuss` 时一起收。
+- **第二次独立评审未跑**：四处关闭的复现是本会话跑的，不是新上下文评审；第二次评审只核这四处，它之前 K2 不记为交付。
 
 ## 证据卫生
 

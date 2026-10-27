@@ -1,10 +1,10 @@
 {
-  "at": "2026-10-23T14:02:48Z",
+  "at": null,
   "bench": "scripts/dao_life.py",
   "bench_version": 1,
   "daos": {
     "dojo-d-001": {
-      "digest": "0c8e4c01afaf3ad5a61a1673ea591d2e870f6ce59f99a72a57338a80b2176c47",
+      "digest": "ffa985544defb0eef61968554dc326e231e84b15cf486934f1a0a03dab46c559",
       "id": "dojo-d-001",
       "receipts": {
         "falsifiable": {
@@ -51,9 +51,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "0c8e4c01afaf",
+            "on_digest": "ffa985544def",
             "on_version": 1
           },
           "verdict": "pass"
@@ -78,9 +78,9 @@
             "strength_note": "自验只说明这条道在这件真实活上被用到了、并且改变了输出；它不说明这条道对别人成立。"
           },
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "0c8e4c01afaf",
+            "on_digest": "ffa985544def",
             "on_version": 1
           },
           "rejected": [],
@@ -183,9 +183,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "0c8e4c01afaf",
+            "on_digest": "ffa985544def",
             "on_version": 1
           },
           "verdict": "pass"
@@ -225,7 +225,7 @@
       "version": 1
     },
     "dojo-d-002": {
-      "digest": "473286a108a8c7411ef81cdf49e634ff1f8c5e8d0275d19ce707b9a7e26c84a7",
+      "digest": "a941134c01d16b2db364fe192b282b8642eb5158c656980b5ccb8836226bd6d3",
       "id": "dojo-d-002",
       "receipts": {
         "falsifiable": {
@@ -272,9 +272,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "473286a108a8",
+            "on_digest": "a941134c01d1",
             "on_version": 1
           },
           "verdict": "pass"
@@ -296,9 +296,9 @@
             "prediction": "把追问压住、把形状一次给全，他会更愿意继续，并说得出满意。"
           },
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "473286a108a8",
+            "on_digest": "a941134c01d1",
             "on_version": 1
           },
           "rejected": [],
@@ -401,9 +401,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "473286a108a8",
+            "on_digest": "a941134c01d1",
             "on_version": 1
           },
           "verdict": "pass"
@@ -443,7 +443,7 @@
       "version": 1
     },
     "dojo-d-003": {
-      "digest": "a69a6fbcb741599363f8a7c1882091fad1163c9450be3a5b843a560f6b48cd90",
+      "digest": "777841e69563cde1207087b60143f7324d9c4e4f5442fe5f378a213b55327cfe",
       "id": "dojo-d-003",
       "receipts": {
         "falsifiable": {
@@ -487,9 +487,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "a69a6fbcb741",
+            "on_digest": "777841e69563",
             "on_version": 1
           },
           "verdict": "pass"
@@ -513,9 +513,9 @@
             "strength_note": "不是一场对话，是一次书面答复的记录；比会话弱一点，但同样是自然出现的，不是被追问出来的。"
           },
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/field-v1",
-            "on_digest": "a69a6fbcb741",
+            "on_digest": "777841e69563",
             "on_version": 1
           },
           "rejected": [],
@@ -618,9 +618,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "a69a6fbcb741",
+            "on_digest": "777841e69563",
             "on_version": 1
           },
           "verdict": "pass"
@@ -704,7 +704,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "812e25f756aa",
             "on_version": 1
@@ -815,7 +815,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "812e25f756aa",
             "on_version": 1
@@ -901,7 +901,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "f781fe7b5c72",
             "on_version": 1
@@ -1012,7 +1012,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "f781fe7b5c72",
             "on_version": 1
@@ -1084,7 +1084,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "f1e3b7156e94",
             "on_version": 1
@@ -1195,7 +1195,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "f1e3b7156e94",
             "on_version": 1
@@ -1267,7 +1267,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "9283fad0fc79",
             "on_version": 1
@@ -1378,7 +1378,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "9283fad0fc79",
             "on_version": 1
@@ -1420,7 +1420,7 @@
       "version": 1
     },
     "dojo-d-008": {
-      "digest": "2a16a6a9a91d5d024e2db4653648fcde57ed5753a23069a0a4c424dbb802be32",
+      "digest": "093be43a5c84453f0efa114f59a270abdfef54d83572ed760d0d9bf9b5adf174",
       "id": "dojo-d-008",
       "receipts": {
         "falsifiable": {
@@ -1450,9 +1450,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "2a16a6a9a91d",
+            "on_digest": "093be43a5c84",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1561,9 +1561,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "2a16a6a9a91d",
+            "on_digest": "093be43a5c84",
             "on_version": 1
           },
           "verdict": "pass"
@@ -1633,7 +1633,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "09ce55215507",
             "on_version": 1
@@ -1744,7 +1744,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "09ce55215507",
             "on_version": 1
@@ -1830,7 +1830,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "b5c1a90d034b",
             "on_version": 1
@@ -1941,7 +1941,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "b5c1a90d034b",
             "on_version": 1
@@ -2013,7 +2013,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "5f5a87673cec",
             "on_version": 1
@@ -2124,7 +2124,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "5f5a87673cec",
             "on_version": 1
@@ -2210,7 +2210,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "33c00e871368",
             "on_version": 1
@@ -2321,7 +2321,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "33c00e871368",
             "on_version": 1
@@ -2363,7 +2363,7 @@
       "version": 1
     },
     "dojo-d-013": {
-      "digest": "fd4d345dbe729d3906b59a40381a214fc4bd06af32c74c9188289b9c6434fb27",
+      "digest": "10adea3b6692fab349a0aeca08136b786552d2c06b1dd8035f4c6e1a4c2656b4",
       "id": "dojo-d-013",
       "receipts": {
         "falsifiable": {
@@ -2423,9 +2423,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "fd4d345dbe72",
+            "on_digest": "10adea3b6692",
             "on_version": 2
           },
           "verdict": "pass"
@@ -2534,9 +2534,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "fd4d345dbe72",
+            "on_digest": "10adea3b6692",
             "on_version": 2
           },
           "verdict": "pass"
@@ -2577,7 +2577,7 @@
     }
   },
   "inputs": {
-    "daos": "e865ba926e7aa70987584aa7412745eadcf65c71f29bdc58f5594cd13cc70ef8",
+    "daos": "2fe7729ed8ab271bac6c4f48b0da96c8d2741fc48846d472de9711edb6ff87ba",
     "episodes": "6eafc474498fea8963694e24490af62ff40163400fd335cce41ffc2ad01c20bc",
     "exposures": "7390097ff2af67e9a02d97a64e3788ecdda67e96ececcedb5f226b3f8c2627c0",
     "map": "6f977a08a10d14c0f2ed30f095864fa0cd98ed74df2e2c2e8b041792b98eafe8",

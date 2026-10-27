@@ -64,7 +64,7 @@ Natural-language discussion against a model endpoint is opt-in and is the only p
 ```sh
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # must match the endpoint's registered id
-export DOJO_LLM_API_KEY=...
+# then set DOJO_LLM_API_KEY in this shell from your endpoint's key store; the repo never holds it
 python3 -m dojo discuss            # zero forms, zero y/n prompts; writes only on agreement
 python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
 ```

@@ -131,8 +131,8 @@
         {
           "person": "p-dojo",
           "episode": "ep-2026-10-23-gate-wait",
-          "status": "自述",
-          "learned_from": "亲历",
+          "status": "转述",
+          "learned_from": "未记录",
           "exposure": "none-at-time",
           "note": "同一天的前半：那扇门在等他"
         }
@@ -272,7 +272,7 @@
         {
           "person": "p-dojo",
           "episode": "ep-2026-10-18-pref",
-          "status": "自述",
+          "status": "未核",
           "learned_from": "未记录",
           "exposure": "none-at-time",
           "note": "署名未核的旁证，不计入独立性"
@@ -389,8 +389,8 @@
         {
           "person": "p-dojo",
           "episode": "ep-2026-10-23-quota",
-          "status": "自述",
-          "learned_from": "亲历",
+          "status": "转述",
+          "learned_from": "未记录",
           "exposure": "none-at-time",
           "note": "root 转述他的问题，不是原话"
         }
@@ -930,8 +930,8 @@
         {
           "person": "p-dojo",
           "episode": "ep-philosophy-evidence",
-          "status": "自述",
-          "learned_from": "亲历",
+          "status": "转述",
+          "learned_from": "未记录",
           "exposure": "none-at-time"
         }
       ],
@@ -1511,8 +1511,8 @@
         {
           "person": "p-dojo",
           "episode": "ep-2026-10-23-gate-wait",
-          "status": "自述",
-          "learned_from": "亲历",
+          "status": "转述",
+          "learned_from": "未记录",
           "exposure": "none-at-time"
         }
       ],

@@ -64,7 +64,7 @@ python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 ```sh
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # 必须与端点注册的 model id 一字不差
-export DOJO_LLM_API_KEY=...
+# 若需要：在此 shell 里从你的密钥来源设置 DOJO_LLM_API_KEY；仓库里不存它
 python3 -m dojo discuss            # 零表单、零 y/n 提示；只在达成一致的那一轮写入
 python3 -m dojo discuss --verbose  # 在 stderr 实时显示请求与检索进度
 ```

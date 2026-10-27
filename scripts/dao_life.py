@@ -57,6 +57,7 @@ OBSERVATION_STRENGTH = {"agent_self": 1, "later_session": 2, "controlled": 3}
 VERDICT_WORD = {"pass": "过", "fail": "不过", "not_run": "未跑", "uncertain": "不确定"}
 ATTRIBUTION_CLASSES = ("person", "relayed", "synthetic", "unverified")
 SOURCE_WORD = {"person": "自述", "relayed": "自述（转述）", "synthetic": "模拟", "unverified": "传闻"}
+PROVENANCE_STATUS = {"person": "自述", "relayed": "转述", "synthetic": "模拟", "unverified": "未核"}
 PART_NAMES = ("situation", "tension", "move", "price", "off", "provenance")
 
 REFUSAL_PARTS = ("情境", "张力", "动作", "代价", "失效", "归属", "重复")
@@ -98,6 +99,11 @@ def source_classes(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> 
         (episodes.get(item.get("episode")) or {}).get("attribution", "")
         for item in dao.get("provenance") or []
     } - {""}
+
+
+def provenance_status_for(episode: dict[str, Any]) -> str:
+    """Display status is derived from the source event, never from extraction prose."""
+    return PROVENANCE_STATUS.get(episode.get("attribution"), "来源未声明")
 
 
 def base_word(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> str:
@@ -614,7 +620,8 @@ def render(
         off = "；".join(f"当{item['when']}——{item['then']}" for item in dao["off"])
         add(f"| 失效 | {off} |")
         prov = "；".join(
-            f"{item['person']} · {item['episode']} · {item['status']} · {item['learned_from']}" for item in dao["provenance"]
+            f"{item['person']} · {item['episode']} · {provenance_status_for(episodes.get(item['episode']) or {})} · {item['learned_from']}"
+            for item in dao["provenance"]
         )
         add(f"| 归属 | {prov} |")
         add("")
@@ -627,6 +634,8 @@ def render(
                 anchor += "　— 署名未核，只当旁证，不计入独立性"
             elif episode.get("attribution") == "synthetic":
                 anchor += "　— 模拟材料，不是某个人说过的"
+            elif episode.get("attribution") == "relayed" and episode.get("attribution_note"):
+                anchor += f"　— {episode['attribution_note']}"
             anchors.append(anchor)
         add("原话：" if not synthetic else "原话（模拟材料，写死的台词）：")
         add("")
@@ -1096,16 +1105,28 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
         )
     authored = {item.get("tension"): item for item in extraction.get("daos") or []}
     session_path = root / "session.json"
-    session_parts: dict[str, dict[str, bool]] = {}
+    session_parts: dict[str, dict[str, dict[str, Any]]] = {}
     if session_path.exists():
         try:
-            session_record = json.loads(session_path.read_text(encoding="utf-8"))
+            session_bytes = session_path.read_bytes()
+            session_record = json.loads(session_bytes.decode("utf-8"))
+            if not re.fullmatch(r"[0-9a-f]{64}", session_record.get("trace_sha256", "")):
+                raise NoteError("作者冲突：session.json 缺少有效 trace_sha256")
+            note_bytes = (root / "note.md").read_bytes()
+            note_digest = hashlib.sha256(note_bytes).hexdigest()
+            if session_record.get("note_sha256") != note_digest:
+                raise NoteError("作者冲突：session.json 的 note_sha256 与当前 note.md 不匹配")
             for item in session_record.get("tensions") or []:
                 pair = " ↔ ".join([x.strip() for x in item.get("pair", "").split("↔")]) if item.get("pair") else None
                 for part, detail in (item.get("parts") or {}).items():
                     if part in {"situation", "tension", "move", "price", "off", "provenance"}:
-                        session_parts.setdefault(pair or item.get("pair") or "*", {})[part] = bool(detail.get("promoted"))
-        except (OSError, json.JSONDecodeError, AttributeError) as exc:
+                        session_parts.setdefault(pair or item.get("pair") or "*", {})[part] = {
+                            "promoted": bool(detail.get("promoted")),
+                            "answer": detail.get("answer"),
+                        }
+        except NoteError:
+            raise
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError) as exc:
             raise NoteError(f"session.json: 无法读取会话来源：{exc}") from None
     person = note["header"]["person"]
     person_slug = re.sub(r"[^0-9A-Za-z_-]", "-", person) or "p"
@@ -1149,10 +1170,32 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
         }
         if session_path.exists():
             promoted = session_parts.get(tension["pair"], {})
+            verbatim_lines = []
+            in_verbatim = False
+            for raw_line in note["text"].splitlines():
+                if raw_line.startswith("## "):
+                    in_verbatim = raw_line.strip() == "## 逐字"
+                    continue
+                if in_verbatim:
+                    match = NOTE_STAMP.match(raw_line.strip())
+                    if match:
+                        verbatim_lines.append(raw_line.strip()[match.end():].lstrip())
+            labels = {"situation": "情境", "tension": "张力", "price": "代价", "off": "失效"}
             for part in ("situation", "tension", "price", "off"):
-                if sources.get(part) == "他的原话" and not promoted.get(part, False):
-                    raise NoteError(f"作者冲突：{tension['pair']} 的{ {'situation':'情境','tension':'张力','price':'代价','off':'失效'}[part] }在 extraction.json 声称他的原话，但 session.json 未晋升")
-                sources[part] = "他的原话" if promoted.get(part, False) else "系统补"
+                evidence = promoted.get(part, {})
+                is_promoted = evidence.get("promoted", False)
+                if is_promoted:
+                    answer = evidence.get("answer")
+                    if not isinstance(answer, str) or not answer or not any(answer in line for line in verbatim_lines):
+                        raise NoteError(f"作者冲突：{labels[part]} 的回答不在笔记逐字里")
+                elif sources.get(part) == "他的原话":
+                    raise NoteError(f"作者冲突：{tension['pair']} 的{labels[part]}在 extraction.json 声称他的原话，但 session.json 未晋升")
+                sources[part] = "他的原话" if is_promoted else "系统补"
+            # 动作的会话证据是方向陈述；归属的来源本身就是这场 session。
+            if sources.get("move") == "他的原话":
+                move_direction = author.get("move", {}).get("direction")
+                if not isinstance(move_direction, str) or move_direction not in tension["direction"]:
+                    raise NoteError(f"作者冲突：{tension['pair']} 的动作方向不在笔记方向里")
         daos.append(
             {
                 "id": dao_id,
@@ -1183,7 +1226,7 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                     {
                         "person": person,
                         "episode": episode_id,
-                        "status": author.get("status") or "自述",
+                        "status": PROVENANCE_STATUS[attribution],
                         "learned_from": "亲历",
                         "exposure": "none-at-time",
                     }
