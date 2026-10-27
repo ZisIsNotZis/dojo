@@ -1095,6 +1095,18 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
             "这个命令不猜一个人是不是真的坐在那儿"
         )
     authored = {item.get("tension"): item for item in extraction.get("daos") or []}
+    session_path = root / "session.json"
+    session_parts: dict[str, dict[str, bool]] = {}
+    if session_path.exists():
+        try:
+            session_record = json.loads(session_path.read_text(encoding="utf-8"))
+            for item in session_record.get("tensions") or []:
+                pair = " ↔ ".join([x.strip() for x in item.get("pair", "").split("↔")]) if item.get("pair") else None
+                for part, detail in (item.get("parts") or {}).items():
+                    if part in {"situation", "tension", "move", "price", "off", "provenance"}:
+                        session_parts.setdefault(pair or item.get("pair") or "*", {})[part] = bool(detail.get("promoted"))
+        except (OSError, json.JSONDecodeError, AttributeError) as exc:
+            raise NoteError(f"session.json: 无法读取会话来源：{exc}") from None
     person = note["header"]["person"]
     person_slug = re.sub(r"[^0-9A-Za-z_-]", "-", person) or "p"
 
@@ -1131,6 +1143,16 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                 "reading": author.get("reading", "读法是提炼那一步写的，不是笔记本身。"),
             }
         )
+        sources = author.get("part_sources") or {
+            "situation": "系统补", "tension": "系统补", "move": "他的原话",
+            "price": "系统补", "off": "系统补", "provenance": "他的原话",
+        }
+        if session_path.exists():
+            promoted = session_parts.get(tension["pair"], {})
+            for part in ("situation", "tension", "price", "off"):
+                if sources.get(part) == "他的原话" and not promoted.get(part, False):
+                    raise NoteError(f"作者冲突：{tension['pair']} 的{ {'situation':'情境','tension':'张力','price':'代价','off':'失效'}[part] }在 extraction.json 声称他的原话，但 session.json 未晋升")
+                sources[part] = "他的原话" if promoted.get(part, False) else "系统补"
         daos.append(
             {
                 "id": dao_id,
@@ -1166,15 +1188,7 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                         "exposure": "none-at-time",
                     }
                 ],
-                "part_sources": author.get("part_sources")
-                or {
-                    "situation": "系统补",
-                    "tension": "系统补",
-                    "move": "他的原话",
-                    "price": "系统补",
-                    "off": "系统补",
-                    "provenance": "他的原话",
-                },
+                "part_sources": sources,
             }
         )
         if author.get("needed"):

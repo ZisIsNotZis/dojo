@@ -9,7 +9,7 @@
 - **K1 的现状（事实，不是计划）**：13 条道，全部 `合写`（情境、张力、代价 13/13 是系统补）；落地 3/13（全是弱观察，无对照）；晋升 0 条；记录检查 26 条（确认 9 / 部分 9 / 收窄 2 / 推翻 0 / 未表态 6）；`con-001` 是一对方向相反的道，留着等 person 一句话。
 - **还在外面的两件事**：张力收敛探针 person 已同意做，仪器在 `docs/probe/tension-convergence.md`，**零笔记**；第二个真人的材料仍为零（`demo-strangers` 是模拟语料，不算人）。
 - **K1 契约还欠两件**：① 独立评审（本页「执行契约」要求、前七片都没花）——本轮派发，verdict 落 `docs/evidence/reviews/`；② A2 要 person 就 `con-001` 说一句确认或推翻——这是 `need_user_review`，页面是 `docs/dao/person-dojo/道图.md`，测试替不了。
-- **本轮推进（第八片）**：把一场真的 `discuss` 会话接进同一条 loop（会话 → 探针笔记），契约见 `### 第八次推进`。这是「一条道的一生」目前唯一断在纸面的一步：四句问法已经在会话里问，会话产物却进不了 `dao_life.py`；`docs/dao/elicitation/live-session-1.md` 是 harness 手搓的，不是真会话。
+- **本轮推进（第八片）**：把一场真的 `discuss` 会话接进同一条 loop（会话 → 探针笔记）——已建、已跑通，结果与残余风险见 `### 第八次推进`。这是「一条道的一生」原先唯一断在纸面的一步：四句问法已经在会话里问，会话产物进不了 `dao_life.py`。
 - **明确没写进路线的东西**：从会话到 `extraction.json`（动作落点、代价单位、规则表）仍是人写，模型提炼（`m2b`/`m2e`）与这条线怎么接，等第八片的事实再定；不先写远路。
 - **证据与预算**：证据块的数字先跑命令再抄；本轮预算照 `## 预算`（每里程碑执行子代理 ≤2、独立评审 ≤2 轮、dojo 模型调用 ≤40），第八片预计 0 次 dojo 模型调用。
 - **历史留档**：M2 的两次独立评审判 fail 与三处关闭、`m2f` 不跑的理由、M2 五条各自的判定依据，都还记在本页原来的位置（`## M2`、`## 不依赖门的 M2 能力包`、`## 证据卫生`）；K1 七片的逐次契约与结果在 K1 一节。不在这里复述。
@@ -654,6 +654,38 @@ $ python3 scripts/dao_life.py /tmp/note-bad --check     # 这一份把 note.md �
 
 **这一片不承诺的**：不承诺真人对四句问法答得出干净的两边（这恰好是它要量的事实：答不出就拒收，拒收理由可读）；不承诺会话能自动变成道（提炼仍是人写）；不把它算作 K1 的 A2——那要 person 自己的那一句话。
 
+#### 第八次推进的结果（2026-10-27，0 次计量调用）
+
+**改了什么，一句话**：一场真的 `discuss` 会话现在能自己写出探针格式的笔记，笔记能进同一条 loop；哪些件是他在会话里答到的，由会话记录决定，不由写提炼的人声明。
+
+```sh
+$ python3 scripts/dao_session.py --trace <真 discuss 轨迹> --out /tmp/lib --person p-demo --sample acquaintances
+写入 /tmp/lib/note.md 与 session.json
+$ python3 scripts/dao_life.py /tmp/lib --check
+  dao-p-demo-T1  v1  模拟 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）
+  作者：他的 1；记录检查 0 条（确认 0 / 部分 0 / 收窄 0 / 推翻 0 / 未表态 0）；晋升 0 条
+--check：不写盘
+$ python3 -m unittest discover -s tests
+Ran 203 tests ... OK
+$ sha256sum docs/dao/person-dojo/daos.json
+2ec777230989d81bd616c042e861f4bf14cdfd7f92c09517f03c1e7319e01acc
+```
+
+- **K2-1 过**：真会话轨迹导出 `note.md` 与 `session.json`；配好 `extraction.json` 后 `dao_life.py --check` 退出 0。上面是 2026-10-27 用 `run_discuss` + `ScriptedHost` 跑出的真轨迹复跑的一遍。
+- **K2-2 过**：`note.md` 的逐字行由测试逐条核对到轨迹输入；时间戳取轨迹的 `at`（这场脚本化会话全在 00:00，运行得比一分钟快，照实写）。
+- **K2-3 过**：两边必须出现在他「张力」那一件的回答里；答不出两边、或藏着无法逐字承载的 `|`、引号、换行时，退出非 0 并说出是哪一件，盘上不写。
+- **K2-4 过**：真会话漏答「代价」两轮时按名拒收且不建目录；空轨迹、缺 `session_end`、没有 elicitation、elicitation 前没有已写入的结论，各拒一次。
+- **K2-5 过**：`session.json` 说哪几件晋升了，`part_sources` 就是那几件；`extraction.json` 把没晋升的一件写成「他的原话」时判不过（负控制：作者冲突）。六件全是他时才到 `自述`。
+- **K2-6 过**：全量 203 项测试绿；`--check` 干净；13 条 `daos.json` 字节不变（哈希同上）；0 次计量调用。
+
+**残余风险（第八次推进）**
+
+- **一场只出一条**：`discuss` 只在**第一条**写入的结论之后问四件（`elicitation["started"]` 之后不再问），所以一场会话最多导出一条张力；第二条结论写了也没有四件。这是会话那边的设计，不是导出器的：要让一场出多条，得先改 `discuss` 的提问节奏，这一片没做。
+- **提炼仍是人写的**：`extraction.json` 的动作落点、代价单位、规则表没有自动化；导出器只保证作者不越权，不保证道写得对。
+- **格式会拒人**：真人的回答里出现 `|`、引号或换行时，探针格式无法逐字承载，命令只能拒收。这是诚实，但意味着真跑时会有笔记写不出来；拒收理由要读得懂，否则人会以为工具坏了。
+- **逐字的校验有一半是同义反复**：elicitation 的回答只存在于它自己的记录里，没有第二处可对；能对的是会话轮次。伪造一条自洽的 elicitation 记录不会被这条检查抓住——这是轨迹自身的边界，已写在这里。
+- **独立评审仍欠**：K1 的契约要求交付前一次独立评审；本片完成后与 K1 一起送评，verdict 落在 `docs/evidence/reviews/`。
+
 ## 证据卫生
 
 - **一条规则**：证据块在写之前先跑它点名的命令，数字从输出复制；不凭记忆写数。上一份报告的提交计数行作废，原因就是这一条。
@@ -683,7 +715,7 @@ $ python3 scripts/dao_life.py /tmp/note-bad --check     # 这一份把 note.md �
 
 - **怎么开始**：`python3 -m dojo --db /tmp/play.sqlite3 discuss`。续跑加 `--resume <轨迹>`，关人物档案加 `--no-profile`，看请求进度加 `--verbose`。端点须显式配置（见 `README.md`），不配置就不联网。
 - **person 想亲手玩一局时的那一条命令**：`cd /home/z/vibe/dojo && DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1 DOJO_SESSIONS=/tmp/dojo-play python3 -m dojo --db /tmp/dojo-play/dojo.sqlite3 discuss`——trace 落在 `/tmp/dojo-play/discuss-<32位十六进制>.jsonl`，玩完把 `ls -t /tmp/dojo-play/*.jsonl | head -1` 打出来的那一行发回来就行（2026-10-23 用回环桩服务实际跑过这条命令：轨迹目录 0700、文件 0600、末行 `session_end` 带 `model`）。
-- **怎么继续规划**：先看本页 `## 当前推进状态`。`K1 一条道的一生` 已跑完七片（结果见 K1 一节），本轮在做第八片（会话 → 探针笔记，契约见 `### 第八次推进`）；K1 的原验收行 A1–A7 在 `docs/proposal-knowledge-network.md` 第七节，独立评审与本轮同批。
+- **怎么继续规划**：先看本页 `## 当前推进状态`。`K1 一条道的一生` 七片已跑完，第八片（会话 → 探针笔记）已建并跑通（结果与残余风险见 `### 第八次推进`）；K1 的原验收行 A1–A7 在 `docs/proposal-knowledge-network.md` 第七节，独立评审与本轮同批。
 - **person 那一局的记录**：`docs/evidence/m1.5-checkpoint/person-2026-10-23.md`，他的原话、他判断的出处、四行里的缺项与谁能补都在那一份里；他以后交来 trace，原样加进同一份。
 - **怎么核实基线**：`python3 -m unittest discover -s tests`；`python3 -m compileall -q dojo tests`。
 - **证据在哪**：`docs/evidence/m1*`、`m1.5-checkpoint`、`m2.0-stance-search`、`m2.1-person-profile`、`m5-sycophancy`，含失败记录，勿删。

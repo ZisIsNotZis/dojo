@@ -26,13 +26,30 @@ python3 scripts/dao_life.py docs/dao/person-dojo --compare docs/dao/demo-strange
 - **拒收**（理由写在第一行，且不写任何文件）：缺头部行、`date`/`minutes`/`sample` 不合格式、锚在「## 逐字」里找不到、张力少一格、原话不带引号、`A ↔ B` 不是一对、`extraction.json` 缺来源类别、笔记里有某条张力而提炼里没有它、提炼缺 `price`/`off`/`rule` 之类。
 - **形状**：`probe-demo/` 是一场模拟会话——头部写 `sample: acquaintances`，但 `extraction.json` 的 `attribution` 是 `synthetic`，所以它的状态行是 `模拟 · 未检（2/3）`，不是一个人的道图。
 
+## 一场讨论会话怎么导出笔记
+
+`python3 -m dojo discuss` 的轨迹可以直接变成同一份探针笔记，不靠人抄：
+
+```sh
+python3 scripts/dao_session.py --trace <数据库目录>/sessions/<session>.jsonl \
+  --out /tmp/lib --person p-demo --sample acquaintances
+```
+
+它写两份：`note.md`（探针格式；四行头取轨迹的日期与时长，`## 逐字` 是他的会话输入与四件回答，`## 张力` 是他「张力」那一件里说出的 A ↔ B）和 `session.json`（机器记录：哪几件在会话里被晋升、逐字回答是什么）。`--check` 只校验不写盘。
+
+- **作者由会话决定，不由写提炼的人声明**：库目录里有 `session.json` 时，四件的 `part_sources` 只按它晋升过的那几件算；`extraction.json` 把没晋升的一件写成「他的原话」时判「作者冲突」，库不建。
+- **它不写 `extraction.json`**：动作落点、代价单位、规则表仍要人写，所以导出的笔记还要配一份提炼才能进 `dao_life.py`。这一半没有自动化。
+- **拒收都比猜好**：一件没答、张力说不出两边、回答里含 `|`／引号／换行（探针格式逐字承载不了）、轨迹没有已写入的结论在前，命令都退非 0、说出是哪一件，盘上不留东西。
+- **一场只有一条**：`discuss` 只在第一条写入的结论之后问四件，所以一场会话最多导出一条张力；第二条结论没有四件，也就导不出来。
+
 ## 文件是哪一种
 
 | 文件 | 种类 | 谁写 |
 |---|---|---|
 | `vocabulary.json` | 落盘数据：受控张力词与动作词，八个词，冻结 | 手写；新增一个词要写理由与它从哪条经历来 |
 | `comparison.json` | 落盘数据：一次对比的读法与限制 | 手写；没有它，`--compare` 不跑 |
-| `<库>/note.md` + `<库>/extraction.json` | 落盘数据（笔记库：事件层来自笔记，提炼层来自 `extraction.json`） | 手写：笔记照探针格式；提炼写它不能从笔记知道的部分 |
+| `<库>/note.md` + `<库>/extraction.json` | 落盘数据（笔记库：事件层来自笔记，提炼层来自 `extraction.json`） | 手写：笔记照探针格式（或用 `dao_session.py` 由会话导出）；提炼写它不能从笔记知道的部分 |
+| `<库>/session.json` | 落盘数据（会话作者记录：四件哪几件被晋升、逐字回答） | `scripts/dao_session.py` 生成；库目录里有时，`part_sources` 只按它算 |
 | `<库>/episodes.json` | 落盘数据（事件层） | 手写：原话、路径、行号、来源类别 |
 | `<库>/daos.json` | 落盘数据（提炼层） | 手写：六件套 + 张力键 + 动作键 + 一张可判的规则表 |
 | `<库>/observations.json` | 落盘数据（落地观察 + `needed`） | 手写：观察与「要什么才能有这一格」 |
