@@ -47,6 +47,10 @@ python3 -m dojo revise idea-01 --statement '在难度不是训练的情况下，
 python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # revoking discussability, not deleting history
 ```
 
+
+What the demo is, and what it is not: three strangers with independent problems — making tidiness stick, writing code before the requirement is clear, and the objection that some ability is built by difficulty — each get a candidate, a retrieval from the real local store, and a challenge that produces a new version without deleting the old one. Every line is scripted, the seed records `seed-m01`–`seed-m04` are simulated material, and the personas are not user research. `compare --full` replays two archived Luna answers offline (old editor-bridge evaluation material, not the current story); `freeze-materials` writes four frozen model inputs with C condition drawn from a real store retrieval; `demo --workdir ./run` keeps the database and a short summary in a new or empty directory and refuses to overwrite.
+
+
 Merging is never automatic; it needs an explicit human judgement and is reversible:
 
 ```sh
