@@ -85,6 +85,7 @@ python3 -m dojo discuss --verbose  # 在 stderr 实时显示请求与检索进�
 - **每场会话都有本地轨迹。** 每轮一行 JSON：你的原话、主持人的回答、当轮候选、是否写入及理由、用量、失败原因。默认开启，`--no-trace` 让整场不产生文件，`--resume <trace>` 续跑同一会话。
 - **离线回放。** `compare` 打印两份归档的 Luna 回答及其出处与 sha256；`freeze-materials` 重新生成四份冻结模型输入，C 条件来自程序实际的本地检索。
 - **「一条道的一生」这条 loop。** `scripts/dao_life.py` 从具体经历建出道库，检查自洽与可反驳，印出哪些落地格从未跑过、要什么才能跑，并按逐对关系比较两个库——不调模型、不联网、不连数据库。
+- **一场真会话能写成探针笔记。** `scripts/dao_session.py` 把 `discuss` 的 JSONL 轨迹写成探针格式的笔记，并写一份 `session.json`：四件里哪几件是他真在会话里答到的。哪件没答、张力说不出两边、或回答里带着笔记无法逐字承载的字符，它就具名拒收、盘上不写；随后 `dao_life.py` 只按会话晋升过的那几件算作者，提炼里把没晋升的一件写成「他的原话」会被判不过。
 
 ## 架构
 
@@ -103,6 +104,7 @@ dojo/
   compare.py     归档回答的离线回放
 scripts/
   dao_life.py    K1 loop：事件 → 道 → 回执 → 道图，含拒收
+  dao_session.py discuss 轨迹 → 探针笔记 + 作者记录
   dao_live_session.py、dao_elicit.py、tension_overlap.py
   demo.sh、storage-smoke.sh
 tests/           unittest 测试集，只用标准库
@@ -156,6 +158,7 @@ sh scripts/storage-smoke.sh                # 临时目录里的端到端 CLI 演
 - 三幕离线 Demo、离线对比回放、冻结材料生成器。
 - `discuss`：零结构自然语言循环、在同意那一轮写入、本地轨迹、`--resume`、`person.md` 档案、答案需要真实计算时落盘计算交接单。
 - K1「一条道的一生」：loop 已跑过一位真人的记录（13 条道、9 条写不成道的材料、1 条候选、1 对自相矛盾、26 条记录检查、0 条晋升），外加一个按构造就是模拟的第二个库，并自己写明这一点。
+- 一场完成的 `discuss` 会话可以导出成探针笔记；哪几件是他的由会话决定、不由手写的提炼声明，提炼声称了一件没被晋升的会被库拒绝。
 - 只用标准库的测试集，覆盖 CLI、存储、检索、讨论、Demo、管线与 K1 loop。
 
 **计划中，且老实说没完成**

@@ -85,6 +85,7 @@ python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
 - **Local trace of every session.** One JSON line per turn: your words, the host's answer, the candidate, the stance decision and its reason, token counts, failures. Default on, `--no-trace` removes it entirely, `--resume <trace>` continues the same session.
 - **Offline replay.** `compare` prints the two archived Luna answers with their provenance and sha256; `freeze-materials` regenerates the four frozen model inputs, C condition from a real local retrieval.
 - **The "life of one dao" loop.** `scripts/dao_life.py` builds a dao library from concrete episodes, checks self-consistency and refutability, prints which observations were never run and what would be needed, and compares two libraries pair by pair — no model, no network, no database.
+- **A real conversation becomes a probe note.** `scripts/dao_session.py` turns a `discuss` JSONL trace into the probe note plus `session.json`, the record of which four parts he actually answered. An unanswered part, a tension without two sides, or an answer the note format cannot carry refuses by name and writes nothing; `dao_life.py` then takes authorship from the session, so an `extraction.json` that claims a part the session did not promote is refused.
 
 ## Architecture
 
@@ -103,6 +104,7 @@ dojo/
   compare.py     offline replay of archived answers
 scripts/
   dao_life.py    K1 loop: episodes → daos → receipts → map, with refusals
+  dao_session.py discuss trace → probe note + the authorship record
   dao_live_session.py, dao_elicit.py, tension_overlap.py
   demo.sh, storage-smoke.sh
 tests/           unittest suite, standard library only
@@ -156,6 +158,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md). In short: this is a scope-disciplined
 - Three-act offline demo, offline comparison replay, frozen-material generator.
 - `discuss`: zero-structure natural-language loop, write on the turn agreement happens, local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
 - K1 "the life of one dao": the loop runs over one real person's record (13 daos, 9 materials that could not be written into a dao, 1 candidate, 1 self-contradicting pair, 26 record checks, 0 promotions), plus a second library that is synthetic by construction and says so.
+- A completed `discuss` session can be exported as the probe note; the session, not the handwritten extraction, decides which parts are his, and the library refuses an extraction that claims an unpromoted part.
 - A standard-library test suite covering the CLI, store, retrieval, discussion, demo, pipeline and the K1 loop.
 
 **Planned, honestly unfinished**
