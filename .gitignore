@@ -13,3 +13,11 @@ exports/
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+
+# Local build/test junk (none of it is tracked)
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
