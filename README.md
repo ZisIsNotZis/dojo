@@ -1,87 +1,170 @@
-# 道场：本地无 UI 业务逻辑 POC
+<p align="center"><img src="assets/logo.svg" alt="dojo 道场" width="200" height="40"></p>
 
-这是一个**本地 CLI 与 SQLite POC**，用于演练编程/agent 项目中的想法、经验主张、反例和未知如何成为可追溯的讨论候选。它记录讨论状态，不认证真假，也不自动把相似主张合并。没有 UI、服务器、登录或自动 agent；默认体验完全离线。显式选择 `chat` 或 `demo --live` 才会联网，并且必须先配置兼容端点。
+**English** | [简体中文](README.zh-CN.md)
 
-## 产品方向、已实现 Demo 与计划入口
+# dojo · 道场
 
-三者分开读：
+A local, no-UI CLI and SQLite proof of concept for keeping ideas, experience claims, counterexamples and unknowns as traceable discussion candidates — with their source, their boundary, and the version they replaced.
 
-- **产品方向**（愿景与质量维度，不是已实现行为）见 [`docs/product.md`](docs/product.md)。它是当前产品方向的唯一入口。
-- **已实现的演示**见 [`docs/current-demo-direction.md`](docs/current-demo-direction.md)：`python3 -m dojo demo` 按三位陌生人的故事做了出来。该页已收窄为这份 Demo 的说明，不再是产品方向入口；照它读出的东西是模拟，不是用户效果。
-- **里程碑、验收与下一步**见 [`docs/plan.md`](docs/plan.md)，其 `## 当前推进状态` 一节写明现在卡在哪。
-
-## 现有演示（约 2–5 分钟）
-
-要求 Python 3.10+；只用 Python 标准库，无需安装依赖。从仓库根目录运行这一条命令：
+**dojo records what was said and on what basis, and refuses to grade it true: `confirm` only means "worth retrieving", every rewrite keeps the version it replaced, and a claim whose only source is the session that wrote it is never broadcast back as corroboration.**
 
 ```sh
-python3 -m dojo demo
+python3 -m dojo demo     # three-act Chinese story, offline, no dependencies
 ```
 
-故事分三幕：甲（空间整洁）提出抽象道，经确认/编辑/拒绝后保存；乙（软件开发）在**独立**问题里被真实本地 Store 检索带回甲的抽象道与不同条件路线，并留下自己的应用路线；丙（抽象挑战）提出逻辑异议，产生关系与新版本而**不删除旧道**。醒目提示的预设台词是**模拟，不是实时 AI、用户研究或效果证明**；默认临时数据库在退出时清理。完整指南见 [`docs/demo-guide.md`](docs/demo-guide.md)。
+## Quick start
 
-可选：离线回放归档的两份实际 Luna 回答（不联网、不重新生成；这是旧 editor-bridge 评价的材料，不是当前故事）：
+Needs Python 3.10+ and nothing else — the whole runtime is the standard library, so there is no install step. Run from the repository root:
 
 ```sh
-python3 -m dojo compare
+git clone https://github.com/ZisIsNotZis/dojo.git
+cd dojo
+
+python3 -m dojo demo              # offline three-act story, temp DB removed on exit
+python3 -m dojo demo --auto       # same story without stdin (no prompts)
+python3 -m dojo demo --details    # expand every retrieved card
+python3 -m dojo --help            # every operation and flag
 ```
 
-四条 `seed-m01`–`seed-m04` 是 [`docs/packets/seed-pack-v2.md`](docs/packets/seed-pack-v2.md) 中的模拟材料；`seed` 可重复执行，已有 ID 不覆盖。
+The demo is simulated dialogue, not live AI and not user research. A real end-to-end walk through every store operation, in a throwaway database:
 
-默认 SQLite 数据库是 `~/.local/share/dojo/dojo.sqlite3`，程序创建的应用目录为仅当前用户访问（权限 `0700`），数据库文件为 `0600`。可在仓库副本间设置 `DOJO_DB=/private/path/dojo.sqlite3` 或 `--db /private/path/dojo.sqlite3`。`discuss` 的可见、可编辑人物档案固定命名为数据库同目录的 `person.md`，首次创建后程序只在末尾追加日期与会话标记的条目，不覆盖用户编辑，文件权限为 `0600`；设置 `DOJO_PERSON=/private/path/person.md` 可改用其他路径。每场默认读取全文并作为上下文发送给模型，也允许模型追加稳定、可复用、非敏感的信息；开场会披露发送行为，`discuss --no-profile` 可让本场既不读取也不写入档案。模型的隐私与敏感信息约束是提示级，不是强制拦截。数据库只保存用户明确录入的候选、结构化来源摘要、匿名 session ID、版本和事件，不存原始聊天；但 `discuss` **默认写逐轮会话轨迹**，轨迹里就是你的原话与模型原文：默认路径 `<数据库目录>/sessions/<session>.jsonl`，目录 `0700`、文件 `0600`，仅存本地、不上传，开场会告诉你本场路径，`--no-trace` 可让整场不产生任何轨迹文件。导出目录与数据库分离，默认 `~/.local/share/dojo/exports`；可用 `DOJO_EXPORTS` 或 `export --outdir` 调整。导出使用唯一文件名，不覆盖既有文件。
+```sh
+sh scripts/storage-smoke.sh
+```
 
-用 `python3 -m dojo --help` 查看操作与参数。核心流程示例：
+The claim lifecycle by hand:
 
 ```sh
 python3 -m dojo add --id idea-01 --kind abstract_idea \
   --statement '降低与目标无关的摩擦能让重复行为更容易持续' \
   --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦'
 python3 -m dojo confirm idea-01 --basis '表述清楚，值得检索；不表示为真'
-python3 -m dojo search '摩擦 持续 行为'
-python3 -m dojo show idea-01 --history
-python3 -m dojo revoke idea-01 --reason '范围仍不清楚'
+python3 -m dojo search '摩擦 持续 行为'          # lexical overlap, hit words shown
+python3 -m dojo show idea-01 --history          # versions and events
+python3 -m dojo challenge idea-01 --text '把一切变容易未必有益'
+python3 -m dojo revise idea-01 --statement '在难度不是训练的情况下，降低无关摩擦才让重复行为更容易持续' \
+  --reason '补上失效条件，保留旧版本'
+python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # revoking discussability, not deleting history
 ```
 
-`confirm` 仅将候选标为可继续讨论/检索；不会增加事实可信度。检索是可查看命中词的透明词汇重合（中文多字符查询按相邻二元组、单字符查询按单字匹配），不是语义理解。只返回当前 `discussable` 的候选，撤回、草稿和分裂父项不匹配；合并重定向解析到规范 ID。重复次数不加权；同一内容再写一次会被拒绝并给出已有卡 ID，第二个独立会话得出同一结论时用 `attach-source` 给那张卡加来源，而不是再写一张卡。
-
-`broadcast` 是同一次检索的跨会话出口：它拒收"全部独立性来源就是写它的那一个会话"的卡（含没有来源组、只带 `--session` 写下的卡），也拒收 `--session` 指名的会话自己写的卡，被拒的卡连同原因列在 `suppressed` 里而不静默丢弃。`pipeline --session <id>` 跑会话末的三个 pass（`classify → locate → challenge`），每张卡每个 pass 只处理一次，重跑是空操作，pass 只提议不改写。
-
-显式人工作出等价判断后才能合并：
+Merging is never automatic; it needs an explicit human judgement and is reversible:
 
 ```sh
 python3 -m dojo merge idea-alias idea-01 --confirm --reason '主持人核对主张及范围可互换'
-python3 -m dojo show idea-alias  # 展示规范 ID 与重定向链
+python3 -m dojo show idea-alias      # canonical ID plus redirect chain
 python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 ```
 
-如合并后任一相关记录又变化，程序会拒绝用旧快照覆盖后续工作；可以手动复核恢复。`split` 的 JSON 子项可用 `--children-json '[{...},{...}]'` 或 `--children-json @children.json` 输入；拆分保留父版本与来源 ID。`abstain` 仅记事件，不增加/降低可信度。
-
-## 真实模型与 CLI/SQLite 操作
-
-- `python3 -m dojo chat` 或 `python3 -m dojo demo --live`：只有显式选择这些模式且配置端点后才会发 HTTP 请求。详见 [`docs/demo-guide.md`](docs/demo-guide.md)；无端点配置时不联网、不回退到预设。
-- `python3 -m dojo discuss` 的主持人先推断再回答：用户没说的参数由它假设并写明条件，能推的公式当场推、能给数字就给数字，只在真存在活分歧时才不给单一结论；默认推理等级为 `medium`。检索带回页面正文（每条摘录上限 1200 字，每场 6000 字），并在对话里显示 `[检索 N] 查询 → 命中数：域名`。当结论依赖真实数值计算时，主持人会在回答里写一节 `## 计算交接单`，程序把它落盘为 `<会话目录>/compute-<id>-<轮>.md`，交给外部执行器运行后把结果说回对话；主持人自己没有代码执行能力，也不会声称跑过计算。
-- `python3 -m dojo discuss --verbose`：把模型请求、检索 query 与命中域名、每轮耗时实时打到 stderr，stdout 与轨迹不变。一轮讨论会等待多次模型请求和检索（实测单轮 5–30 秒），没有这个通道就只能看到空提示符。`DOJO_LLM_MODEL` 必须与端点注册的模型名一字不差：本机端点是 `github_copilot/gpt-6-luna`（下划线），连字符版本会被端点以 HTTP 400 拒绝。单次模型请求超时默认 60 秒，可用 `DOJO_LLM_TIMEOUT`（5–600 秒整数）调整；默认值偏长的原因见 [`docs/plan.md`](docs/plan.md) 的已修缺陷小节。
-- `python3 -m dojo demo --auto`：无 stdin 的 CI 预设故事；`python3 -m dojo demo --details` 展开每条检索卡；`python3 -m dojo demo --workdir ./my-dojo-run` 可保存数据库和简短总结，目录必须为空且不会覆盖已有数据。
-- `python3 -m dojo compare --full`：显示两份归档原文（旧 editor-bridge 评价，非当前故事）；默认 `compare` 提供短摘要、run ID 和输入文件路径，不联网。
-- `python3 -m dojo freeze-materials`：生成四份独立模型输入；C 条件来自程序实际 Store 检索，输出不会覆盖现有目录。默认输出目录为 `docs/packets/frozen-conversation-v2/`。
-- [`docs/evidence/conversation-demo-luna-v1/provenance.md`](docs/evidence/conversation-demo-luna-v1/provenance.md)：归档来源、摘要、sha256 和比较局限；两份原文均完整保留。
-- [`docs/cli-guide.md`](docs/cli-guide.md)：15 分钟业务存储操作序列，含确认、撤销、challenge/revise、检索、abstain 与 B/C 导出。
-- `sh scripts/demo.sh` 启动同一个中文故事；旧的后台 JSON 数据库检查改为 `sh scripts/storage-smoke.sh`。
-
-## 文档与试验边界
-
-- [`docs/philosophy.md`](docs/philosophy.md)：用户明确优先事项与可撤销 POC 设计分别标注。
-- [`docs/poc-spec.md`](docs/poc-spec.md)：纸面阶段的历史规格与当前 CLI/SQLite 实现行为、简化差异。
-- [`docs/packets/seed-pack-v2.md`](docs/packets/seed-pack-v2.md)：当前 demo 的四条模拟 seed 说明。
-- [`docs/packets/seed-pack-v1.md`](docs/packets/seed-pack-v1.md)、[`docs/roleplay-guide.md`](docs/roleplay-guide.md)、[`docs/evaluation.md`](docs/evaluation.md)、[`docs/facilitator-notes.md`](docs/facilitator-notes.md)：旧 editor-bridge 评价的历史材料，不属于当前陌生人故事。
-
-存储检索始终只是可检查的词汇重合，不是语义检索。`export --mode b` 生成不带 seed 的共同目标材料；`export --mode c --id seed-m01 --id seed-m02` 将同一目标与操作者显式选择的讨论候选合并。`--budget-chars` 是包含来源 ID 在内的硬字符上限，不是模型 token 估计；导出不含 actor/judge 笔记。`idea.md` 是历史原稿，保持原样。
-
-运行标准库测试：
+Natural-language discussion against a model endpoint is opt-in and is the only path that touches the network:
 
 ```sh
-python3 -m unittest discover -s tests -v
-python3 -m compileall -q dojo tests
+export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
+export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # must match the endpoint's registered id
+export DOJO_LLM_API_KEY=...
+python3 -m dojo discuss            # zero forms, zero y/n prompts; writes only on agreement
+python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
 ```
 
-原始草案 [`idea.md`](idea.md) 保留原样，仅作为历史来源，不覆盖已明确优先事项。示例、角色和四条种子均为模拟材料，不代表研究结果、独立证据或产品效能。
+## What it can do now
+
+- **Candidate ledger with provenance.** Each record carries statement, kind, premises, scope, alternatives, contradictions, unknowns, and structured sources — never a raw chat transcript.
+- **Discussability ≠ truth.** `confirm` marks a candidate as worth discussing and retrieving; `revoke` withdraws that mark; `abstain` records uncertainty without touching a version.
+- **Immutable versions.** `revise`, `challenge`, `link`, `split` and `merge` all keep prior versions and the reason for the change; `unmerge` restores an exact pre-merge record as a new version.
+- **Transparent retrieval.** `search` is lexical overlap with the hit words printed — CJK multi-character queries match adjacent bigrams, single characters match themselves. No embeddings, no hidden ranking; only `discussable` candidates are returned and merge redirects resolve to the canonical ID.
+- **No double-entry inflation.** Re-adding the same content is refused and reports the existing card ID; a second independent session that reaches the same conclusion uses `attach-source` instead of writing a second card.
+- **Independence guard on broadcast.** `broadcast` suppresses cards whose only independent source is the session that wrote them, and cards written by the session asking; suppressed cards are listed with the reason rather than silently dropped.
+- **Idempotent end-of-session passes.** `pipeline --session <id>` runs `classify → locate → challenge` once per card per revision; a re-run writes nothing, and every pass only proposes.
+- **Bounded prompt export.** `export --mode b` (shared goal, no seeds) or `--mode c --id …` (goal plus explicitly chosen candidates) with `--budget-chars` as a hard character cap; exports carry no actor or judge notes.
+- **Discussion that stores the price.** `discuss` asks four things per rule — situation, tension, cost, failure — with the author of each part recorded and the weakest part capping the grade (`合写` whenever any part was filled by the system).
+- **A host that answers instead of stalling.** It infers the parameters you did not state and writes their conditions, does the arithmetic it can, and hands off real computation as a `## 计算交接单` section that lands on disk as `<session dir>/compute-<id>-<turn>.md` for an external runner — it has no code execution and never claims to have run something.
+- **Bounded requests.** Retrieval brings page text back with caps of 1200 characters per excerpt and 6000 per session; reasoning level is `DOJO_LLM_REASONING` (default `medium`); one request times out at 60 s and `DOJO_LLM_TIMEOUT` accepts 5–600.
+- **Local trace of every session.** One JSON line per turn: your words, the host's answer, the candidate, the stance decision and its reason, token counts, failures. Default on, `--no-trace` removes it entirely, `--resume <trace>` continues the same session.
+- **Offline replay.** `compare` prints the two archived Luna answers with their provenance and sha256; `freeze-materials` regenerates the four frozen model inputs, C condition from a real local retrieval.
+- **The "life of one dao" loop.** `scripts/dao_life.py` builds a dao library from concrete episodes, checks self-consistency and refutability, prints which observations were never run and what would be needed, and compares two libraries pair by pair — no model, no network, no database.
+
+## Architecture
+
+The runtime is deliberately small: one SQLite file is the whole state, the CLI is a thin argparse surface, and everything above the store either proposes or renders.
+
+```
+dojo/
+  cli.py         argparse surface: one subcommand per store operation
+  storage.py     SQLite schema, versions and events, retrieval, merge/split, export
+  live.py        bounded OpenAI-compatible HTTP client on urllib
+  discuss.py     natural-language loop: write-on-agreement, traces, person.md profile
+  elicit.py      the four questions and the "who wrote it" rules, in one place
+  pipeline.py    classify → locate → challenge, once per card per revision
+  search.py      lexical overlap scoring with visible hit words
+  demo.py        three-act simulated story; freeze-materials
+  compare.py     offline replay of archived answers
+scripts/
+  dao_life.py    K1 loop: episodes → daos → receipts → map, with refusals
+  dao_live_session.py, dao_elicit.py, tension_overlap.py
+  demo.sh, storage-smoke.sh
+tests/           unittest suite, standard library only
+docs/            the layered fact base; index in docs/README.md
+docs/dao/        K1 data: person-dojo, demo-strangers, probe-demo, vocabulary.json
+inbox/, mail/    working notes kept as history
+idea.md          the original draft, preserved unchanged
+```
+
+How the pieces talk: `cli.py` parses a command and hands it to `Store` (`storage.py`), which is the only writer to SQLite and the only reader for retrieval. `discuss.py` composes the host prompt, calls `live.py`, writes the turn to a local JSONL trace, and writes a card only when the model reports the user accepted. `pipeline.py` is a reader/writer over the same store, run after the session. `scripts/dao_life.py` touches no database at all: it reads and writes the JSON library under `docs/dao/` and is reproducible byte for byte for a given `--at`.
+
+State and privacy, stated plainly:
+
+- Default database `~/.local/share/dojo/dojo.sqlite3` (`DOJO_DB` or `--db` to move it); its app directory is created `0700`, the file `0600`.
+- `discuss` keeps a fixed `person.md` next to the database, `0600`, append-only after creation; `--no-profile` neither reads nor writes it.
+- Session traces live at `<db dir>/sessions/<session>.jsonl`, `0600`; local only, never uploaded.
+- Exports go to `~/.local/share/dojo/exports` with unique filenames and never overwrite (`DOJO_EXPORTS`, `--outdir`).
+- Model-side privacy constraints are prompt-level, not enforced filtering. The database stores candidates, source summaries, anonymous session IDs, versions and events — not raw chat; the trace is the one place your own words are kept, and it can be turned off.
+
+### Where the facts live
+
+- [`docs/product.md`](docs/product.md) — product direction, quality dimensions, non-goals; the single entry point for what this is meant to be.
+- [`docs/design.md`](docs/design.md) — invariants, modules, pipeline, anti-storm and anti-pollution rules.
+- [`docs/plan.md`](docs/plan.md) — milestones, acceptance lines, budget, delivery contract; `## 当前推进状态` says where work is stuck right now.
+- [`docs/dao/README.md`](docs/dao/README.md) — the K1 library: what each file is, who writes it, and what is still weak.
+- [`docs/cli-guide.md`](docs/cli-guide.md) — a 15-minute store walkthrough; [`docs/demo-guide.md`](docs/demo-guide.md) — the demo, flag by flag.
+- [`docs/evidence/`](docs/evidence/) — archived evidence bound to commits, not current fact.
+
+`idea.md` is the preserved original draft: it motivates the direction and is never a behavioral spec.
+
+## Development
+
+```sh
+python3 -m unittest discover -s tests -v   # full suite, no install, no network
+python3 -m compileall -q dojo tests        # syntax check across the tree
+sh scripts/storage-smoke.sh                # end-to-end CLI walk in a temp directory
+```
+
+Development conventions and the full layered documentation index are in [`docs/README.md`](docs/README.md); collaboration boundaries (single maintainer, no UI, no scope invented from the draft) are in [`AGENTS.md`](AGENTS.md).
+
+## Contributing
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md). In short: this is a scope-disciplined POC — behavior changes need an acceptance line before the code, tests run on the standard library, and no dependency gets added for convenience.
+
+## Roadmap
+
+**Implemented**
+
+- Candidate lifecycle with provenance, immutable versions, reversible merge and split; lexical retrieval with merge redirects; duplicate refusal.
+- Broadcast independence guard, session-end `classify → locate → challenge` pipeline, bounded B/C prompt export.
+- Three-act offline demo, offline comparison replay, frozen-material generator.
+- `discuss`: zero-structure natural-language loop, write on the turn agreement happens, local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
+- K1 "the life of one dao": the loop runs over one real person's record (13 daos, 9 materials that could not be written into a dao, 1 candidate, 1 self-contradicting pair, 26 record checks, 0 promotions), plus a second library that is synthetic by construction and says so.
+- A standard-library test suite covering the CLI, store, retrieval, discussion, demo, pipeline and the K1 loop.
+
+**Planned, honestly unfinished**
+
+- M2 is not met: `classify` reports `unavailable` instead of guessing, so it still needs one real model judgement, and the end-of-session distillation list has not been run in full and reviewed.
+- The experimental harness and the tension-convergence probe are specified but not run; `docs/probe/notes/` holds zero notes.
+- There is exactly one real person's record. The cross-person promise of a shared database of "dao" has no cross-person evidence yet; until a second person's material lands, read this as one person's thought organizer, not as humanity's dao.
+- Not built and not planned near-term: UI, server, login, social features, rankings, feeds, billing, multi-node federation.
+
+The direction, if the loop survives contact with more than one person: a claim arrives stripped of the occasion it came from but carrying its boundary, its counterexample and the author of each part — so a stranger facing a real decision gets the method with its conditions attached, disagreement produces a new version instead of a deletion, and nothing is graded true by repetition.
+
+## License
+
+GNU Affero General Public License v3.0 — see [`LICENSE`](LICENSE). Copyright (C) ZisIsNotZis.
+
+`idea.md` is the author's original draft, preserved as historical source and not rewritten. Every demo persona, seed and simulated corpus in this repository is simulated material, not a research result, independent evidence, or a claim of product effect.
