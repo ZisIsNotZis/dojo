@@ -113,14 +113,14 @@
         {
           "person": "synthetic-demo",
           "episode": "ep-demo-m02",
-          "status": "推得",
+          "status": "模拟",
           "learned_from": "未记录",
           "exposure": "none-at-time"
         },
         {
           "person": "synthetic-demo",
           "episode": "ep-demo-m03",
-          "status": "推得",
+          "status": "模拟",
           "learned_from": "未记录",
           "exposure": "none-at-time",
           "note": "同一张道的另一条条件路线"
@@ -128,7 +128,7 @@
         {
           "person": "synthetic-demo",
           "episode": "ep-demo-m04",
-          "status": "传闻",
+          "status": "模拟",
           "learned_from": "未记录",
           "exposure": "none-at-time",
           "note": "模拟角色的一句自述，只能旁证"

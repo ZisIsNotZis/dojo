@@ -203,6 +203,18 @@ def check_structure(
         if (episodes.get(item.get("episode")) or {}).get("attribution") not in ATTRIBUTION_CLASSES
     ]
     _add(checks, "每条出处都写明了来源类别", bool(provenance) and not unknown_class, f"类别没写：{unknown_class}")
+    provenance_status_errors = [
+        f"{item.get('episode')}: {item.get('status')!r} != {provenance_status_for(episode)!r}"
+        for item in provenance
+        if (episode := episodes.get(item.get("episode")) or {})
+        and item.get("status") != provenance_status_for(episode)
+    ]
+    _add(
+        checks,
+        "存储归属状态与事件来源一致",
+        not provenance_status_errors,
+        f"状态不匹配：{provenance_status_errors}",
+    )
     tension_keys = {term["key"] for term in vocabulary.get("tensions") or []}
     move_keys = {term["key"] for term in vocabulary.get("moves") or []}
     _add(
@@ -1181,13 +1193,28 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                     if match:
                         verbatim_lines.append(raw_line.strip()[match.end():].lstrip())
             labels = {"situation": "情境", "tension": "张力", "price": "代价", "off": "失效"}
+            cursor = 0
             for part in ("situation", "tension", "price", "off"):
                 evidence = promoted.get(part, {})
                 is_promoted = evidence.get("promoted", False)
                 if is_promoted:
                     answer = evidence.get("answer")
-                    if not isinstance(answer, str) or not answer or not any(answer in line for line in verbatim_lines):
-                        raise NoteError(f"作者冲突：{labels[part]} 的回答不在笔记逐字里")
+                    label = labels[part]
+                    if not isinstance(answer, str) or not answer:
+                        raise NoteError(f"作者冲突：{label} 的回答不在笔记逐字里")
+                    match_index = next(
+                        (index for index in range(cursor, len(verbatim_lines)) if verbatim_lines[index] == answer),
+                        None,
+                    )
+                    if match_index is None:
+                        if any(answer == line for line in verbatim_lines[:cursor]):
+                            reason = "逐字行在该件应有顺序之前"
+                        elif any(answer in line for line in verbatim_lines):
+                            reason = "回答不是完整的逐字行"
+                        else:
+                            reason = "不在笔记逐字里"
+                        raise NoteError(f"作者冲突：{label} 的回答{reason}")
+                    cursor = match_index + 1
                 elif sources.get(part) == "他的原话":
                     raise NoteError(f"作者冲突：{tension['pair']} 的{labels[part]}在 extraction.json 声称他的原话，但 session.json 未晋升")
                 sources[part] = "他的原话" if is_promoted else "系统补"
@@ -1227,7 +1254,7 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                         "person": person,
                         "episode": episode_id,
                         "status": PROVENANCE_STATUS[attribution],
-                        "learned_from": "亲历",
+                        "learned_from": "亲历" if attribution == "person" else "未记录",
                         "exposure": "none-at-time",
                     }
                 ],

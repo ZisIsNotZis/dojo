@@ -236,6 +236,50 @@ class DaoSessionTests(unittest.TestCase):
         with self.assertRaisesRegex(dao_life.NoteError, "note_sha256"):
             dao_life.build_library_from_note(self.out)
 
+    def test_cross_part_price_to_situation_answer_swap_refuses(self):
+        self.assertEqual(self.run_export(), 0)
+        self.prepare_extraction(self.out)
+        session_path = self.out / "session.json"
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        situation_answer = session["tensions"][0]["parts"]["situation"]["answer"]
+        session["tensions"][0]["parts"]["price"]["answer"] = situation_answer
+        session_path.write_text(json.dumps(session, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(dao_life.NoteError, "作者冲突：代价 的回答逐字行在该件应有顺序之前"):
+            dao_life.build_library_from_note(self.out)
+
+    def test_cross_part_price_to_off_answer_swap_refuses_by_cursor(self):
+        self.assertEqual(self.run_export(), 0)
+        self.prepare_extraction(self.out)
+        session_path = self.out / "session.json"
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        off_answer = session["tensions"][0]["parts"]["off"]["answer"]
+        session["tensions"][0]["parts"]["price"]["answer"] = off_answer
+        session_path.write_text(json.dumps(session, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(dao_life.NoteError, "作者冲突：失效 的回答逐字行在该件应有顺序之前"):
+            dao_life.build_library_from_note(self.out)
+
+    def test_repeated_answer_lines_are_consumed_in_order(self):
+        repeated = "同一句话可以是两个不同问题的回答"
+        trace = self.make_real_trace([repeated, ANSWERS[1], repeated, ANSWERS[3]])
+        self.assertEqual(self.run_export(trace, self.out), 0)
+        self.prepare_extraction(self.out)
+        dao = dao_life.build_library_from_note(self.out)["daos"]["daos"][0]
+        self.assertEqual(dao_life.authorship(dao["part_sources"]), "他的")
+        session = json.loads((self.out / "session.json").read_text(encoding="utf-8"))
+        parts = session["tensions"][0]["parts"]
+        self.assertEqual(parts["situation"]["answer"], parts["price"]["answer"])
+
+    def test_generated_nonperson_provenance_is_not_lived_experience(self):
+        self.assertEqual(self.run_export(), 0)
+        self.prepare_extraction(self.out)
+        path = self.out / "extraction.json"
+        extraction = json.loads(path.read_text(encoding="utf-8"))
+        extraction["attribution"] = "relayed"
+        path.write_text(json.dumps(extraction, ensure_ascii=False), encoding="utf-8")
+        dao = dao_life.build_library_from_note(self.out)["daos"]["daos"][0]
+        self.assertEqual(dao["provenance"][0]["status"], "转述")
+        self.assertEqual(dao["provenance"][0]["learned_from"], "未记录")
+
     def test_move_direction_exact_is_accepted_but_paraphrase_is_refused(self):
         self.assertEqual(self.run_export(), 0)
         self.prepare_extraction(self.out)
@@ -284,6 +328,23 @@ class DaoSessionTests(unittest.TestCase):
         first["status"] = "错误标签"
         self.assertNotEqual(first["status"], dao_life.provenance_status_for(episodes[first["episode"]]))
 
+    def test_dao_life_check_rejects_corrupted_stored_provenance_status(self):
+        import contextlib
+        library = self.root / "person-dojo-copy"
+        shutil.copytree(ROOT / "docs/dao/person-dojo", library)
+        daos_path = library / "daos.json"
+        daos = json.loads(daos_path.read_text(encoding="utf-8"))
+        daos["daos"][0]["provenance"][0]["status"] = "错误标签"
+        daos_path.write_text(json.dumps(daos, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = dao_life.main([
+                "dao_life.py", str(library), "--vocabulary", str(ROOT / "docs/dao/vocabulary.json"), "--check",
+            ])
+        self.assertNotEqual(code, 0)
+        self.assertIn("存储归属状态与事件来源一致", output.getvalue())
+        self.assertIn("错误标签", output.getvalue())
+
     def test_export_and_dao_life_cli_pair_with_vocabulary(self):
         library = self.root / "lib"
         library.mkdir()
@@ -299,6 +360,8 @@ class DaoSessionTests(unittest.TestCase):
         extraction = json.loads(extraction_path.read_text(encoding="utf-8"))
         extraction["attribution"] = "synthetic"
         extraction_path.write_text(json.dumps(extraction, ensure_ascii=False), encoding="utf-8")
+        synthetic_dao = dao_life.build_library_from_note(library)["daos"]["daos"][0]
+        self.assertEqual(synthetic_dao["provenance"][0]["learned_from"], "未记录")
         vocabulary = self.root / "vocabulary.json"
         shutil.copy(ROOT / "docs/dao/vocabulary.json", vocabulary)
         check = subprocess.run(

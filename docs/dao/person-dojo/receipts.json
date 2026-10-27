@@ -1,5 +1,5 @@
 {
-  "at": null,
+  "at": "2026-10-23T14:02:48Z",
   "bench": "scripts/dao_life.py",
   "bench_version": 1,
   "daos": {
@@ -51,7 +51,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "ffa985544def",
             "on_version": 1
@@ -78,7 +78,7 @@
             "strength_note": "自验只说明这条道在这件真实活上被用到了、并且改变了输出；它不说明这条道对别人成立。"
           },
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
             "on_digest": "ffa985544def",
             "on_version": 1
@@ -160,6 +160,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'检查归属' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -183,7 +188,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "ffa985544def",
             "on_version": 1
@@ -272,7 +277,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "a941134c01d1",
             "on_version": 1
@@ -296,7 +301,7 @@
             "prediction": "把追问压住、把形状一次给全，他会更愿意继续，并说得出满意。"
           },
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
             "on_digest": "a941134c01d1",
             "on_version": 1
@@ -378,6 +383,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'信息形状' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -401,7 +411,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "a941134c01d1",
             "on_version": 1
@@ -487,7 +497,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "777841e69563",
             "on_version": 1
@@ -513,7 +523,7 @@
             "strength_note": "不是一场对话，是一次书面答复的记录；比会话弱一点，但同样是自然出现的，不是被追问出来的。"
           },
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/field-v1",
             "on_digest": "777841e69563",
             "on_version": 1
@@ -595,6 +605,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'决策成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -618,7 +633,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "777841e69563",
             "on_version": 1
@@ -704,7 +719,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "812e25f756aa",
             "on_version": 1
@@ -792,6 +807,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'归属与匿名' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -815,7 +835,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "812e25f756aa",
             "on_version": 1
@@ -901,7 +921,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "f781fe7b5c72",
             "on_version": 1
@@ -989,6 +1009,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'开放与质量' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1012,7 +1037,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "f781fe7b5c72",
             "on_version": 1
@@ -1084,7 +1109,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "f1e3b7156e94",
             "on_version": 1
@@ -1172,6 +1197,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'抽象与可复核' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1195,7 +1225,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "f1e3b7156e94",
             "on_version": 1
@@ -1267,7 +1297,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "9283fad0fc79",
             "on_version": 1
@@ -1355,6 +1385,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'可信度来源' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1378,7 +1413,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "9283fad0fc79",
             "on_version": 1
@@ -1450,7 +1485,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "093be43a5c84",
             "on_version": 1
@@ -1538,6 +1573,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'可信度来源' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1561,7 +1601,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "093be43a5c84",
             "on_version": 1
@@ -1633,7 +1673,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "09ce55215507",
             "on_version": 1
@@ -1721,6 +1761,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'可发现与不排名' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1744,7 +1789,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "09ce55215507",
             "on_version": 1
@@ -1830,7 +1875,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "b5c1a90d034b",
             "on_version": 1
@@ -1918,6 +1963,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'免费与成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -1941,7 +1991,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "b5c1a90d034b",
             "on_version": 1
@@ -2013,7 +2063,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "5f5a87673cec",
             "on_version": 1
@@ -2101,6 +2151,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'一致与成本' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -2124,7 +2179,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "5f5a87673cec",
             "on_version": 1
@@ -2210,7 +2265,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "33c00e871368",
             "on_version": 1
@@ -2298,6 +2353,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'快与体验' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -2321,7 +2381,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "33c00e871368",
             "on_version": 1
@@ -2423,7 +2483,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
             "on_digest": "10adea3b6692",
             "on_version": 2
@@ -2511,6 +2571,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'判断的范围' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -2534,7 +2599,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": null,
+            "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
             "on_digest": "10adea3b6692",
             "on_version": 2

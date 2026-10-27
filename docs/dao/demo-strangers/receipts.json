@@ -4,7 +4,7 @@
   "bench_version": 1,
   "daos": {
     "demo-d-101": {
-      "digest": "94db69626a270f28cde9e1ab6b13a6a9fdd3637d4f46a97c49a0c0b71c844eed",
+      "digest": "c8e2204e8c4c4fc2fae4eec1955adf7b7281a5b742d0d6738b477949b8e84a6c",
       "id": "demo-d-101",
       "receipts": {
         "falsifiable": {
@@ -50,7 +50,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "94db69626a27",
+            "on_digest": "c8e2204e8c4c",
             "on_version": 1
           },
           "verdict": "pass"
@@ -136,6 +136,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'开始摩擦' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -161,7 +166,7 @@
           "ran": {
             "at": "2026-10-23T14:02:48Z",
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "94db69626a27",
+            "on_digest": "c8e2204e8c4c",
             "on_version": 1
           },
           "verdict": "pass"
@@ -202,7 +207,7 @@
     }
   },
   "inputs": {
-    "daos": "4c97ac68158e47522cfa0028017b476674627f9eba78eea7e5840db23e8a32b1",
+    "daos": "a54249ab978510117cf7acf8ac0cfe738b1a0ff71310420133454f4e96d80edf",
     "episodes": "9fb4b26d5238fac1a8c15d7deadbba970c1a4a62d3426eaf883102f684247f69",
     "exposures": "15f1c9ab52341b23b71477dbe5416dc9b62206ebf718143433767478d5a0ee81",
     "map": "a2e941d8c1c9d04c685d9b4188ab7a679a9ffed5f045918e34dfe9f2c81bd6cc",

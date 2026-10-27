@@ -1,10 +1,10 @@
 {
-  "at": "2026-10-23T14:02:48Z",
+  "at": null,
   "bench": "scripts/dao_life.py",
   "bench_version": 1,
   "daos": {
     "dao-p-demo-T1": {
-      "digest": "297590dafd867817707e9f9d14f44874e87caa22809d70d163964ec08f43c7ec",
+      "digest": "7668282cb6dda786b7b769f91d7525675aed5182df5cb6c38afef90ebc5213ae",
       "id": "dao-p-demo-T1",
       "receipts": {
         "falsifiable": {
@@ -48,9 +48,9 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/simulate-v1",
-            "on_digest": "297590dafd86",
+            "on_digest": "7668282cb6dd",
             "on_version": 1
           },
           "verdict": "pass"
@@ -136,6 +136,11 @@
               "ok": true
             },
             {
+              "detail": "状态不匹配：[]",
+              "name": "存储归属状态与事件来源一致",
+              "ok": true
+            },
+            {
               "detail": "'开始摩擦' 不在 ['一致与成本', '信息形状', '免费与成本', '决策成本', '判断的范围', '可信度来源', '可发现与不排名', '开始摩擦', '开放与质量', '归属与匿名', '快与体验', '抽象与可复核', '检查归属'] 里；新词要先写进 docs/dao/vocabulary.json 并写理由",
               "name": "张力键在受控词表里",
               "ok": true
@@ -159,9 +164,9 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-10-23T14:02:48Z",
+            "at": null,
             "by": "scripts/dao_life.py/structure-v1",
-            "on_digest": "297590dafd86",
+            "on_digest": "7668282cb6dd",
             "on_version": 1
           },
           "verdict": "pass"
@@ -202,7 +207,7 @@
     }
   },
   "inputs": {
-    "daos": "0b7b20d2c7c9e15e14673baf21428f7b5ca81ea4e0436e1c778f1ae052afe7be",
+    "daos": "fe9fea7a105d365025911f15bf9fa2f2b6700813767f843af3e57920da2780f5",
     "episodes": "81d5de2803c52e760986c741f2ed516be7de7545396cd67cad733591ef0bccf0",
     "exposures": "9d580b158a0dd3b65c6320a0e073377b8ac790fcb833d3be85daba8831f06d57",
     "map": "af88891e2228e8d375a0fda729296323e18ddf0d5c3949f3dc448b36a105f0c5",
