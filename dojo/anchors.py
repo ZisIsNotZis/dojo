@@ -26,7 +26,7 @@ def strip_times(value):
     if isinstance(value,dict):return {k:strip_times(v) for k,v in value.items() if k not in DIGEST_NEUTRAL_KEYS}
     if isinstance(value,list):return [strip_times(v) for v in value]
     return value
-
+
 def packet_hash(packet):
     import hashlib
     body={k:v for k,v in packet.items() if k!='sha256'}
