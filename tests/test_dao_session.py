@@ -127,6 +127,31 @@ class DaoSessionTests(unittest.TestCase):
         self.assertFalse(self.out.exists())
         self.assertIn("代价", capture.getvalue())
 
+    def test_real_discuss_off_topic_answer_is_not_a_confirmation(self):
+        """Real words that answer nothing must not export as the person's price.
+
+        The empty-answer arm next door cannot tell the honest gate from "any non-empty
+        row is a confirmation": the empty-string refusal would catch a naive gate by
+        itself. Here 代价 gets two real off-topic answers, so `classify_answer` marks
+        both rows `none` and `collected: false`, and only the recorded promotion
+        evidence can refuse. A gate that accepted any recorded row would export rc 0
+        with `"answer": "看情况"` in session.json (measured: .scratch/3286/legacy).
+        """
+        answers = list(ANSWERS)
+        answers[2:3] = ["不知道", "看情况"]
+        trace = self.make_real_trace(answers)
+        rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line.strip()]
+        price_rows = [r for r in rows if r.get("event") == "elicitation" and r.get("part") == "代价"]
+        self.assertEqual(["不知道", "看情况"], [r.get("answer") for r in price_rows])
+        self.assertTrue(all(r.get("collected") is False and r.get("reading") == "none" for r in price_rows))
+        self.assertTrue(all(r.get("promoted") is False for r in price_rows))
+        import contextlib
+        capture = io.StringIO()
+        with contextlib.redirect_stderr(capture):
+            self.assertNotEqual(self.run_export(trace, self.out), 0)
+        self.assertIn("代价", capture.getvalue())
+        self.assertFalse(self.out.exists())
+
     def test_trace_without_written_round_before_elicitation_refuses(self):
         rows = [json.loads(line) for line in self.trace.read_text(encoding="utf-8").splitlines()]
         rows = [r for r in rows if r.get("decision") != "written"]

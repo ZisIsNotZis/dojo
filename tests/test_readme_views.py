@@ -14,11 +14,15 @@ English page. Three things this gate refuses to accept:
                  `[5, 15, 16, 17]`, the `--revision` refusal naming #27) read
                  off the executed output, in *both* languages.
 
-Why a temp dir per page: both pages name the same library
-(`/tmp/dojo-ledger-front.sqlite3`) and the builder refuses to clobber. Running
-both blocks into one directory would fail on the second page for a reason the
-reader's machine would not have -- the #3247 harness bug, caught before it
-could produce a verdict. The two-language parity check is separate from that:
+Why a temp dir per page: each page's block mints its own `mktemp -d`, and the
+builder refuses to clobber an existing path. Two blocks sharing one TMPDIR
+therefore still reach two distinct libraries (measured: distinct dirs, identical
+content digest, the first library intact), so a shared directory is not the
+failure mode -- a page naming a fixed library path would be, and the #3247 bug
+that sent the gate substitute paths is what this block is written not to need.
+The per-page TMPDIR keeps any such path inside the test, and the block runs
+**verbatim**: a page that only works after the gate rewrites its paths is not
+a page a reader can run. The two-language parity check is separate from that:
 it compares registered flags and quoted numbers, not file bytes.
 """
 import io
