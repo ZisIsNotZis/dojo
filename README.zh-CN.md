@@ -35,6 +35,8 @@ sh scripts/storage-smoke.sh
 手工走一遍一条主张的一生：
 
 ```sh
+DEMO=$(mktemp -d)
+export DOJO_DB=$DEMO/lifecycle.sqlite3   # 临时目录：不会碰你自己的库
 python3 -m dojo add --id idea-01 --kind abstract_idea \
   --statement '降低与目标无关的摩擦能让重复行为更容易持续' \
   --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦'
@@ -44,6 +46,7 @@ python3 -m dojo show idea-01 --history          # 版本与事件
 python3 -m dojo challenge idea-01 --text '把一切变容易未必有益'
 python3 -m dojo revise idea-01 --statement '在难度不是训练的情况下，降低无关摩擦才让重复行为更容易持续' \
   --reason '补上失效条件，保留旧版本'
+python3 -m dojo confirm idea-01 --basis '修订后仍值得检索；仍不表示为真'   # 挑战与修订都会撤销这个标记
 python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # 撤销的是可讨论性，不是历史
 ```
 
@@ -54,6 +57,12 @@ python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # 撤销的是可
 合并从不自动发生；它要一次明确的人工判断，而且可撤销：
 
 ```sh
+DEMO=$(mktemp -d)
+export DOJO_DB=$DEMO/merge.sqlite3        # 自己的库：别名得先存在，才谈得上合并
+python3 -m dojo add --id idea-01 --kind abstract_idea \
+  --statement '降低与目标无关的摩擦能让重复行为更容易持续' --scope '日常重复行为'
+python3 -m dojo add --id idea-alias --kind abstract_idea \
+  --statement '与目标无关的摩擦可以降低，重复行为就更容易持续' --scope '日常重复行为'
 python3 -m dojo merge idea-alias idea-01 --confirm --reason '主持人核对主张及范围可互换'
 python3 -m dojo show idea-alias      # 规范 ID 与重定向链
 python3 -m dojo unmerge idea-alias --reason '复核后撤销'

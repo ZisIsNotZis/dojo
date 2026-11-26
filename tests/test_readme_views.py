@@ -10,6 +10,10 @@ English page. Three things this gate refuses to accept:
   block broken   the README's own `sh` block failing when executed. It is run
                  here from the text, in its own temp dir -- not from a copy
                  written into the test, so a regress in the README is caught.
+                 #3286: that now holds for *every* block, not only the builder
+                 one. The lifecycle and merge blocks on both pages exited 2 on a
+                 fresh library while this file stayed green, because only
+                 `view_blocks(page)[0]` was ever executed.
   prose drifting the numbers the prose quotes (`checked` with `[3, 4]`,
                  `[5, 15, 16, 17]`, the `--revision` refusal naming #27) read
                  off the executed output, in *both* languages.
@@ -402,6 +406,157 @@ class FrontPageRouteRuns(unittest.TestCase):
                               cwd=str(ROOT), capture_output=True, text=True,
                               env=self.env, timeout=180)
         return proc.returncode, proc.stdout, proc.stderr
+
+
+class EveryRegisteredBlockRuns(unittest.TestCase):
+    """Every `sh` block a front page prints must run, and must not touch the reader's library.
+
+    Why this exists: the gate above runs `view_blocks(page)[0]` only. The pages
+    register ten blocks each, and two of them -- "The claim lifecycle by hand"
+    and "Merging never happens automatically" -- exited 2 on a fresh library
+    while this suite stayed green. `revoke` needs an active discussability mark
+    and `challenge`/`revise` each withdraw one (`storage.py:728`, `769`), so the
+    lifecycle block asked to revoke nothing; the merge block merged an
+    `idea-alias` the page never created. Both were inherited from `1af799f`:
+    this is the test that had never been written.
+
+    Two kinds of block are excluded by name, and the exclusion is asserted so a
+    new page cannot hide behind it:
+
+      DEV_BLOCK     `python3 -m unittest discover` + `compileall` -- the page's
+                    own verification recipe, not a demo. Running it here costs
+                    ~20 minutes and reproduces what the suite already is.
+      NET_BLOCK     `dojo discuss` -- needs a live endpoint; the page says so.
+
+    What is asserted, on the bytes the page prints:
+      runs          exit 0 on a fresh library
+      twice         a second run in the same directory also exits 0 (a fixed
+                    library path breaks here, which is the shape of #3246)
+      own library   a block that adds or merges must name its own DB and leave
+                    a sqlite3 inside its own temp dir -- never in HOME. The
+                    missing `--db` was found by doing this by hand once, and it
+                    wrote into `~/.local/share/dojo/dojo.sqlite3`.
+    """
+
+    DEV_BLOCK = ("unittest discover", "compileall")
+    NET_BLOCK = "dojo discuss"
+    WRITES = ("dojo add", "dojo merge")
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="dojo-readme-blocks."))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+
+    def blocks(self, page):
+        found = shell_blocks(page_text(page))
+        self.assertTrue(found, "%s registers no sh block" % page)
+        for number, block in enumerate(found):
+            yield number, "\n".join(block) + "\n"
+
+    @staticmethod
+    def script(text):
+        """Drop the offline-impossible clone header."""
+        lines = text.splitlines()
+        while lines and (lines[0].strip().startswith("git clone")
+                         or lines[0].strip() == "cd dojo" or not lines[0].strip()):
+            lines.pop(0)
+        return "\n".join(lines) + "\n"
+
+    def excluded(self, script):
+        if any(marker in script for marker in self.DEV_BLOCK):
+            return "dev"
+        if self.NET_BLOCK in script:
+            return "network"
+        return None
+
+    def isolated(self, name):
+        """A throwaway workspace: HOME, TMPDIR and the library all live inside it."""
+        work = self.base / name
+        (work / "home").mkdir(parents=True)
+        (work / "tmp-mint").mkdir()
+        env = {key: value for key, value in os.environ.items()
+               if key in ("PATH", "LANG", "LC_ALL", "TZ")}
+        env.update({"HOME": str(work / "home"), "TMPDIR": str(work / "tmp-mint"),
+                    "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"})
+        return work, env
+
+    def run_block(self, script, env):
+        return subprocess.run(["sh", "-eu", "-c", script], cwd=str(ROOT),
+                              capture_output=True, text=True, env=env,
+                              timeout=300, stdin=subprocess.DEVNULL)
+
+    def test_the_exclusions_still_match_blocks_that_exist(self):
+        """A skip that stops matching is a hole: this fails if the markers go stale."""
+        pages = {page: [text for _, text in self.blocks(page)] for page in PAGES}
+        for page, texts in pages.items():
+            with self.subTest(page=page):
+                self.assertTrue(any(any(marker in text for marker in self.DEV_BLOCK)
+                                    for text in texts),
+                                "%s no longer shows a verification recipe; drop the "
+                                "exclusion instead of keeping it silently" % page)
+                self.assertTrue(any(self.NET_BLOCK in text for text in texts),
+                                "%s no longer shows the discussion entry" % page)
+
+    def test_each_page_runs_every_block_it_prints(self):
+        for page in PAGES:
+            for number, text in self.blocks(page):
+                script = self.script(text)
+                if not script.strip():
+                    continue
+                why = self.excluded(script)
+                if why:
+                    continue
+                label = "%s block %d" % (page, number)
+                work, env = self.isolated("%s-run-%d" % (page.replace(".", "-"), number))
+                with self.subTest(block=label):
+                    proc = self.run_block(script, env)
+                    tail = (proc.stderr.strip() or proc.stdout.strip())[-1200:]
+                    self.assertEqual(0, proc.returncode,
+                                     "%s prints a block that fails\n---\n%s\n---\n%s"
+                                     % (label, script, tail))
+                    written_home = [path.name for path in (work / "home").rglob("*")
+                                    if path.is_file()]
+                    self.assertEqual([], written_home,
+                                     "%s prints a block that writes into HOME (%s); a "
+                                     "demo must not touch the reader's own library"
+                                     % (label, written_home))
+                    if any(marker in script for marker in self.WRITES):
+                        self.assertTrue(
+                            any(token in script for token in ("DOJO_DB", "--db ")),
+                            "%s writes to a library without naming one, so it lands in "
+                            "the reader's own store" % label)
+                        self.assertTrue(list((work / "tmp-mint").rglob("*.sqlite3")),
+                                        "%s names no library that survives its own temp "
+                                        "dir" % label)
+
+    def test_a_second_run_of_every_block_still_works(self):
+        """Repeating a block is a reader's normal move; a fixed library path breaks it."""
+        for page in PAGES:
+            for number, text in self.blocks(page):
+                script = self.script(text)
+                if not script.strip() or self.excluded(script):
+                    continue
+                if not any(marker in script for marker in self.WRITES):
+                    continue  # only the blocks that write a library can go stale
+                label = "%s block %d (twice)" % (page, number)
+                _, env = self.isolated("%s-twice-%d" % (page.replace(".", "-"), number))
+                with self.subTest(block=label):
+                    for attempt in (1, 2):
+                        proc = self.run_block(script, env)
+                        self.assertEqual(0, proc.returncode,
+                                         "%s run %d failed: %s"
+                                         % (label, attempt, proc.stderr.strip()[-900:]))
+
+    def test_the_lifecycle_block_keeps_the_versions_it_claims_to_keep(self):
+        """The page says challenge/revise keep prior versions; read that off the run."""
+        page = PAGES[0]
+        block = next(text for _, text in self.blocks(page) if "dojo revoke" in text)
+        _, env = self.isolated("lifecycle-claim")
+        proc = self.run_block(self.script(block), env)
+        self.assertEqual(0, proc.returncode, proc.stderr.strip()[-1200:])
+        for needle in ("降低与目标无关的摩擦能让重复行为更容易持续",
+                       "在难度不是训练的情况下", "把一切变容易未必有益", "idea-01"):
+            self.assertIn(needle, proc.stdout,
+                          "the lifecycle block no longer shows %r" % needle)
 
 
 if __name__ == '__main__':
