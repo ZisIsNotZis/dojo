@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -10,7 +11,7 @@ from contextlib import contextmanager
 from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 
 KINDS = {"abstract_idea", "experience_claim", "application", "question", "counterexample"}
@@ -39,8 +40,61 @@ class DuplicateContent(DojoError):
         self.candidate_id = candidate_id
 
 
+class MergeRefused(DojoError):
+    """A merge that would have quietly cost a recorded acceptance, and did not happen.
+
+    A `DojoError`, so every existing caller keeps treating it as the refusal it is; the
+    `details` ride along so a caller that needs to say *which card, which direction* does
+    not have to parse the sentence back out of `str(exc)`.
+    """
+
+    def __init__(self, message: str, details: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.details = details
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _command_path(path: Path) -> str:
+    """A path as it can be pasted into the command an error message prints.
+
+    #1921: a hint is only useful if following it works. A path with a space, pasted
+    unquoted into `--db <path>`, arrives as two arguments and fails on a different
+    error than the one it was meant to fix. Quoted only when it needs to be -- most
+    paths stay as short as they read.
+    """
+    text = str(path)
+    if any(character.isspace() or character in '"\'' for character in text):
+        return f'"{text}"'
+    return text
+
+
+def _agreed_at(value: str | None) -> str | None:
+    """Normalize a caller's "when the agreement happened" to this ledger's timestamp shape.
+
+    Returns None for "the caller did not say", so a missing moment stays missing instead
+    of being filled with the write time -- that substitution is the defect the field
+    exists to prevent. A value that is not an ISO instant is refused rather than stored:
+    a reader comparing times would otherwise meet a string that only looks like one.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise DojoError("agreed_at must be an ISO 8601 timestamp")
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise DojoError(f"agreed_at must be an ISO 8601 timestamp: {value!r}") from exc
+    if moment.tzinfo is None:
+        # Stored times carry an offset; a naive string would compare as earlier than
+        # everything on some platforms and later on others.
+        raise DojoError("agreed_at must carry a timezone offset")
+    # Seconds, matching `_now()`: the ledger's own timestamps are second-resolution, and
+    # a field that keeps microseconds invites "agreed_at > created_at" by rounding error
+    # alone when the two are the same moment.
+    return moment.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
 def _json(value: Any) -> str:
@@ -75,8 +129,130 @@ def _new_id(prefix: str) -> str:
 class Store:
     """Single-database storage boundary; all mutations are SQLite transactions."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, readonly: bool = False):
+        """Open the library. `readonly=True` describes an existing one instead of making it.
+
+        #1893: `freeze-materials` used to describe a library it had just invented in
+        a temporary directory, which is how a packet-time came to be printed as an
+        entry time. It now describes a library that already exists, and describing a
+        library must not be able to change it -- not by creating it when the path is
+        wrong, not by running DDL, and not by opening it for writing at all. A missing
+        file is an error here; a writer would have silently created an empty library
+        and then complained about the seeds, which points at the wrong thing.
+        """
         self.path = Path(path).expanduser()
+        self.readonly = readonly
+        if readonly:
+            if not self.path.exists():
+                # #1904: the old message was just the path, which tells a person the file
+                # is absent and nothing about the step they skipped. Creating a library is
+                # a command; name it.
+                raise DojoError(
+                    f"database does not exist: {self.path}\n"
+                    "这个库还不存在。先创建并写入四条模拟 seed（只写这个路径，不会碰其他库）：\n"
+                    f"  python3 -m dojo --db {_command_path(self.path)} seed"
+                )
+            # #1921: `--db <a directory>` reached sqlite, which answered
+            # `unable to open database file` -- no path in it, and no way to tell which
+            # of the reader's paths that was. A directory is never a library, so it is
+            # refused here by name, before sqlite is asked to open it.
+            if self.path.is_dir():
+                raise DojoError(
+                    f"这个路径是个目录，不是 dojo 库文件: {self.path}\n"
+                    "--db 要的是库文件本身（例如 <目录>/dojo.sqlite3），不是它所在的目录。"
+                )
+            uri = self.path.resolve().as_uri() + "?mode=ro"
+            try:
+                self.connection = sqlite3.connect(uri, uri=True, timeout=10, isolation_level=None)
+                self.connection.row_factory = sqlite3.Row
+                self.connection.execute("PRAGMA foreign_keys = ON")
+            except sqlite3.DatabaseError as exc:
+                # #1921: `file is not a database` names neither the path nor the state.
+                # Retrying `seed` on such a file fails identically, so the honest instruction
+                # is to repoint `--db`, not to run a command that would find the same bytes.
+                # `connect` may have succeeded before the pragma failed, and the caller's
+                # `finally` cannot close a store it never received. It may also have failed
+                # first, in which case there is no connection to close.
+                if getattr(self, "connection", None) is not None:
+                    self.connection.close()
+                raise DojoError(
+                    f"这个文件不是 sqlite 数据库，读不出事件账本: {self.path}\n"
+                    f"（sqlite 的原文：{exc}）\n"
+                    "换一个已有的 dojo 库文件，或换一个还不存在的路径重新建库；"
+                    "不要用这个路径，对它跑 seed 会得到同样的错。"
+                ) from exc
+            # An existing file that is not a dojo library, or an empty one, otherwise
+            # fails later as `no such table: candidates` -- the same dead end one step
+            # further in. #1904: refused here, with the command that makes it one.
+            # sqlite reads the file header lazily, so a file that is not a database
+            # first fails here rather than at connect(); the same refusal is used for both.
+            try:
+                has_candidates = self.connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='candidates'"
+                ).fetchone() is not None
+            except sqlite3.DatabaseError as exc:
+                self.connection.close()
+                raise DojoError(
+                    f"这个文件不是 sqlite 数据库，读不出事件账本: {self.path}\n"
+                    f"（sqlite 的原文：{exc}）\n"
+                    "换一个已有的 dojo 库文件，或换一个还不存在的路径重新建库；"
+                    "不要用这个路径，对它跑 seed 会得到同样的错。"
+                ) from exc
+            if not has_candidates:
+                # #1921: this used to be one branch -- "no candidates table, so run seed
+                # on it" -- and `seed` writes candidates/events/pipeline_marks/snapshots
+                # into whatever file it is pointed at. Measured on a healthy SQLite file
+                # from another application: following that hint took it from 8192 to
+                # 61440 bytes and added four tables to somebody else's database. So the
+                # question is not "does it have a candidates table" but "may this file be
+                # written to at all", and the answer is no exactly when the file already
+                # holds tables that are not ours.
+                others = [row["name"] for row in self.connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name"
+                )]
+                self.connection.close()
+                command = f"python3 -m dojo --db {_command_path(self.path)} seed"
+                if not others:
+                    # No tables at all: this file is a new (or emptied) library, and
+                    # seeding it is the step that makes it one. The names it will create
+                    # are stated, because "seed" alone does not say it writes.
+                    raise DojoError(
+                        f"这个库还是空的（没有任何表）: {self.path}\n"
+                        "先建表并写入四条模拟 seed（会在**这个文件**里新建 candidates / events / "
+                        "pipeline_marks / snapshots 四张表）：\n"
+                        f"  {command}"
+                    )
+                # A working database that belongs to something else. Seeding it would
+                # add this project's tables to another application's file; the only
+                # honest next step is to point `--db` somewhere else.
+                raise DojoError(
+                    f"这个文件是别的应用的 SQLite 库，不是 dojo 库: {self.path}\n"
+                    f"它已经有这些表：{', '.join(others)}\n"
+                    "对它跑 seed 会在这个文件里**加上** candidates / events / pipeline_marks / "
+                    "snapshots 四张表，改动别人的库。所以这里不给 seed 命令。二选一：\n"
+                    "  1) 换成一个现成的 dojo 库（里面有 candidates 表）；\n"
+                    "  2) 换一个全新的路径（不要选别人的目录）作为新库，再对那个新路径跑 seed。\n"
+                    "这里不给可执行的命令：能跑的命令要么写别人的库，要么必须由你决定写到哪。"
+                )
+            # #1929: a dojo-shaped library whose ledger has no time column at all -- an
+            # import that dropped it, a schema from before this field existed. Every
+            # time read is `events.created_at`, so the first one raises
+            # `no such column: created_at` from somewhere deep in a query, which names
+            # neither the library nor the fact the reader needs: **this library never
+            # stored times**, so no packet from it can date anything. Refused here, by
+            # name, before a packet is half written.
+            columns = {row["name"] for row in self.connection.execute("PRAGMA table_info(events)")}
+            if "created_at" not in columns:
+                self.connection.close()
+                raise DojoError(
+                    f"这个库没有时刻记录（events 表没有 created_at 列）: {self.path}\n"
+                    "所以包里每条来源都拿不到入库时刻。这不是本程序漏印，是这个库从来没存过；"
+                    "补不了——没有可回填的原始时刻。二选一：\n"
+                    "  1) 把记录重新导入一个带时刻的库（导入工具必须写 events.created_at）；\n"
+                    "  2) 只把它当素材，不冻结成带时刻的包。"
+                )
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         self.connection.row_factory = sqlite3.Row
@@ -264,7 +440,17 @@ class Store:
                 "sessions": [_text(session, "session")] if session else [],
                 "confirmation": {"active": False},
             }
-            self._insert_candidate(state, "add", {"session": session})
+            # #1831b: the creating event names the sources it attached. Without this,
+            # a group-less source added here could never be attributed to the session
+            # that brought it (`independence()` reads the ledger, and the ledger never
+            # said which source this write introduced), so its card fell to
+            # `unidentified` and was admitted -- absence passing as a pass. The key is
+            # absent from events written before this change, and nothing backfills it:
+            # those cards keep the answer they had rather than getting a guessed one.
+            self._insert_candidate(state, "add", {
+                "session": session,
+                "sources": [source["id"] for source in source_values],
+            })
         return state
 
     def attach_source(self, candidate_id: str, source: dict[str, Any], session: str | None = None) -> dict[str, Any]:
@@ -289,6 +475,52 @@ class Store:
             if session:
                 state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
             state = self._write(state, "attach_source", {"source": source_value["id"], "session": session})
+        return state
+
+    def accept_draft(
+        self, candidate_id: str, session: str | None = None, *, agreed_at: str | None = None,
+    ) -> dict[str, Any]:
+        """The session that left an unaccepted draft now accepts that exact wording.
+
+        A draft written at session end says, in its own source, that the user did not
+        accept this wording. If the user later resumes the conversation and accepts it
+        verbatim, storing that as "nothing new" leaves the card asserting something
+        false, and reporting it as a write would be a write that did not happen. So the
+        single draft source is rewritten in place to the accepted shape, in one versioned
+        event, and only when the whole provenance is that one draft from that one session.
+        """
+        with self.transaction():
+            state = self._get(_id(candidate_id))
+            sources = list(state.get("sources", []))
+            if len(sources) != 1:
+                raise DojoError("only a card with a single source can be accepted from draft")
+            source = sources[0]
+            if source.get("type") != "model_generated" or source.get("verification") != "unverified":
+                raise DojoError("card is not an unaccepted draft")
+            if session is not None and source.get("independence_group") != session:
+                raise DojoError("only the session that wrote the draft can accept it")
+            state["sources"] = [{
+                **source,
+                "type": "unknown",
+                "verification": "unknown",
+                "claim": "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。",
+                "scope_note": "单一会话来源；不构成独立佐证。",
+            }]
+            state["confirmation"] = self._confirmation_off(state, "accepted after the session resumed")
+            # r112b: the acceptance is an action, so it is recorded as one. Retrieval
+            # reads this event instead of inferring acceptance from the source's shape;
+            # `dojo add --source-json` can produce the accepted shape by hand, and a
+            # shape is not somebody agreeing to the sentence.
+            details = {
+                "session": session, ACCEPTANCE_EVENT: True, "path": "accept_draft",
+                DIGEST_FIELD: wording_digest(state), CARD_FIELD: candidate_id,
+            }
+            # Same fact as `record_acceptance`'s: when the agreement happened, not when
+            # this row is written. Omitted when the caller does not know it.
+            agreed = _agreed_at(agreed_at)
+            if agreed is not None:
+                details[AGREED_AT_FIELD] = agreed
+            state = self._write(state, "draft_accepted", details)
         return state
 
     def record_pipeline_pass(
@@ -318,11 +550,36 @@ class Store:
         )
 
     def list_candidates(self, include_history: bool = False) -> list[dict[str, Any]]:
+        """The listing screen. A row says `unaccepted_draft: true` when the card's
+        whole provenance is one model-written, unverified wording nobody accepted.
+
+        r110 stored a session's landing point as exactly that and left it
+        unreadable here: `status` is `draft` both for that and for a conclusion the
+        user agreed to, so someone scanning `list` could take the version they never
+        agreed to as settled. The key appears only when it is true -- a conclusion's
+        row keeps the same five keys and bytes it had before -- and the draft is not
+        filtered out, which would put it back where nobody sees it.
+        """
         rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
         values = [json.loads(row["state_json"]) for row in rows]
         if include_history:
+            # r111b: `--history` is the same listing command's other path, and it had
+            # the same blind spot. A draft and a conclusion the user agreed to both
+            # read `status: draft` there with nothing else to tell them apart, so the
+            # person who asked for the fuller view got less signal than the short one.
+            # The marker sits beside the record; `status` is the ledger's value and is
+            # not rewritten.
+            for state in values:
+                if is_unaccepted_draft(state):
+                    state["unaccepted_draft"] = True
             return values
-        return [{key: state[key] for key in ("id", "version", "status", "statement", "kind")} for state in values]
+        listing = []
+        for state in values:
+            row = {key: state[key] for key in ("id", "version", "status", "statement", "kind")}
+            if is_unaccepted_draft(state):
+                row["unaccepted_draft"] = True
+            listing.append(row)
+        return listing
 
     def history(self, candidate_id: str) -> dict[str, Any]:
         candidate_id = _id(candidate_id)
@@ -379,7 +636,30 @@ class Store:
 
     def show(self, candidate_id: str) -> dict[str, Any]:
         state, path = self.resolve(candidate_id)
-        return {"requested_id": candidate_id, "resolved_id": state["id"], "redirect_chain": path, "candidate": self._present_state(state)}
+        payload = {
+            "requested_id": candidate_id,
+            "resolved_id": state["id"],
+            "redirect_chain": path,
+            "candidate": self._present_state(state),
+        }
+        # r1721: `show` answered "what does this say" and "where did it come from" but
+        # not "when", while `search`, the chat context and `export` all answered it --
+        # the same reading was inconsistent across two exits. The times go beside
+        # `candidate`, never inside it: `candidate` is the stored state, byte for byte,
+        # and a test compares it to that (`test_storage.py`, the full-listing case).
+        # Absent fact means an absent key, so a card with no acceptance keeps exactly
+        # the bytes it had.
+        basis = self.time_basis(state["id"], state)
+        if basis:
+            payload["time_basis"] = basis
+        # #1801: `time_basis` dates the wording and says nothing about the provenance
+        # rows beside it, so a reader could date the sentence and not the evidence. The
+        # key is added only when a source record really has a readable entry; a card
+        # with no sources keeps exactly the bytes it had.
+        provenance = self.source_basis(state["id"], state)
+        if provenance:
+            payload["source_basis"] = provenance
+        return payload
 
     def _active(self, state: dict[str, Any]) -> None:
         if state.get("redirect_to") or state["status"] == "superseded":
@@ -405,7 +685,15 @@ class Store:
                 "basis": basis, "not_truth_claim": True,
             }
             if session:
-                state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
+                # r111: confirming is not a second sighting of the claim. Until this
+                # change the confirmer went into `sessions`, which `independence()`
+                # reads as a provenance group, so one facilitator marking a card
+                # discussable raised a single-session card to cross_session and
+                # `broadcast` handed it back as another session's compatible word.
+                # The confirmer is recorded in its own field and counted by nothing.
+                state["confirmed_sessions"] = _strings(
+                    state.get("confirmed_sessions", []) + [session], "confirmed session"
+                )
             state = self._write(state, "confirm_discussable", {"basis": basis, "session": session, "not_truth_claim": True})
         return state
 
@@ -418,7 +706,10 @@ class Store:
             state["status"] = "draft"
             state["confirmation"] = self._confirmation_off(state, reason)
             if session:
-                state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
+                # r111: revoking is the mirror of confirming -- also not provenance.
+                state["confirmed_sessions"] = _strings(
+                    state.get("confirmed_sessions", []) + [session], "confirmed session"
+                )
             state = self._write(state, "revoke_confirmation", {"reason": reason, "session": session})
         return state
 
@@ -585,11 +876,108 @@ class Store:
             by_id[source["id"]] = source
         return result
 
+    def _merged_target(self, target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+        """The canonical record a merge would produce, built in memory and written by nobody.
+
+        Split out of `merge` so the acceptance guards can ask what the merged card would
+        *say* before a single row is written. Reading a half-applied merge to decide
+        whether the merge was allowed would be the same class of mistake as repairing
+        history on read.
+        """
+        merged = dict(target)
+        merged["sources"] = self._source_union(target.get("sources", []), source.get("sources", []))
+        aliases = list(target.get("aliases", []))
+        for wording in [source["statement"], *source.get("aliases", [])]:
+            if wording != target["statement"] and wording not in aliases:
+                aliases.append(wording)
+        merged["aliases"] = aliases
+        changed: list[str] = []
+        for key in CONTENT_FIELDS:
+            union = _strings(target.get(key, []) + source.get(key, []), key)
+            if union != list(target.get(key, [])):
+                changed.append(key)
+            merged[key] = union
+        merged["relations"] = list(target.get("relations", []))
+        for relation in source.get("relations", []):
+            resolved, _ = self.resolve(relation["target"])
+            if resolved["id"] != target["id"]:
+                value = {**relation, "target": resolved["id"]}
+                if value not in merged["relations"]:
+                    merged["relations"].append(value)
+        merged[MERGED_CHANGED_FIELDS] = changed  # returned only; stripped before any write
+        return merged
+
+    def _acceptance_route(self, candidate_id: str, state: dict[str, Any]) -> str | None:
+        """The route that recorded the current-wording acceptance, if the event names one."""
+        route = self.time_basis(candidate_id, state).get("acceptance_path")
+        return route if isinstance(route, str) and route.strip() else None
+
+    def _merge_acceptance_refusal(
+        self, source: dict[str, Any], target: dict[str, Any], merged: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Whether this merge would move or drop a recorded acceptance, and why.
+
+        Two different losses, one guard, because both are the same failure: a reader sees
+        the same sentence and a *worse* record, and nothing in the merge output says so.
+
+        - The accepted card is the one being merged away. Its ledger row survives as
+          `superseded`, but every reading surface resolves the redirect, so the canonical
+          card is now unaccepted while its sentence is unchanged: search drops it, the
+          export header loses `accepted_at`. Nothing was rewritten and the merge is still
+          a lie about who agreed to what. Refused, and the operator names the direction.
+        - The accepted card is the target, but the union changes a field the acceptance's
+          digest covers (`premises`/`scope`/...). An acceptance of the old sentence does
+          not carry over to a new one -- that is `#1497`, reached through `merge` instead
+          of `revise`. Refused unless the wording identity is unchanged.
+
+        Acceptances for an *older* wording on either card are not this guard's business:
+        they are already `superseded` to anyone reading, and refusing on them would turn
+        an honest audit line into a permanent ban on merging the card.
+        """
+        source_accepted = self.has_acceptance(source["id"], source)
+        target_accepted = self.has_acceptance(target["id"], target)
+        wording_changed = wording_digest(merged) != wording_digest(target)
+        if not source_accepted and not (target_accepted and wording_changed):
+            return None
+        changed = list(merged.get(MERGED_CHANGED_FIELDS) or [])
+        reasons: list[str] = []
+        if source_accepted:
+            route = self._acceptance_route(source["id"], source)
+            reasons.append(
+                f"{source['id']} is a card a user accepted"
+                + (f" (route {route})" if route else "")
+                + f"; merging it into {target['id']} would leave the merged card with the same"
+                f" sentence and no acceptance, and drop it out of search and the export header"
+            )
+        if target_accepted and wording_changed:
+            route = self._acceptance_route(target["id"], target)
+            reasons.append(
+                f"{target['id']} was accepted on its current wording"
+                + (f" (route {route})" if route else "")
+                + f", and merging {source['id']} into it would change "
+                + (", ".join(changed) if changed else "its wording")
+                + "; an acceptance of the old sentence does not cover the new one"
+            )
+        return {
+            "accepted_card": source["id"] if source_accepted else target["id"],
+            "source": source["id"], "target": target["id"],
+            "wording_changed": wording_changed, "changed_content_fields": changed,
+            "reasons": reasons,
+            "message": "merge refused: " + "; and ".join(reasons) + ".",
+        }
+
     def merge(self, source_id: str, target_id: str, *, confirmed: bool, reason: str) -> dict[str, Any]:
         if not confirmed:
             raise DojoError("merge requires explicit human acknowledgement (--confirm)")
         reason = _text(reason, "merge reason")
+        refusal: dict[str, Any] | None = None
         with self.transaction():
+            # Everything is read inside the write transaction: deciding "this merge would
+            # cost an acceptance" from a snapshot taken before `BEGIN IMMEDIATE` would let
+            # an acceptance land between the check and the write, which is the exact case
+            # the guard exists for. A refusal still writes no candidate, no snapshot and
+            # no version -- only the refusal event, which is committed with this
+            # transaction and raised on afterwards.
             source, source_chain = self.resolve(source_id)
             target, target_chain = self.resolve(target_id)
             if source["id"] == target["id"]:
@@ -598,38 +986,31 @@ class Store:
             self._active(target)
             if source["status"] == "withdrawn" or target["status"] == "withdrawn":
                 raise DojoError("withdrawn candidates cannot be merged")
-            before_source, before_target = source, target
-            target = dict(target)
-            sources = self._source_union(target.get("sources", []), source.get("sources", []))
-            aliases = list(target.get("aliases", []))
-            for wording in [source["statement"], *source.get("aliases", [])]:
-                if wording != target["statement"] and wording not in aliases:
-                    aliases.append(wording)
-            target["sources"] = sources
-            target["aliases"] = aliases
-            for key in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
-                target[key] = _strings(target.get(key, []) + source.get(key, []), key)
-            for relation in source.get("relations", []):
-                resolved, _ = self.resolve(relation["target"])
-                if resolved["id"] != target["id"]:
-                    value = {**relation, "target": resolved["id"]}
-                    if value not in target["relations"]:
-                        target["relations"].append(value)
-            # Resolve both endpoints before installing the new redirect; this rejects existing loops.
+            # Resolve both endpoints before installing the new redirect; this rejects loops.
             if source["id"] in target_chain or target["id"] in source_chain:
                 raise DojoError("merge would create a redirect cycle")
-            target = self._write(target, "merge_received", {"source": source["id"], "reason": reason})
-            source = dict(source)
-            source["status"] = "superseded"
-            source["redirect_to"] = target["id"]
-            source["confirmation"] = self._confirmation_off(source, "merged into " + target["id"])
-            source = self._write(source, "merge_redirect", {"target": target["id"], "reason": reason})
-            event_id = self._event(source["id"], "merge", {
-                "source": source["id"], "target": target["id"], "reason": reason,
-                "before_source": before_source, "before_target": before_target,
-                "after_source_version": source["version"], "after_target_version": target["version"],
-            })
-            source["last_merge_event"] = event_id  # returned only; not persisted in candidate state
+            before_source, before_target = source, target
+            merged = self._merged_target(target, source)
+            refusal = self._merge_acceptance_refusal(source, target, merged)
+            if refusal is not None:
+                self._event(source["id"], MERGE_REFUSED_EVENT, {**refusal, "reason": reason})
+            else:
+                merged.pop(MERGED_CHANGED_FIELDS, None)
+                target = self._write(merged, "merge_received", {"source": source["id"], "reason": reason})
+                source = dict(source)
+                source["status"] = "superseded"
+                source["redirect_to"] = target["id"]
+                source["confirmation"] = self._confirmation_off(source, "merged into " + target["id"])
+                source = self._write(source, "merge_redirect", {"target": target["id"], "reason": reason})
+                event_id = self._event(source["id"], "merge", {
+                    "source": source["id"], "target": target["id"], "reason": reason,
+                    "before_source": before_source, "before_target": before_target,
+                    "after_source_version": source["version"], "after_target_version": target["version"],
+                })
+                source["last_merge_event"] = event_id  # returned only; not persisted in candidate state
+        if refusal is not None:
+            # After the commit, so the refusal row survives the exception.
+            raise MergeRefused(refusal["message"], refusal)
         return self._get(target["id"])
 
     def unmerge(self, source_id: str, reason: str) -> dict[str, Any]:
@@ -676,8 +1057,480 @@ class Store:
             state = self._write(state, "withdraw", {"reason": reason})
         return state
 
+    def has_acceptance(self, candidate_id: str, state: dict[str, Any] | None = None) -> bool:
+        """Whether some path recorded that a user accepted this card's wording.
+
+        Asked of the ledger, not of the card's shape. A card written with
+        `--source-json` can have the same fields as an accepted one and has no such
+        event, which is the whole point.
+
+        The event also has to be for *this* wording: an acceptance recorded before a
+        rewrite does not speak for the rewritten sentence.
+        """
+        state = state if state is not None else self._get(_id(candidate_id))
+        return is_accepted_conclusion(
+            state, self._acquisition_events(_id(candidate_id)), self._snapshot_digest(_id(candidate_id)),
+        )
+
+    def _snapshot_digest(self, candidate_id: str) -> Callable[[int], str | None]:
+        """Read-only lookup from a stored version to the wording identity it held.
+
+        `snapshots` is written by every `_write`, so a version named by an old
+        acceptance event still has its wording. Nothing here writes: the fallback in
+        `is_accepted_conclusion` must not repair history, only read it.
+        """
+        def by_version(version: int) -> str | None:
+            row = self.connection.execute(
+                "SELECT state_json FROM snapshots WHERE candidate_id=? AND version=?",
+                (candidate_id, version),
+            ).fetchone()
+            if row is None:
+                return None
+            return wording_digest(json.loads(row["state_json"]))
+        return by_version
+
+    def audit_acceptances(self) -> dict[str, Any]:
+        """How every acceptance in this library stands, counted rather than assumed.
+
+        Read only. Three counts, because they mean different things and collapsing them
+        would hide the one that matters:
+
+        - `bound`: an acceptance names a wording and that wording is the card's now.
+        - `superseded`: every acceptance that could be resolved names a wording the
+          card no longer holds, which is the honest state after a rewrite.
+        - `unbound`: an acceptance exists but its wording cannot be recovered (no
+          digest, no usable version, or the snapshot is gone), and nothing else on
+          the card binds. Not silently "no acceptance" -- that is the failure this
+          report exists to make visible.
+
+        Checked in that order, because that is the order the predicate answers in: a
+        card with one resolvable acceptance for the current wording is accepted, and a
+        second unresolvable event does not un-accept it. Reporting it as `unbound`
+        would contradict the retrieval gate.
+        """
+        report = {"bound": [], "unbound": [], "superseded": []}
+        rows = self.connection.execute(
+            "SELECT id,state_json FROM candidates ORDER BY id"
+        ).fetchall()
+        for row in rows:
+            state = json.loads(row["state_json"])
+            accepts = [event for event in self._acquisition_events(state["id"]) if _is_acceptance_event(event)]
+            if not accepts:
+                continue
+            wanted = wording_digest(state)
+            digests = [
+                _accepted_wording_digest(event, self._snapshot_digest(state["id"]), state["id"])
+                for event in accepts
+            ]
+            record = {"id": state["id"], "status": state["status"], "acceptances": len(accepts)}
+            if any(digest == wanted for digest in digests):
+                report["bound"].append(record)
+            elif any(digest is None for digest in digests):
+                # Two different failures, kept apart: an acceptance that cannot say
+                # what wording it was for, and one that says it was for another card.
+                # Collapsing them would hide the second, which is the one whose wording
+                # matches perfectly and is still not this card's acceptance.
+                foreign = any(
+                    _acceptance_names_another_card(event, state["id"]) for event in accepts
+                )
+                report["unbound"].append({**record, "reason": (
+                    "acceptance was written for another card" if foreign
+                    else "acceptance names no recoverable wording")})
+            else:
+                report["superseded"].append({**record, "reason": "accepted wording is not the current one"})
+        return {key: value for key, value in report.items()}
+
+    def record_acceptance(
+        self, candidate_id: str, session: str | None, *, path: str, agreed_at: str | None = None,
+    ) -> int:
+        """Record that a user accepted this wording verbatim, on any path that can do so.
+
+        Kept separate from `_write` so it does not bump a version: accepting a wording
+        already stored changes no content. `path` names which route accepted it, so a
+        later reader can tell a resumed draft from a conclusion reached in conversation.
+
+        `agreed_at` is when the agreement itself happened, as the caller knew it. It is
+        not the same fact as the event's `created_at` -- when this row was written -- and
+        the two can be weeks apart: a reader copying an acceptance out of a trace file
+        writes it today for a sentence agreed a month ago. Until r1638 the writer had no
+        way to pass the moment, so the trace held it and the write dropped it, and every
+        backfilled acceptance dated the copy. Omitted by callers that only know now (the
+        live conversation passes the moment the accepting line arrived); absent means no
+        claim, never "agreed at the record time".
+        """
+        with self.transaction():
+            state = self._get(_id(candidate_id))
+            details = {
+                "session": session, "path": path, DIGEST_FIELD: wording_digest(state),
+                CARD_FIELD: candidate_id,
+            }
+            agreed = _agreed_at(agreed_at)
+            if agreed is not None:
+                details[AGREED_AT_FIELD] = agreed
+            return self._event(candidate_id, ACCEPTANCE_EVENT, details)
+
+    def _acquisition_events(self, candidate_id: str) -> list[dict[str, Any]]:
+        """The card's event ledger, read only -- used to tell a sighting from a confirmation."""
+        rows = self.connection.execute(
+            "SELECT event,details_json,created_at FROM events WHERE candidate_id=? ORDER BY seq",
+            (candidate_id,),
+        ).fetchall()
+        return [
+            {"event": row["event"], "details": json.loads(row["details_json"]), "created_at": row["created_at"]}
+            for row in rows
+        ]
+
+    def time_basis(self, candidate_id: str, state: dict[str, Any] | None = None) -> dict[str, str]:
+        """When this card's wording was written, and when *that wording* was accepted.
+
+        Two facts, read from two different places, and deliberately not derived from
+        each other:
+
+        - `versioned_at`: `snapshots.created_at` of the *first* stored version whose
+          `wording_digest` equals the wording on the card now, i.e. when the sentence a
+          reader is looking at was written. Not the current version's row: `confirm`,
+          `revoke` and `attach_source` all write a new version while leaving the sentence
+          byte-identical, and reading the current row made a status change reprint the
+          sentence's date as today (r1627 measured it, `bumps2.py`). A wording that is
+          restored after a rewrite dates from its first appearance, not the restore.
+        - `accepted_at`: `events.created_at` of an acceptance event whose bound wording
+          is the wording on the card now. An acceptance recorded before a rewrite is not
+          an acceptance of the rewritten sentence, so `c-one-fact` in the meter -- accepted,
+          then revised -- has no `accepted_at`.
+        - `acceptance_path`: that same event's `details.path` -- the route that recorded
+          the acceptance, verbatim as the writer passed it (`discuss_conclusion`,
+          `accept_draft`, or whatever a backfill tool names itself). The
+          one field that separates "a user agreed in conversation" from "a reader copied
+          the agreement in from a text file later"; both print the same `accepted_at`
+          shape, and the backfilled one prints the moment of the copy, not of the
+          agreement. Omitted when the event carries no path.
+        - `agreed_at`: that same event's `details.agreed_at` -- when the agreement itself
+          happened, when the accepting caller knew it. r1638: `accepted_at` is the moment
+          the row was written, which for a backfill is the copy date; this is the one
+          field that can say what the copy is about. Omitted when the event has none,
+          which is every event written before r1638. Read as written: this build does not
+          infer it from `versioned_at`, from the trace, or from any clock.
+
+        Absent fact means the key is absent, never `None` and never `_now()`. "No key"
+        is the honest statement "this build found no such record" and keeps the reading
+        of a card with no acceptance exactly as it was.
+
+        Read only. Nothing is written back, no row is repaired, no digest is filled in.
+        """
+        state = state if state is not None else self._get(_id(candidate_id))
+        basis: dict[str, str] = {}
+        wanted = wording_digest(state)
+        # First version that carried this exact wording, not the version number the card
+        # happens to hold now. Read oldest first, so a later status-only bump cannot move
+        # the date forward; `snapshots` keeps every version, so this is a read.
+        for row in self.connection.execute(
+            "SELECT state_json,created_at FROM snapshots WHERE candidate_id=? ORDER BY version",
+            (candidate_id,),
+        ):
+            if wording_digest(json.loads(row["state_json"])) == wanted:
+                basis["versioned_at"] = row["created_at"]
+                break
+        accepted = [
+            event for event in self._acquisition_events(candidate_id)
+            if _is_acceptance_event(event)
+            and _accepted_wording_digest(
+                event, self._snapshot_digest(candidate_id), candidate_id) == wanted
+        ]
+        if accepted:
+            # The newest acceptance of this exact wording is the one a reader means by
+            # "when was this accepted"; an earlier one for the same sentence is the same
+            # fact stated twice.
+            basis["accepted_at"] = accepted[-1]["created_at"]
+            # r1627: the time alone cannot separate "agreed in conversation" from "copied
+            # in from a trace file afterwards". The route is already on the event.
+            path = (accepted[-1].get("details") or {}).get("path")
+            if isinstance(path, str) and path.strip():
+                basis["acceptance_path"] = path
+            # r1638: the record time is not the agreement time when the acceptance was
+            # copied in later. Printed only when the writer stated it; nothing here
+            # substitutes `accepted_at` for it and nothing backfills an old event.
+            agreed = (accepted[-1].get("details") or {}).get(AGREED_AT_FIELD)
+            if isinstance(agreed, str) and agreed.strip():
+                basis["agreed_at"] = agreed
+        return basis
+
+    def source_basis(self, candidate_id: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
+        """When each source record on this card entered the library, and by what route.
+
+        `time_basis` dates the *wording*; it says nothing about the provenance rows a
+        reader is asked to weigh. #1801 measured that gap on every library on disk: 696
+        source records, and no surface printed one of their entry times. A reader could
+        say when the sentence was written and still not say whether the evidence behind
+        it arrived before or after the claim it is meant to support.
+
+        The moment is read, never guessed. A source id can never be reused
+        (`_source_ids_available` refuses a second card claiming a different record under
+        the same id), so the first version whose state holds the id is the version that
+        introduced it, and one event wrote that version:
+
+        - version 1, written by `add` or `load_simulated_seed`: the creating event's own
+          `created_at`. Those events store exactly the sources passed in.
+        - version 1, written by `split_child` or `merge_received`: the source did not enter
+          *here*; it was copied from the card named in the event. The walk continues
+          there, so the answer is when it entered the library, not when it was copied.
+        - version > 1: the event carrying that `version` in its details. `attach_source`
+          names the source itself and is the one event that records an acquisition;
+          `merge_received` copies again and is followed back; any other event at that
+          version did not bring a new source, so the id is reported undetermined.
+
+        This is not the same question as "which snapshot first mentions the id", which is
+        what a hand-written join would do: it answers "when was this record first *stored
+        anywhere on this card*". #1801 ran both over the tree and they differ on 11
+        records -- the join reports the copy (or a backdated snapshot) as the entry. So
+        the copy is reported separately as `entered_on`, and `entered_by` names the event
+        kind that did the introducing.
+
+        A source whose entry cannot be pinned appears in `undetermined_source_ids` and
+        gets no time at all, rather than inheriting the card's `versioned_at` or today's
+        clock. Nothing is written back and no row is repaired.
+        """
+        state = state if state is not None else self._get(_id(candidate_id))
+        here = _id(candidate_id)
+        sources: dict[str, dict[str, str]] = {}
+        undetermined: list[str] = []
+        for source in state.get("sources") or []:
+            source_id = source.get("id") if isinstance(source, dict) else None
+            if not isinstance(source_id, str) or not source_id:
+                continue
+            found = self._source_entry(here, source_id, 0)
+            if found is None:
+                undetermined.append(source_id)
+                continue
+            entered_at, entered_by, entered_on = found
+            entry = {"entered_at": entered_at, "entered_by": entered_by}
+            if entered_on != here:
+                entry["entered_on"] = entered_on
+            sources[source_id] = entry
+        payload: dict[str, Any] = {}
+        if sources:
+            payload["sources"] = sources
+        if undetermined:
+            payload["undetermined_source_ids"] = sorted(set(undetermined))
+        return payload
+
+    def _source_entry(self, candidate_id: str, source_id: str, depth: int) -> tuple[str, str, str] | None:
+        """(entered_at, event kind, card it entered on) for one source id, or None.
+
+        Split out of `source_basis` because the copy routes recurse: a merged or split
+        card holds a source it did not introduce, and the honest answer is on the card
+        that did.
+        """
+        if depth > 12:
+            # A merge/split graph that loops would otherwise recurse forever. No stored
+            # library reaches this; saying "undetermined" beats a recursion error.
+            return None
+        version = None
+        for row in self.connection.execute(
+            "SELECT version,state_json FROM snapshots WHERE candidate_id=? ORDER BY version",
+            (candidate_id,),
+        ):
+            held = json.loads(row["state_json"]).get("sources") or []
+            if any(isinstance(item, dict) and item.get("id") == source_id for item in held):
+                version = row["version"]
+                break
+        if version is None:
+            return None
+        events = self._acquisition_events(candidate_id)
+        if version == 1:
+            creating = next((e for e in events if e["event"] in SOURCE_CREATING_EVENTS), None)
+            if creating is not None:
+                return _dated(creating["created_at"], creating["event"], candidate_id)
+            copied = next((e for e in events if e["event"] in ("split_child", "merge_received")), None)
+            if copied is None:
+                return None
+            details = copied.get("details") or {}
+            parent = details.get("parent") if copied["event"] == "split_child" else details.get("source")
+            if not isinstance(parent, str) or not parent:
+                return None
+            return self._source_entry(parent, source_id, depth + 1)
+        writers = [e for e in events if (e.get("details") or {}).get("version") == version]
+        for event in writers:
+            if event["event"] == "attach_source" and (event.get("details") or {}).get("source") == source_id:
+                return _dated(event["created_at"], event["event"], candidate_id)
+        for event in writers:
+            if event["event"] == "merge_received":
+                other = (event.get("details") or {}).get("source")
+                if isinstance(other, str) and other:
+                    return self._source_entry(other, source_id, depth + 1)
+        return None
+
+    READS_SCHEMA = """
+        CREATE TABLE IF NOT EXISTS reads (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            wording_digest TEXT NOT NULL,
+            reader_session TEXT,
+            at TEXT NOT NULL,
+            surface TEXT NOT NULL,
+            accepted_at_at_read TEXT
+        );
+        CREATE INDEX IF NOT EXISTS reads_by_candidate ON reads(candidate_id, seq);
+    """
+
+    def record_read(self, candidate_id: str, session: str | None, *, surface: str) -> None:
+        """Log that this wording left the library towards somebody.
+
+        #1534 established that nothing in this database records a *read*: `search`,
+        `show` and `export` returned rows and left no trace, so "was this read before
+        or after it was accepted" had no answer on disk. This is that write point.
+
+        Deliberately outside `Store.retrieve` and `export_prompt`: both are pure (the
+        three outputs and `distill()` depend on that), and a log written inside them
+        would fire for every internal caller too, so the pipeline's own lookups would
+        be recorded as somebody reading the card.
+
+        Deliberately not an `events` row: `independence()` reads the sessions on
+        `attach_source` events, and a new event kind carrying a session is one reader
+        away from counting a *look* as a second sighting -- the defect r111/r112 spent
+        two rounds removing.
+
+        The table is created by `ensure_reads_table`, not in `__init__`, on purpose:
+        `__init__` runs for every command, so a table declared there would rewrite the
+        bytes of the frozen old library merely by opening it.
+
+        `accepted_at_at_read` is what makes two reads orderable against an acceptance
+        without trusting a clock comparison: `events.created_at` is second-resolution
+        while `at` is microsecond, so within one second "read then accepted" would
+        otherwise look like "read after acceptance". Recording the acceptance state as
+        it stood at read time keeps the two apart whatever the clock granularity.
+        """
+        state = self._get(_id(candidate_id))
+        basis = self.time_basis(candidate_id, state)
+        if self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='reads'"
+        ).fetchone() is None:
+            # Outside the insert's transaction on purpose: `executescript` commits
+            # implicitly, which would end the transaction wrapping the insert.
+            self.ensure_reads_table()
+        with self.transaction():
+            self.connection.execute(
+                "INSERT INTO reads(candidate_id,version,wording_digest,reader_session,at,surface,"
+                "accepted_at_at_read) VALUES(?,?,?,?,?,?,?)",
+                (
+                    candidate_id, int(state["version"]), wording_digest(state), session,
+                    datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+                    surface, basis.get("accepted_at"),
+                ),
+            )
+
+    def ensure_reads_table(self) -> None:
+        """Create the read log if absent. Called by the command layer, not by `__init__`."""
+        with self.transaction():
+            self.connection.executescript(self.READS_SCHEMA)
+
+    def reads(self, candidate_id: str | None = None, reader_session: str | None = None) -> dict[str, Any]:
+        """The read log, or the fact that this library has none. Read only.
+
+        `holds_table: false` is not "nobody read this": a library whose reads were
+        never logged has no table at all. The two are reported apart so an empty list
+        cannot be mistaken for the stronger claim.
+
+        `reader_session` narrows the log to one reader. Without it, a card that two
+        sessions were handed comes back as one list and the second person has to pick
+        his own row by `sequence` -- the one thing he does not have. The filter is here
+        rather than in a new command because it changes no stored byte and answers the
+        question the exit was written for.
+        """
+        present = self.connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='reads'"
+        ).fetchone()
+        if present is None:
+            return {"holds_table": False, "rows": []}
+        sql = "SELECT * FROM reads"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if candidate_id is not None:
+            clauses.append("candidate_id=?")
+            params.append(_id(candidate_id))
+        if reader_session is not None:
+            # Compared by value, not by column name: an unrecorded reader is stored as
+            # NULL, and NULL must not match a named reader.
+            clauses.append("reader_session=?")
+            params.append(reader_session)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY seq"
+        rows = [dict(row) for row in self.connection.execute(sql, tuple(params))]
+        payload: dict[str, Any] = {"holds_table": True, "rows": rows}
+        if reader_session is not None:
+            payload["reader"] = reader_session
+        return payload
+
+    def provenance_reading(self, candidate_id: str, session: str | None = None) -> dict[str, Any]:
+        """The provenance facts an exit may state, and the one it may not.
+
+        #1774: `broadcast` rows and a discussion's closing line left the reader to turn
+        `independence_groups=2 | independent=true` into "two people". #1763 measured that
+        the ledger cannot make that turn: an echo and a genuinely independent second
+        arrival write byte-identical provenance, so any rendering that reads as "people"
+        is unsupported however many entries it adds up. The exits therefore state counts
+        -- how many source records the card holds, how many group names those sources
+        declared for themselves, and how many handouts the read log holds -- and this
+        docstring is the rule for anyone tempted to render those counts as persons.
+
+        `this_session_logged` is None when the question cannot be put: no session was
+        given, or the library has no read log at all. None is reported rather than False,
+        because "this library never logged a handout" and "logged, and this session is
+        not in the log" are different facts and only the second one is about a reader.
+        `handout_rows` is None for the same reason and not 0: `reads()` already reports a
+        missing table apart from an empty one, and a count of 0 here would put that lie
+        back into a field that only ever gets added up. `session` must be a *reader*
+        identity; `broadcast`'s `--session` names a writer to exclude, so the broadcast
+        row passes no session at all rather than reporting a reader it does not know.
+        "Whether the second group is a second arrival" is not among the keys: that is the
+        signal #1763 found missing, and inventing one from these counts is the defect.
+
+        `readable` is False when the card declares at most one group name. That is the
+        one shape where no key here can be misread: one source record and one group name
+        cannot be taken for two people, and the exits that call this keep their exact
+        bytes for it (#1774's control cell). A row or line was never added to fix a
+        sentence that was already true.
+        """
+        state = self._get(_id(candidate_id))
+        sources = list(state.get("sources") or [])
+        groups = {
+            source.get("independence_group") for source in sources
+            if source.get("independence_group") and source.get("independence_group") != "unknown"
+        }
+        log = self.reads(candidate_id)
+        readers = sorted({row["reader_session"] for row in log["rows"] if row["reader_session"]})
+        if session is None or not log["holds_table"]:
+            logged: bool | None = None
+        else:
+            logged = session in readers
+        return {
+            "readable": len(groups) >= 2,
+            "source_records": len(sources),
+            "self_declared_groups": len(groups),
+            "handout_rows": len(log["rows"]) if log["holds_table"] else None,
+            "handout_readers": readers,
+            "this_session_logged": logged,
+            "counts": (
+                "source records and self-declared group names, not people: two group names "
+                "can come from one person"
+            ),
+        }
+
     def _matches(self, terms: set[str]) -> list[tuple[int, set[str], dict[str, Any]]]:
-        """Every discussable card whose text overlaps `terms`, best overlap first."""
+        """Every retrievable card whose text overlaps `terms`, best overlap first.
+
+        A conclusion the user accepted sits at `status=draft` (accepting a wording
+        does not confirm it), which is also where a card nobody touched sits; a card
+        a facilitator merely unblocked is `discussable`. Gating on `discussable`
+        alone therefore kept the sentence the user agreed to out of reach.
+
+        The gate is: `discussable`, or `draft` **with a recorded acceptance in the
+        event ledger** (`has_acceptance`). The ledger -- not the card's shape -- is
+        what separates "somebody accepted this wording" from "written that way".
+        Withdrawn, superseded, redirected and challenged cards stay out as before, and
+        a card with no acceptance event never gets in, however conclusion-shaped it is.
+        """
         rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
         matches: dict[str, tuple[int, set[str], dict[str, Any]]] = {}
         for row in rows:
@@ -686,7 +1539,20 @@ class Store:
                 canonical, _chain = self.resolve(state["id"])
             except DojoError:
                 continue
-            if canonical["status"] != "discussable" or canonical.get("redirect_to"):
+            if canonical.get("redirect_to"):
+                continue
+            # Asked through the predicate, not through `has_acceptance` directly: a
+            # predicate with no caller is decoration, and a mutant that changes the
+            # predicate would then leave every gate green (that is what S1 showed).
+            # The `status == "draft"` term is load-bearing on its own: a card that was
+            # accepted and then challenged keeps its acceptance event, so the predicate
+            # alone would let it back into search. That is S5, and it is why this is an
+            # `and`, not just a call.
+            accepts = self._acquisition_events(canonical["id"])
+            if canonical["status"] != "discussable" and not (
+                canonical["status"] == "draft"
+                and is_accepted_conclusion(canonical, accepts, self._snapshot_digest(canonical["id"]))
+            ):
                 continue
             found = terms.intersection(lexical_terms(candidate_text(canonical)))
             if found:
@@ -705,7 +1571,7 @@ class Store:
         ordered = self._matches(terms)[:limit]
         results = []
         for score, found, state in ordered:
-            results.append({
+            row = {
                 "id": state["id"],
                 "version": state["version"],
                 "status": state["status"],
@@ -721,7 +1587,20 @@ class Store:
                 "sources": state.get("sources", []),
                 "relations": self._present_state(state).get("relations", []),
                 "aliases": state.get("aliases", []),
-            })
+            }
+            # r111c: `status` is `discussable` for a conclusion the user accepted and
+            # equally for a card a facilitator merely unblocked, so this screen could
+            # hand back an unaccepted draft as settled. Judged by the value, and only
+            # when true: an accepted conclusion's row keeps the same bytes.
+            if is_unaccepted_draft(state):
+                row["unaccepted_draft"] = True
+            # r115: the ledger holds when the sentence was written and when this exact
+            # wording was accepted; this screen showed neither, so a reader could not
+            # tell today's card from a fortnight-old one. Two separate keys, added only
+            # when the fact exists: a row for a card with no acceptance keeps exactly
+            # the bytes it had.
+            row.update(self.time_basis(state["id"], state))
+            results.append(row)
         return {
             "query": query,
             "method": "transparent lexical overlap (distinct query terms only); not semantic search or truth ranking",
@@ -751,7 +1630,7 @@ class Store:
         results = []
         suppressed = []
         for score, found, state in self._matches(terms):
-            info = independence(state)
+            info = independence(state, self._acquisition_events(state["id"]))
             reason = None
             if exclude_session is not None and exclude_session in info["provenance_groups"]:
                 reason = "written by the session asking: a session does not broadcast its own word back"
@@ -778,6 +1657,32 @@ class Store:
                 "sources": state.get("sources", []),
                 "independence": info,
             })
+            # r1721: `broadcast` is `search`'s other exit and it dropped the same two
+            # facts `search` carries, so a reader who crossed sessions could not say
+            # when the wording was written or accepted. Added by value, only when the
+            # ledger has the record: a row for a card with no acceptance keeps exactly
+            # the bytes it had (the same rule `retrieve` uses).
+            results[-1].update(self.time_basis(state["id"], state))
+            # #1801: same gap on `search`'s other exit -- the row carried the wording's
+            # date and nothing about when each source behind it arrived. Added by the
+            # same rule as `time_basis`: only when the ledger pins an entry time, so a
+            # row for a card whose sources cannot be dated keeps the bytes it had.
+            provenance = self.source_basis(state["id"], state)
+            if provenance:
+                results[-1]["source_basis"] = provenance
+            # #1774: a reader of this row saw `independence_groups=2 | independent=true`
+            # and read "two people". #1763 measured that the ledger cannot support that
+            # reading: an echo and an independent second arrival write identical
+            # provenance. The row now states the counts and names what they count; the
+            # `independence` block above keeps every byte it had, because the values it
+            # reports are unchanged and callers pin them. Only rows that declare two or
+            # more group names get the key -- one group name is not a shape anyone reads
+            # as two people, and those rows keep exactly the bytes they had.
+            # No session is passed: this row's reader is whoever is asking, and the
+            # `--session` this call receives names a *writer* to exclude.
+            reading = self.provenance_reading(state["id"])
+            if reading["readable"]:
+                results[-1]["provenance_reading"] = reading
         return {
             "query": query,
             "method": method,
@@ -806,7 +1711,7 @@ class Store:
             state, _ = self.resolve(candidate_id)
             if state["status"] != "discussable" or state.get("redirect_to"):
                 raise DojoError(f"selected candidate is not currently discussable: {candidate_id}")
-            info = independence(state)
+            info = independence(state, self._acquisition_events(state["id"]))
             if info["single_session"]:
                 raise DojoError(
                     f"single-session provenance cannot be exported as cross-session material: {candidate_id}"
@@ -822,12 +1727,48 @@ class Store:
         ]
         if mode == "c":
             lines.extend(["", "Explicitly selected dojo excerpts (not an answer key):"])
+            # r117: every excerpt header below prints `independence_groups=N |
+            # independent=...`, and nothing in the file said what N counts. #1831d: N is
+            # now the provenance count the verdict used (`provenance_groups`), not the
+            # named groups alone; the named groups are `named_groups`. The gate refuses only single-session provenance, so a card
+            # marked `independent=false` still ships. Appended as its own line, after
+            # the existing heading, so every other line keeps its exact bytes and its
+            # order -- the same reason r114/r115 appended. Mode b has no excerpts, so
+            # it gets no such line: there would be nothing here for it to describe.
+            lines.append(
+                "Independence in the headers below is self-declared, not verified: independence_groups "
+                "counts the provenance entries the verdict was computed from -- a named group, or the "
+                "session that brought a source naming none -- so two entries can come from one person, "
+                "and one material logged two ways can count twice. The only provenance refused here is "
+                "single-session (one session's word standing alone), so a card marked independent=false "
+                "can still appear."
+            )
             for state, info in excerpts:
-                lines.append(
+                header = (
                     f"\n[{state['id']} v{state['version']} | {state['kind']} | status={state['status']}"
                     f" | independence_groups={len(info['independence_groups'])}"
                     f" | independent={str(info['independent']).lower()}]"
                 )
+                # r115: the participant receiving this prompt had no way to tell a
+                # conclusion reached today from one reached a fortnight ago, though the
+                # ledger holds both times. Appended *inside* the closing bracket and
+                # only when the ledger has the record, so the bytes every other reader
+                # matches on (up to `independent=`) are unchanged.
+                basis = self.time_basis(state["id"], state)
+                # r1627: `accepted_at` alone cannot tell a reader whether the agreement
+                # happened in the conversation or was copied out of a trace file later --
+                # the backfilled one dates the copy, and the copy can be weeks after. The
+                # route is already in the ledger (`details.path`), so it is appended as
+                # one more field inside the same bracket; every byte before it is
+                # unchanged and no line is reordered. Omitted when the ledger has no
+                # path, so an old acceptance keeps exactly the header it had.
+                if basis:
+                    header = header[:-1] + "".join(
+                        f" | {key}={basis[key]}"
+                        for key in HEADER_TIME_FIELDS
+                        if key in basis
+                    ) + "]"
+                lines.append(header)
                 lines.append(state["statement"])
                 for key in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
                     values = state.get(key, [])
@@ -835,10 +1776,50 @@ class Store:
                         lines.append(f"{key}: " + " | ".join(values))
                 if state.get("sources"):
                     lines.append("sources:")
+                    # #1801: this is the exit a real downstream reads -- the frozen
+                    # prompt handed to whoever is asked to weigh the card. Every other
+                    # time field in this header dates the wording; not one of them said
+                    # when the evidence behind it arrived, so a participant could not
+                    # say whether a source predates the claim it is offered for. Read
+                    # once per card, and used only for ids the ledger really pins.
+                    basis = self.source_basis(state["id"], state)
+                    entries = basis.get("sources", {})
                     for source in state["sources"]:
-                        lines.append(
+                        line = (
                             f"- {source['id']} | {source['type']} | verification={source['verification']} "
                             f"| independence_group={source['independence_group']} | {source['claim']}"
+                        )
+                        # r114: `scope_note` is the one field that says how far this
+                        # source reaches ("仅此一次，未复测", "两次都在同一团队"). The
+                        # export dropped it, so the participant handed the frozen prompt
+                        # got five of six fields -- all the provenance, none of the
+                        # caveat that bounds it. Appended, not reordered: the prefix
+                        # bytes other readers match on are unchanged. Omitted rather
+                        # than printed empty when the card has no note, so a blank stub
+                        # never reads as "no caveat needed".
+                        if source.get("scope_note"):
+                            line += f" | scope_note: {source['scope_note']}"
+                        # Appended after every existing field, never reordered, so the
+                        # prefix other readers match on keeps its bytes. Omitted when the
+                        # ledger cannot pin the entry: a `entered_at=<card date>` here
+                        # would be the substitution this whole field exists to avoid.
+                        entry = entries.get(source["id"])
+                        if entry:
+                            line += f" | entered_at: {entry['entered_at']}"
+                            if entry.get("entered_on"):
+                                line += f" | entered_on: {entry['entered_on']}"
+                        lines.append(line)
+                    # #1929: dropping the field is honest about the value but silent
+                    # about the fact. A reader of a six-line block cannot tell "this
+                    # source has no entry time" from "this row never had that field",
+                    # and the question this header exists to answer is exactly which
+                    # evidence can be dated. So the undated ids are named, once, in a
+                    # line of their own -- appended after the block so every byte a
+                    # reader matches on keeps its place.
+                    if basis.get("undetermined_source_ids"):
+                        lines.append(
+                            "sources_undated: " + ", ".join(basis["undetermined_source_ids"])
+                            + " | 这个库的账本里没有这些来源的入库记录；不是省略，是它真的说不出。"
                         )
                 if state.get("relations"):
                     lines.append("relations: " + " | ".join(
@@ -910,7 +1891,211 @@ def content_key(statement: str, kind: str, fields: dict[str, list[str]]) -> str:
     })
 
 
-def independence(state: dict[str, Any]) -> dict[str, Any]:
+def is_unaccepted_draft(state: dict[str, Any]) -> bool:
+    """Whether this card's whole provenance is an unaccepted model-written wording.
+
+    One source, and the model wrote it: no session put its word behind this version,
+    so nothing here is a conclusion. The condition is the card's *shape*, not one
+    verification value -- a model-written wording that was never independently
+    checked is equally unaccepted whether it is filed as `unverified` or as
+    `not_evidence`, and testing for either one would only pin the label r110 happens
+    to write today. `accept_draft` rewrites that one source's type to `unknown`,
+    which is why the same card stops matching once the user accepts the wording.
+    Confirmation is deliberately not part of this predicate -- being marked
+    discussable says nothing about who agreed to the sentence. (Written after a
+    mutant showed the extra `verification == "unverified"` conjunct carried no test
+    weight; it was narrow for the wrong reason and is gone.)
+    """
+    sources = list(state.get("sources", []))
+    if len(sources) != 1:
+        return False
+    return sources[0].get("type") == "model_generated"
+
+
+ACCEPTANCE_EVENT = "wording_accepted"
+# A merge the store refused, written on the source card's ledger. A refusal changes no
+# version -- refusing to do something must not look like doing it -- but it does leave a
+# row, so `dojo events --id` can show that the rule fired and on which two cards, instead
+# of the command failing with only a message nobody kept.
+MERGE_REFUSED_EVENT = "merge_refused"
+# Where `_merged_target` leaves the content fields the union would change, between being
+# computed and being decided on. Stripped before any write; never persisted.
+MERGED_CHANGED_FIELDS = "_merge_changed_content_fields"
+# Which field in an acceptance event's details holds the identity of the wording that
+# was accepted. Named once so the writer and the reader cannot drift apart -- they did:
+# the writer used `draft_accepted` as the event name and the reader matched on the name,
+# so `accept_draft`'s acceptance was only found because a SQL query happened to include
+# the old name in its IN-list.
+DIGEST_FIELD = "statement_digest"
+# Which field names the *card* the acceptance was given for. The digest above answers
+# "is this the same sentence"; this answers "is this the card". They are different
+# questions and only both together are an acceptance: two cards can hold identical
+# wording, so a digest alone lets one card's acceptance be read onto the other. The
+# digest is therefore a check on an acceptance, not a way to move it between cards.
+# Events written before this field existed carry no card identity of their own; for
+# those the ledger row (`events.candidate_id`) is the binding and nothing is rewritten.
+CARD_FIELD = "candidate_id"
+# When the agreement happened, as the accepting caller knew it -- distinct from
+# `events.created_at`, which is when the row was written. A backfilled acceptance can be
+# weeks later than the agreement it records. Absent on events written before r1638 and
+# on acceptances whose caller had no moment to give; absent means "not stated", and the
+# export then prints only the record time rather than inventing this one.
+AGREED_AT_FIELD = "agreed_at"
+# #1801: the two events that create a card together with its sources. A source found on
+# version 1 of a card written by one of these entered the library at that event's time.
+SOURCE_CREATING_EVENTS = ("add", "load_simulated_seed")
+
+
+def _dated(when: Any, kind: str, card: str) -> tuple[str, str, str] | None:
+    """An entry time the ledger really holds, or None -- never an empty stand-in.
+
+    #1929: every surface prints `entered_at: {value}` and drops the field only when
+    the ledger has no entry. A row whose `created_at` is empty (a hand-edited library,
+    an import that dropped the column) is *not* an entry: printing `entered_at: ` with
+    nothing after it reads as "this source was dated, the date is over there", which is
+    the opposite of what the library knows. Such a source is undetermined instead.
+    """
+    if not isinstance(when, str) or not when.strip():
+        return None
+    return (when, kind, card)
+
+
+# The order these appear in an export header, after `independent=`. Appended, never
+# interleaved: a reader matching the bytes up to an earlier field keeps matching. Each
+# is omitted when the ledger has no such record, so an old card's header is unchanged.
+HEADER_TIME_FIELDS = ("versioned_at", "accepted_at", "acceptance_path", "agreed_at")
+# Event names that have meant "a user accepted this wording". `accept_draft` writes
+# `draft_accepted`; the conversation path writes ACCEPTANCE_EVENT. An older library
+# has only the first, and it is what the snapshot fallback has to recognise.
+LEGACY_ACCEPTANCE_EVENTS = frozenset({"draft_accepted", ACCEPTANCE_EVENT})
+
+
+def is_accepted_conclusion(
+    state: dict[str, Any],
+    accepts: list[dict[str, Any]] | None = None,
+    snapshot_digest: Callable[[int], str | None] | None = None,
+) -> bool:
+    """Whether anyone actually accepted this wording -- read from the event ledger.
+
+    r112b (this version) replaced a shape test. The shape test said yes to any card
+    with one non-`model_generated` source whose group was one of its sessions; but
+    `dojo add --source-json` writes exactly that shape by hand, so a card nobody had
+    accepted was retrivable as an accepted conclusion. A predicate that cannot tell
+    "accepted" from "written that way" is not evidence of acceptance.
+
+    So acceptance is now an *action*, recorded as a `wording_accepted` event by the two
+    places where a user accepts a wording, and this reads that event. No event, no
+    answer: fail-closed, including for every card written before this version (those
+    carry no such event, so they stay out of retrieval exactly as they were before B).
+
+    `accepts` is passed explicitly rather than fetched here so this function stays
+    pure; `Store._acquisition_events` supplies it. `None` means "the caller did not
+    supply the ledger" and returns False -- not "looks fine".
+
+    r112d: an acceptance recorded *before* the digest existed still names the version
+    it was given for, and the `snapshots` table holds that version's wording. So the
+    identity is recoverable by reading the snapshot and hashing it with the same
+    normalization -- read only, nothing written back into the old event. Without this,
+    a library written by an earlier version had every acceptance permanently
+    unmatched, which discarded real evidence: an accepted, never-touched card is not
+    the same thing as a card nobody accepted.
+
+    `snapshot_digest` is that lookup, supplied by the Store because this function does
+    no I/O. It returns None when the snapshot is absent, and the event then counts for
+    nothing -- fail-closed, as before, but now counted by `Store.audit_acceptances`
+    instead of disappearing.
+    """
+    if not accepts:
+        return False
+    wanted = wording_digest(state)
+    card_id = state.get("id")
+    for event in accepts:
+        digest = _accepted_wording_digest(event, snapshot_digest, card_id)
+        if digest and digest == wanted:
+            return True
+    return False
+
+
+def _accepted_wording_digest(
+    event: dict[str, Any], snapshot_digest: Callable[[int], str | None] | None = None,
+    candidate_id: str | None = None,
+) -> str | None:
+    """Which wording an acceptance event speaks for, or None if it speaks for none.
+
+    Written by this version: the digest is on the event. Written before it: the event
+    carries only the `version` its write produced, so the wording is read from that
+    version's snapshot.
+
+    The fallback is gated on the event *being* an acceptance first. Every versioned
+    event carries a `version`, so without that gate a `revise` or `confirm` event would
+    have its own new wording hashed and read back as an acceptance of itself -- the
+    false positive this binding exists to prevent, under a different name. A `revise`
+    event's snapshot is the *rewritten* wording, so it would match today's card exactly.
+    """
+    if not _is_acceptance_event(event):
+        return None
+    details = event.get("details") or {}
+    # The event's own card identity, when it has one, must be the card being asked
+    # about. A digest match is a check on an acceptance, so an event that names a
+    # different card proves nothing here however well its wording matches -- that is
+    # the case where two cards hold the same sentence and one was accepted. Events
+    # written before the field existed have only their ledger row, which the caller
+    # already scoped to this card; they are read exactly as before.
+    if _acceptance_names_another_card(event, candidate_id):
+        return None
+    digest = details.get(DIGEST_FIELD)
+    if digest:
+        return digest
+    version = details.get("version")
+    if not isinstance(version, int) or snapshot_digest is None:
+        return None
+    return snapshot_digest(version)
+
+
+def _acceptance_names_another_card(event: dict[str, Any], candidate_id: str | None) -> bool:
+    """Whether this acceptance says, in its own details, that it belongs to another card.
+
+    Absent field means the event was written before the binding existed, and then the
+    ledger row is the only identity there is -- not a disagreement. A named card that
+    differs from the one asked about is a refusal: the case that byte comparison of
+    wording cannot detect, because the wording is identical on both cards. A named card
+    with nothing to compare it to is also a refusal -- unverifiable is not agreement.
+    """
+    owner = (event.get("details") or {}).get(CARD_FIELD)
+    if owner is None:
+        return False
+    # No card to compare against is not agreement. An event that names a card can only
+    # be checked against the card being asked about; without one there is nothing to
+    # check it against, and reading that as "fine" was the same fail-open this function
+    # was written to remove (an unnamed state would accept any card's named acceptance).
+    return candidate_id is None or owner != candidate_id
+
+
+def _is_acceptance_event(event: dict[str, Any]) -> bool:
+    """Whether this ledger row records a user accepting a wording.
+
+    Two spellings, because the two routes wrote different ones: `accept_draft` writes
+    the `draft_accepted` name, the conversation path writes `ACCEPTANCE_EVENT` plus the
+    marker field. An older library has only the first.
+    """
+    details = event.get("details") or {}
+    return bool(details.get(ACCEPTANCE_EVENT)) or event.get("event") in LEGACY_ACCEPTANCE_EVENTS
+
+
+def wording_digest(state: dict[str, Any]) -> str:
+    """Identity of the wording this card holds now.
+
+    Content, not `version`: a version bump for something that does not touch the
+    sentence (an alias, a relation) must not invalidate an acceptance, and a revision
+    that restores the same text must be accepted again by the same identity. It is the
+    same normalization duplicates use, so "the same wording" means one thing here.
+    """
+    return hashlib.sha256(
+        content_key(state.get("statement", ""), state.get("kind", ""), state).encode("utf-8")
+    ).hexdigest()
+
+
+def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """What a card's provenance supports, computed from its sources and sessions.
 
     A session that wrote the card is itself one source of provenance, so it counts
@@ -923,23 +2108,162 @@ def independence(state: dict[str, Any]) -> dict[str, Any]:
     that wrote it (seed and methodology material) is `unidentified`: neither one
     session's word nor two independent ones, reported as such and not guessed.
     Nothing here is stored twice.
+
+    r112: provenance is counted per *source*, not per session.
+
+    - A source that names an independence group contributes that group, and only
+      that group. Two sessions citing the same named group are one provenance,
+      because the group name is the same key both times. This closes one
+      direction and not its mirror: it stops *two citations of one material*
+      from reading as two sightings. It does not stop *one material logged two
+      ways* -- a named group plus a group-less source the same session brought --
+      from reading as two, because those are two different keys and this rule
+      never compares them. That shape (a card whose one named group is joined by
+      an attributed group-less source) still reports `independent=true`, and its
+      header still counted only the named group, printing a 1 beside `true`.
+      #1831d measured both: the union-of-groups-and-sessions alternative that
+      would close it also merges two distinct declared groups written in one
+      call into one provenance, taking the documented two-group broadcast case
+      with it. So the header now counts what the verdict counts (below); the
+      merge itself is left as a product decision, not silently changed here.
+    - `independence_groups` reports the same value `independent` was decided
+      from (`provenance_groups`), so a header can no longer print a count smaller
+      than the one the verdict used. What it counts is still provenance, not
+      people: two group names can come from one person. The raw named-group list
+      is kept as `named_groups` for callers that need that distinction.
+    - A source that names no group is attributed to the session that attached it,
+      taken from the `attach_source` event. Material a second session really
+      brought back therefore still counts -- even if that session confirmed the
+      card afterwards. Confirming records no acquisition, which is the whole reason
+      a confirmation cannot inflate provenance; the confirmer is deliberately not
+      subtracted by name, so acquiring-then-confirming keeps its sighting.
+    - A source that names no group and has no ledger entry to attribute it is
+      reported in `unattributed_source_ids` and counted as nothing. It is not
+      guessed from `sessions`, because `sessions` holds every writer, including a
+      session whose only other act was to hand the card a group-named source that
+      is already counted.
+    - A card with no sources at all falls back to its writing sessions, so
+      `--session` with no sources reads `single_session` rather than absent.
     """
-    groups = sorted({
-        source["independence_group"]
-        for source in state.get("sources", [])
-        if source.get("independence_group") and source.get("independence_group") != "unknown"
-    })
+    # #1831d: this function never reads `verification`, and that is deliberate -- do not
+    # turn it into a gate later. Independence and "is this evidence" are two axes: a
+    # source can be an unverified second arrival (counts as provenance) or a verified
+    # restatement of something the same person already said (does not add one).
+    # Filtering on `verification == "not_evidence"` here would make a model-generated
+    # source stop counting at all, which silently changes how many sightings a card
+    # claims based on a field about content, not about who brought it. It would also
+    # make the count disagree with the ledger under a name that still says provenance.
+    sources = list(state.get("sources", []))
     sessions = list(state.get("sessions", []))
-    provenance = sorted(set(groups) | set(sessions))
+
+    def _group(source: dict[str, Any]) -> str | None:
+        value = source.get("independence_group")
+        return value if value and value != "unknown" else None
+
+    groups = sorted({_group(source) for source in sources if _group(source)})
+
+    # Provenance is counted per *source*, not per session. Two sessions that each
+    # attach material from the same named group are citing one provenance, not two:
+    # a group name and a session ID are never equal, so subtracting one set from the
+    # other can never collapse them, and a session-counting rule reports `independent`
+    # for a claim only one source backs. That was the shape still going out in exports.
+    #
+    # A source that names no group is attributed to the session that attached it, read
+    # from the `attach_source` event -- so a session that really brought back different
+    # material still counts, even if it confirmed the card afterwards. Confirming writes
+    # no acquisition, which is what keeps a confirmation from inflating anything; the
+    # confirmer is not subtracted by name, so acquiring-then-confirming keeps its
+    # sighting.
+    # #1876: the group each source names, so a create event can tell which of the ids
+    # it wrote already carry a group name.
+    group_by_id = {source.get("id"): _group(source) for source in sources}
+    attribution: dict[str, str] = {}
+    # Sessions that really handed material over, kept apart from `attribution`: the
+    # group-name branch stores a *group* in `attribution`, and calling a group name an
+    # attributed session is the same confusion this fix is about.
+    acquirers: set[str] = set()
+    for event in events or []:
+        details = event.get("details") or {}
+        if event.get("event") == "attach_source":
+            if details.get("source") and details.get("session"):
+                attribution[details["source"]] = details["session"]
+                acquirers.add(details["session"])
+        # #1831b: the creating event names the sources it wrote. Reading it is what
+        # makes "attached when the card was written" attributable at all; before this,
+        # only `attach_source` carried that fact and a card written in one go with its
+        # source fell to `unidentified` and was admitted.
+        #
+        # #1876: a group-less source written in the SAME call as a named one belongs to
+        # that named group, not to the writing session. One witness logging the same
+        # material two ways is one provenance: the registration changed, the witness did
+        # not. Falling back to the session key there is what made a card written once
+        # carry two provenance entries (`['sess-b', 'team-alpha']` for a single source of
+        # one group). A session key is never attached to a source that already names a
+        # group -- doing that is how the rejected union rule collapsed two genuinely
+        # distinct declarations into one, taking the documented two-group case with it.
+        elif event.get("event") in SOURCE_CREATING_EVENTS:
+            session = details.get("session")
+            named = details.get("sources")
+            if session and isinstance(named, list):
+                # The groups this same call declared, in the order the ids appear.
+                declared: list[str] = []
+                for source_id in named:
+                    if isinstance(source_id, str) and source_id:
+                        found = group_by_id.get(source_id)
+                        if found and found not in declared:
+                            declared.append(found)
+                for source_id in named:
+                    if isinstance(source_id, str) and source_id:
+                        if group_by_id.get(source_id):
+                            # group name wins; never also a session key
+                            continue
+                        if declared:
+                            attribution[source_id] = declared[0]
+                        else:
+                            attribution[source_id] = session
+                            acquirers.add(session)
+    unattributed: list[str] = []
+    provenance: set[str] = set(groups)
+    for source in sources:
+        if _group(source):
+            continue
+        session = attribution.get(source.get("id"))
+        if session is None and len(sessions) == 1 and not events:
+            # No ledger to attribute from (a bare state dict). With exactly one writing
+            # session that is the only answer available, and it is the one `add` means.
+            session = sessions[0]
+        if session is None:
+            unattributed.append(source.get("id", "?"))
+        else:
+            provenance.add(session)
+    if not sources:
+        # Written with --session and no sources at all: the writing sessions are the
+        # only provenance there is, and reading that as "none" would pass the isolation
+        # guard on absence.
+        provenance |= set(sessions)
+    provenance = sorted(provenance)
+    acquirers |= {item for item in sessions if not sources}
     if len(provenance) >= 2:
         status = "cross_session"
     elif len(provenance) == 1 and provenance[0] in sessions:
         status = "single_session"
     else:
         status = "unidentified"
+    # #1831d: `independence_groups` is what `independent` was decided from, not a
+    # narrower count beside it. It used to be the named groups alone, so a card joined
+    # by an attributed group-less source printed `independence_groups=1 | independent=true`
+    # -- a number the verdict had already stopped using. The raw named-group list is
+    # still reported, as `named_groups`: that is a property of the source records, and
+    # #1774's "self-declared groups" wording is about it, so it keeps its own name
+    # instead of being read out of a field that now means something else.
     return {
-        "independence_groups": groups,
+        "independence_groups": provenance,
+        "named_groups": groups,
         "sessions": sessions,
+        "attributed_sessions": sorted(acquirers),
+        # Reported rather than guessed: a source that names no group and cannot be tied
+        # to a session contributes nothing, and the caller can see that it happened.
+        "unattributed_source_ids": sorted(unattributed),
         "provenance_groups": provenance,
         "provenance_status": status,
         "independent": len(provenance) >= 2,

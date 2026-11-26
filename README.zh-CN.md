@@ -59,14 +59,31 @@ python3 -m dojo show idea-alias      # 规范 ID 与重定向链
 python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 ```
 
-接模型端点的自然语言讨论是显式选择，也是唯一会联网的路径：
+把一条故事的知识链读回有四个只读视图，都不写库。它们读的账本是文本（`fixtures/comparison-ledger.json`）；生成出来的 `*.sqlite3` 被忽略规则挡在版本库外，所以检出里要自己造一份：
+
+```sh
+# 每跑一次都在一个新目录里建库，所以第二遍不会动到第一遍的库
+DEMO=$(mktemp -d)
+DB=$DEMO/ledger.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --report 2 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --proposal 5 --synthetic
+```
+
+`--context` 读回这条故事还没核过来源独立性的部分；它的 `omitted_events`（`[5, 15, 16, 17]`）是本视图放不下的当前提议，每个都能直接拿去 `--comparison` 读。`--comparison 5` 返回 `comparison_status: checked` 和 `source_events: [3, 4]`——那是比较者记下「核过两份回执」的判断，不是程序认证。`--report 2` 返回用户原话，`epistemic_status` 是 `user_report_not_independently_verified`。`--proposal 5` 返回提议的 `statement` 和 `state`；这份账本里它的 `report_review` 是空的，空只表示这里没有可列项，不是「核过没问题」。用 `--revision` 再造一份，还能看到「已替代」那一态：`--comparison 5` 退出码 2，并指明当前版是 #27。四个视图互斥，一次只给一个。完整走法和每种拒绝的含义见 [`docs/cli-guide.md`](docs/cli-guide.md)。
+
+真实聊天/讨论、探究工具和限额知识复核会联网；以下是旧讨论入口：
 
 ```sh
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # 必须与端点注册的 model id 一字不差
 # 若需要：在此 shell 里从你的密钥来源设置 DOJO_LLM_API_KEY；仓库里不存它
-python3 -m dojo discuss            # 零表单、零 y/n 提示；只在达成一致的那一轮写入
+python3 -m dojo discuss            # 零表单、零 y/n 提示；达成一致才写入结论
 python3 -m dojo discuss --verbose  # 在 stderr 实时显示请求与检索进度
+python3 -m dojo list               # 没人认可的版本保留为 `unaccepted_draft: true` 草稿
 ```
 
 ## 现在能做什么
@@ -79,7 +96,7 @@ python3 -m dojo discuss --verbose  # 在 stderr 实时显示请求与检索进�
 - **广播的独立性守卫。** `broadcast` 拒收「全部独立性来源就是写它的那个会话」的卡，也拒收 `--session` 指名的会话自己写的卡；被拒的卡连同原因列在 `suppressed` 里，不静默丢弃。
 - **会话末管线是幂等的。** `pipeline --session <id>` 跑 `classify → locate → challenge`，每张卡每个修订只处理一次；重跑什么都不写，每个 pass 只提议不改写。
 - **有上限的提示词导出。** `export --mode b`（共同目标，不带 seed）或 `--mode c --id …`（目标加显式选择的候选），`--budget-chars` 是硬字符上限；导出不含 actor/judge 笔记。
-- **会记录代价的讨论。** `discuss` 对每条做法问四件事——情境、张力、代价、失效——每一件都记「谁写的」，并由最弱的一件封顶（只要有一件是系统补，状态就是 `合写`）。
+- **保留代价与出处的讨论。** `discuss` 对每条做法问情境、张力、代价、失效，按问题和字段键记录完整自由文本。收集到回答不等于候选字段已获语义来源锚定，不会仅因非空就升格为“他的原话”；模型生成的候选在映射未完成前仍标 `系统补`。这不否认用户的贡献：原话留在轨迹里，但不拿它为未经映射的模型内容背书。
 - **先推断再回答的主持人。** 你没说的参数由它假设并写明条件，能推的公式当场推；结论依赖真实数值计算时，它写一节 `## 计算交接单`，程序落盘为 `<会话目录>/compute-<id>-<轮>.md` 交给外部执行器运行——它自己没有代码执行能力，也不会声称跑过计算。
 - **请求有边界。** 检索带回页面正文，每条摘录上限 1200 字、每场 6000 字；推理等级用 `DOJO_LLM_REASONING`（默认 `medium`）；单次请求超时默认 60 秒，`DOJO_LLM_TIMEOUT` 接受 5–600 秒。
 - **每场会话都有本地轨迹。** 每轮一行 JSON：你的原话、主持人的回答、当轮候选、是否写入及理由、用量、失败原因。默认开启，`--no-trace` 让整场不产生文件，`--resume <trace>` 续跑同一会话。
@@ -156,7 +173,7 @@ sh scripts/storage-smoke.sh                # 临时目录里的端到端 CLI 演
 - 候选生命周期：带出处、不可改写版本、可撤销的合并与拆分；词汇检索带合并重定向；重复写入被拒。
 - 广播独立性守卫、会话末 `classify → locate → challenge` 管线、有上限的 B/C 提示词导出。
 - 三幕离线 Demo、离线对比回放、冻结材料生成器。
-- `discuss`：零结构自然语言循环、在同意那一轮写入、本地轨迹、`--resume`、`person.md` 档案、答案需要真实计算时落盘计算交接单。
+- `discuss`：零结构自然语言循环；被认可的版本成为候选，没人认可的版本保留为 `unaccepted_draft` 草稿（来源标 `model_generated`/`unverified`，不可讨论，所以别的会话不会拿它当材料）。本地轨迹、`--resume`、`person.md` 档案、答案需要真实计算时落盘计算交接单。
 - K1「一条道的一生」：loop 已跑过一位真人的记录（13 条道、9 条写不成道的材料、1 条候选、1 对自相矛盾、26 条记录检查、0 条晋升），外加一个按构造就是模拟的第二个库，并自己写明这一点。
 - 一场完成的 `discuss` 会话可以导出成探针笔记；哪几件是他的由会话决定、不由手写的提炼声明，提炼声称了一件没被晋升的会被库拒绝。
 - 只用标准库的测试集，覆盖 CLI、存储、检索、讨论、Demo、管线与 K1 loop。

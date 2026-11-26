@@ -1,0 +1,1200 @@
+{
+ "layer": "fixture",
+ "about": "合成探究账本：一份用户报告、两处虚构正文、若干提议与一次比较记录。",
+ "not": "不是研究结论，不是真人材料，也不是模型回放的产物。值都是夹具作者编写的。",
+ "story": "0f272e5f34244b328df1c80edfdde3df",
+ "synthetic": true,
+ "events": [
+  {
+   "seq": 1,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "start",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": null,
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12
+   },
+   "at": "2026-11-25T16:35:13.330155+00:00"
+  },
+  {
+   "seq": 2,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "user",
+   "payload": {
+    "text": "我在整理一套给陌生人接手用的经验账本：希望后来者能看见原始报告、材料正文，也知道自己还缺哪一步，而不是只读到一段总结。",
+    "synthetic": true
+   },
+   "at": "2026-11-25T16:35:13.337227+00:00"
+  },
+  {
+   "seq": 3,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "tool_result",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "https://fiction.example/source-a"
+    },
+    "result": {
+     "url": "https://fiction.example/source-a",
+     "title": "虚构材料 A",
+     "text": "虚构材料 A：本地试读者在第三次接手时先读原报告，再打开材料正文；她说这样做能发现总结里省略的适用条件。"
+    },
+    "status": "executed"
+   },
+   "at": "2026-11-25T16:35:13.344162+00:00"
+  },
+  {
+   "seq": 4,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "tool_result",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "https://fiction.example/source-b"
+    },
+    "result": {
+     "url": "https://fiction.example/source-b",
+     "title": "虚构材料 B",
+     "text": "虚构材料 B：另一位从未参与写稿的试读者按同样顺序操作，也指出同一处条件遗漏；这份记录是夹具编写者另写的场景，不是对 A 的转述。"
+    },
+    "status": "executed"
+   },
+   "at": "2026-11-25T16:35:13.351422+00:00"
+  },
+  {
+   "seq": 5,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 2,
+       "quote": "希望后来者能看见原始报告",
+       "role": "assumption"
+      },
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两位试读者面对同一个虚构任务"
+     ],
+     "conditions": [
+      "只适用于已保存原始报告和可读正文的账本"
+     ],
+     "alternatives": [
+      "只读模型总结，不核对正文"
+     ],
+     "falsifier": "若只在总结里也能稳定看见该条件，此说法需要收窄。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:35:13.369690+00:00"
+  },
+  {
+   "seq": 6,
+   "run": "18dadfeacdbc42eba64cbc02bb9e12bc",
+   "kind": "start",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": "0f272e5f34244b328df1c80edfdde3df",
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12
+   },
+   "at": "2026-11-25T16:35:13.411018+00:00"
+  },
+  {
+   "seq": 7,
+   "run": "18dadfeacdbc42eba64cbc02bb9e12bc",
+   "kind": "story_context",
+   "payload": {
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "previous_run": "0f272e5f34244b328df1c80edfdde3df",
+    "prior_run_count": 1,
+    "intent_snapshot_event": null,
+    "intent_snapshot_state": "absent",
+    "user_events_after_intent": [
+     2
+    ],
+    "user_events_after_intent_omitted": 0,
+    "sources": [
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 2,
+      "at": "2026-11-25T16:35:13.337227+00:00",
+      "kind": "user",
+      "text": "我在整理一套给陌生人接手用的经验账本：希望后来者能看见原始报告、材料正文，也知道自己还缺哪一步，而不是只读到一段总结。",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "user_report_not_independently_verified",
+      "attribution": "reported_in_current_story"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 3,
+      "at": "2026-11-25T16:35:13.344162+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-a\"}, \"result\": {\"text\": \"虚构材料 A：本地试读者在第三次接手时先读原报告，再打开材料正文；她说这样做能发现总结里省略的适用条件。\", \"title\": \"虚构材料 A\", \"url\": \"https://fiction.example/source-a\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 4,
+      "at": "2026-11-25T16:35:13.351422+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-b\"}, \"result\": {\"text\": \"虚构材料 B：另一位从未参与写稿的试读者按同样顺序操作，也指出同一处条件遗漏；这份记录是夹具编写者另写的场景，不是对 A 的转述。\", \"title\": \"虚构材料 B\", \"url\": \"https://fiction.example/source-b\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     }
+    ],
+    "pending_knowledge": {
+     "items": [],
+     "more_pending": false,
+     "preview_only": true,
+     "scope": "Pending knowledge created in these story runs, filtered before output bounds. Truncated previews are review warnings, not full propositions or citable evidence; inspect canonical sources before reuse."
+    },
+    "source_comparison": {
+     "items": [
+      {
+       "conclusion_event": 5,
+       "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件。",
+       "comparison_status": "open",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": "先核两份材料是否独立形成、是否各自支持这条说法；不因有两个 URL 就跳过核对。",
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      }
+     ],
+     "omitted": 0,
+     "preview_only": true,
+     "reading": "来源比较摘要只说明所引材料与本版提议的账本状态，不是新证据或可选引文。两处不同 URL 不证明独立形成或支持；open 表示没有适用的明确比较记录，checked 表示已记录支持比较，contested 表示有冲突记录；都不认证事实。按正文事件号找 sources 中的原文；body_events_not_in_packet 没有随包恢复正文，不能说已看到它们。省略不表示已核。"
+    },
+    "latest_intent_snapshot": null,
+    "intent_snapshot_omitted_for_size": false,
+    "source_events_omitted": 0,
+    "internal_replies_not_restored": 0,
+    "internal_critiques_not_restored": 0,
+    "status": "same_story_history_not_new_user_testimony_or_independent_evidence"
+   },
+   "at": "2026-11-25T16:35:13.448518+00:00"
+  },
+  {
+   "seq": 8,
+   "run": "18dadfeacdbc42eba64cbc02bb9e12bc",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 B 单独就足以说明接手者能看见总结省略的适用条件。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "材料 B 的试读者与写稿者无关"
+     ],
+     "conditions": [
+      "只适用于材料 B 可读的情况"
+     ],
+     "alternatives": [
+      "需要第二份独立材料才成立"
+     ],
+     "falsifier": "若材料 B 单独无法复现，此说法应收窄。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:35:13.462178+00:00"
+  },
+  {
+   "seq": 9,
+   "run": "0f272e5f34244b328df1c80edfdde3df",
+   "kind": "review_evidence_notice",
+   "payload": {
+    "target": 5,
+    "sources": [],
+    "comparison": {
+     "relation": "supports_independently",
+     "events": [
+      3,
+      4
+     ]
+    },
+    "reason": "两份虚构材料的正文各自独立指出同一处条件遗漏；这是夹具场景记录，不是真人研究。",
+    "synthetic": true,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict"
+   },
+   "at": "2026-11-25T16:35:18.421462+00:00"
+  },
+  {
+   "seq": 10,
+   "run": "0b0139150ab7401f9f43019e1e4976b3",
+   "kind": "start",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": "18dadfeacdbc42eba64cbc02bb9e12bc",
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12
+   },
+   "at": "2026-11-25T16:37:18.785442+00:00"
+  },
+  {
+   "seq": 11,
+   "run": "0b0139150ab7401f9f43019e1e4976b3",
+   "kind": "story_context",
+   "payload": {
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "previous_run": "18dadfeacdbc42eba64cbc02bb9e12bc",
+    "prior_run_count": 2,
+    "intent_snapshot_event": null,
+    "intent_snapshot_state": "absent",
+    "user_events_after_intent": [
+     2
+    ],
+    "user_events_after_intent_omitted": 0,
+    "sources": [
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 2,
+      "at": "2026-11-25T16:35:13.337227+00:00",
+      "kind": "user",
+      "text": "我在整理一套给陌生人接手用的经验账本：希望后来者能看见原始报告、材料正文，也知道自己还缺哪一步，而不是只读到一段总结。",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "user_report_not_independently_verified",
+      "attribution": "reported_in_current_story"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 3,
+      "at": "2026-11-25T16:35:13.344162+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-a\"}, \"result\": {\"text\": \"虚构材料 A：本地试读者在第三次接手时先读原报告，再打开材料正文；她说这样做能发现总结里省略的适用条件。\", \"title\": \"虚构材料 A\", \"url\": \"https://fiction.example/source-a\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 4,
+      "at": "2026-11-25T16:35:13.351422+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-b\"}, \"result\": {\"text\": \"虚构材料 B：另一位从未参与写稿的试读者按同样顺序操作，也指出同一处条件遗漏；这份记录是夹具编写者另写的场景，不是对 A 的转述。\", \"title\": \"虚构材料 B\", \"url\": \"https://fiction.example/source-b\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     }
+    ],
+    "pending_knowledge": {
+     "items": [],
+     "more_pending": false,
+     "preview_only": true,
+     "scope": "Pending knowledge created in these story runs, filtered before output bounds. Truncated previews are review warnings, not full propositions or citable evidence; inspect canonical sources before reuse."
+    },
+    "source_comparison": {
+     "items": [
+      {
+       "conclusion_event": 8,
+       "statement": "虚构材料 B 单独就足以说明接手者能看见总结省略的适用条件。",
+       "comparison_status": "open",
+       "support_status": "single_material",
+       "rank_class": "single_source",
+       "next_check": "补一份不同来源的材料，核对它是否独立形成并实际支持这条结论；换一个网址重刊同一份材料不算。",
+       "recorded_body_events": [
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 5,
+       "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件。",
+       "comparison_status": "checked",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": null,
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [
+        {
+         "notice_event": 9,
+         "target": 5,
+         "relation": "supports_independently",
+         "source_events": [
+          3,
+          4
+         ]
+        }
+       ],
+       "comparisons_omitted": 0
+      }
+     ],
+     "omitted": 0,
+     "preview_only": true,
+     "reading": "来源比较摘要只说明所引材料与本版提议的账本状态，不是新证据或可选引文。两处不同 URL 不证明独立形成或支持；open 表示没有适用的明确比较记录，checked 表示已记录支持比较，contested 表示有冲突记录；都不认证事实。按正文事件号找 sources 中的原文；body_events_not_in_packet 没有随包恢复正文，不能说已看到它们。省略不表示已核。"
+    },
+    "latest_intent_snapshot": null,
+    "intent_snapshot_omitted_for_size": false,
+    "source_events_omitted": 0,
+    "internal_replies_not_restored": 0,
+    "internal_critiques_not_restored": 0,
+    "status": "same_story_history_not_new_user_testimony_or_independent_evidence"
+   },
+   "at": "2026-11-25T16:37:18.827872+00:00"
+  },
+  {
+   "seq": 12,
+   "run": "0b0139150ab7401f9f43019e1e4976b3",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "两份虚构材料都指出条件遗漏，因此接手者的做法在这套虚构任务里成立。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于这两份虚构材料"
+     ],
+     "alternatives": [
+      "只有一份材料支持时结论应更弱"
+     ],
+     "falsifier": "若两份材料实为同一份转述，此说法失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:37:18.847105+00:00"
+  },
+  {
+   "seq": 13,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "start",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": "0b0139150ab7401f9f43019e1e4976b3",
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12
+   },
+   "at": "2026-11-25T16:39:54.006295+00:00"
+  },
+  {
+   "seq": 14,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "story_context",
+   "payload": {
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "previous_run": "0b0139150ab7401f9f43019e1e4976b3",
+    "prior_run_count": 3,
+    "intent_snapshot_event": null,
+    "intent_snapshot_state": "absent",
+    "user_events_after_intent": [
+     2
+    ],
+    "user_events_after_intent_omitted": 0,
+    "sources": [
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 2,
+      "at": "2026-11-25T16:35:13.337227+00:00",
+      "kind": "user",
+      "text": "我在整理一套给陌生人接手用的经验账本：希望后来者能看见原始报告、材料正文，也知道自己还缺哪一步，而不是只读到一段总结。",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "user_report_not_independently_verified",
+      "attribution": "reported_in_current_story"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 3,
+      "at": "2026-11-25T16:35:13.344162+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-a\"}, \"result\": {\"text\": \"虚构材料 A：本地试读者在第三次接手时先读原报告，再打开材料正文；她说这样做能发现总结里省略的适用条件。\", \"title\": \"虚构材料 A\", \"url\": \"https://fiction.example/source-a\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 4,
+      "at": "2026-11-25T16:35:13.351422+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-b\"}, \"result\": {\"text\": \"虚构材料 B：另一位从未参与写稿的试读者按同样顺序操作，也指出同一处条件遗漏；这份记录是夹具编写者另写的场景，不是对 A 的转述。\", \"title\": \"虚构材料 B\", \"url\": \"https://fiction.example/source-b\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     }
+    ],
+    "pending_knowledge": {
+     "items": [],
+     "more_pending": false,
+     "preview_only": true,
+     "scope": "Pending knowledge created in these story runs, filtered before output bounds. Truncated previews are review warnings, not full propositions or citable evidence; inspect canonical sources before reuse."
+    },
+    "source_comparison": {
+     "items": [
+      {
+       "conclusion_event": 8,
+       "statement": "虚构材料 B 单独就足以说明接手者能看见总结省略的适用条件。",
+       "comparison_status": "open",
+       "support_status": "single_material",
+       "rank_class": "single_source",
+       "next_check": "补一份不同来源的材料，核对它是否独立形成并实际支持这条结论；换一个网址重刊同一份材料不算。",
+       "recorded_body_events": [
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 5,
+       "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件。",
+       "comparison_status": "checked",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": null,
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [
+        {
+         "notice_event": 9,
+         "target": 5,
+         "relation": "supports_independently",
+         "source_events": [
+          3,
+          4
+         ]
+        }
+       ],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 12,
+       "statement": "两份虚构材料都指出条件遗漏，因此接手者的做法在这套虚构任务里成立。",
+       "comparison_status": "open",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": "先核两份材料是否独立形成、是否各自支持这条说法；不因有两个 URL 就跳过核对。",
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      }
+     ],
+     "omitted": 0,
+     "preview_only": true,
+     "reading": "来源比较摘要只说明所引材料与本版提议的账本状态，不是新证据或可选引文。两处不同 URL 不证明独立形成或支持；open 表示没有适用的明确比较记录，checked 表示已记录支持比较，contested 表示有冲突记录；都不认证事实。按正文事件号找 sources 中的原文；body_events_not_in_packet 没有随包恢复正文，不能说已看到它们。省略不表示已核。"
+    },
+    "latest_intent_snapshot": null,
+    "intent_snapshot_omitted_for_size": false,
+    "source_events_omitted": 0,
+    "internal_replies_not_restored": 0,
+    "internal_critiques_not_restored": 0,
+    "status": "same_story_history_not_new_user_testimony_or_independent_evidence"
+   },
+   "at": "2026-11-25T16:39:54.045845+00:00"
+  },
+  {
+   "seq": 15,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 1 处共同细节支持同一做法。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:39:54.059793+00:00"
+  },
+  {
+   "seq": 16,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 2 处共同细节支持同一做法。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:39:54.075787+00:00"
+  },
+  {
+   "seq": 17,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 3 处共同细节支持同一做法。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:39:54.092842+00:00"
+  },
+  {
+   "seq": 18,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "review_evidence_notice",
+   "payload": {
+    "target": 15,
+    "sources": [],
+    "comparison": {
+     "relation": "supports_independently",
+     "events": [
+      3,
+      4
+     ]
+    },
+    "reason": "虚假材料共同细节的合成比较记录（压力测试）",
+    "synthetic": true,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict"
+   },
+   "at": "2026-11-25T16:39:54.225706+00:00"
+  },
+  {
+   "seq": 19,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "review_evidence_notice",
+   "payload": {
+    "target": 16,
+    "sources": [],
+    "comparison": {
+     "relation": "supports_independently",
+     "events": [
+      3,
+      4
+     ]
+    },
+    "reason": "虚假材料共同细节的合成比较记录（压力测试）",
+    "synthetic": true,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict"
+   },
+   "at": "2026-11-25T16:39:54.351929+00:00"
+  },
+  {
+   "seq": 20,
+   "run": "41448d7ac7454908b1953e9dadedb74f",
+   "kind": "review_evidence_notice",
+   "payload": {
+    "target": 17,
+    "sources": [],
+    "comparison": {
+     "relation": "supports_independently",
+     "events": [
+      3,
+      4
+     ]
+    },
+    "reason": "虚假材料共同细节的合成比较记录（压力测试）",
+    "synthetic": true,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict"
+   },
+   "at": "2026-11-25T16:39:54.476359+00:00"
+  },
+  {
+   "seq": 21,
+   "run": "2a4d189fefa34c97a65848ee6e2a82bc",
+   "kind": "start",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": "41448d7ac7454908b1953e9dadedb74f",
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12
+   },
+   "at": "2026-11-25T16:40:14.864681+00:00"
+  },
+  {
+   "seq": 22,
+   "run": "2a4d189fefa34c97a65848ee6e2a82bc",
+   "kind": "story_context",
+   "payload": {
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "previous_run": "41448d7ac7454908b1953e9dadedb74f",
+    "prior_run_count": 4,
+    "intent_snapshot_event": null,
+    "intent_snapshot_state": "absent",
+    "user_events_after_intent": [
+     2
+    ],
+    "user_events_after_intent_omitted": 0,
+    "sources": [
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 2,
+      "at": "2026-11-25T16:35:13.337227+00:00",
+      "kind": "user",
+      "text": "我在整理一套给陌生人接手用的经验账本：希望后来者能看见原始报告、材料正文，也知道自己还缺哪一步，而不是只读到一段总结。",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "user_report_not_independently_verified",
+      "attribution": "reported_in_current_story"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 3,
+      "at": "2026-11-25T16:35:13.344162+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-a\"}, \"result\": {\"text\": \"虚构材料 A：本地试读者在第三次接手时先读原报告，再打开材料正文；她说这样做能发现总结里省略的适用条件。\", \"title\": \"虚构材料 A\", \"url\": \"https://fiction.example/source-a\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     },
+     {
+      "origin_story": "0f272e5f34244b328df1c80edfdde3df",
+      "story_scope": "same_story",
+      "event": 4,
+      "at": "2026-11-25T16:35:13.351422+00:00",
+      "kind": "tool_result",
+      "text": "{\"action\": {\"kind\": \"read_source\", \"url\": \"https://fiction.example/source-b\"}, \"result\": {\"text\": \"虚构材料 B：另一位从未参与写稿的试读者按同样顺序操作，也指出同一处条件遗漏；这份记录是夹具编写者另写的场景，不是对 A 的转述。\", \"title\": \"虚构材料 B\", \"url\": \"https://fiction.example/source-b\"}, \"status\": \"executed\"}",
+      "run": "0f272e5f34244b328df1c80edfdde3df",
+      "dependency_status": {
+       "state": "current_interpretation",
+       "truth": "not_certified"
+      },
+      "epistemic_status": "executed_tool_result_with_model_limits",
+      "evidence_region": "computed_observation_fields_only; action_prediction_basis_assumptions_and_generated_text_are_context_only"
+     }
+    ],
+    "pending_knowledge": {
+     "items": [],
+     "more_pending": false,
+     "preview_only": true,
+     "scope": "Pending knowledge created in these story runs, filtered before output bounds. Truncated previews are review warnings, not full propositions or citable evidence; inspect canonical sources before reuse."
+    },
+    "source_comparison": {
+     "items": [
+      {
+       "conclusion_event": 8,
+       "statement": "虚构材料 B 单独就足以说明接手者能看见总结省略的适用条件。",
+       "comparison_status": "open",
+       "support_status": "single_material",
+       "rank_class": "single_source",
+       "next_check": "补一份不同来源的材料，核对它是否独立形成并实际支持这条结论；换一个网址重刊同一份材料不算。",
+       "recorded_body_events": [
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 5,
+       "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件。",
+       "comparison_status": "checked",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": null,
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [
+        {
+         "notice_event": 9,
+         "target": 5,
+         "relation": "supports_independently",
+         "source_events": [
+          3,
+          4
+         ]
+        }
+       ],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 12,
+       "statement": "两份虚构材料都指出条件遗漏，因此接手者的做法在这套虚构任务里成立。",
+       "comparison_status": "open",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": "先核两份材料是否独立形成、是否各自支持这条说法；不因有两个 URL 就跳过核对。",
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 15,
+       "statement": "虚构材料 A 与 B 的第 1 处共同细节支持同一做法。",
+       "comparison_status": "checked",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": null,
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [
+        {
+         "notice_event": 18,
+         "target": 15,
+         "relation": "supports_independently",
+         "source_events": [
+          3,
+          4
+         ]
+        }
+       ],
+       "comparisons_omitted": 0
+      },
+      {
+       "conclusion_event": 16,
+       "statement": "虚构材料 A 与 B 的第 2 处共同细节支持同一做法。",
+       "comparison_status": "checked",
+       "support_status": "two_distinct_materials",
+       "rank_class": "independent",
+       "next_check": null,
+       "recorded_body_events": [
+        3,
+        4
+       ],
+       "body_events_not_in_packet": [],
+       "comparisons": [
+        {
+         "notice_event": 19,
+         "target": 16,
+         "relation": "supports_independently",
+         "source_events": [
+          3,
+          4
+         ]
+        }
+       ],
+       "comparisons_omitted": 0
+      }
+     ],
+     "omitted": 1,
+     "preview_only": true,
+     "reading": "来源比较摘要只说明所引材料与本版提议的账本状态，不是新证据或可选引文。两处不同 URL 不证明独立形成或支持；open 表示没有适用的明确比较记录，checked 表示已记录支持比较，contested 表示有冲突记录；都不认证事实。按正文事件号找 sources 中的原文；body_events_not_in_packet 没有随包恢复正文，不能说已看到它们。省略不表示已核。"
+    },
+    "latest_intent_snapshot": null,
+    "intent_snapshot_omitted_for_size": false,
+    "source_events_omitted": 0,
+    "internal_replies_not_restored": 0,
+    "internal_critiques_not_restored": 0,
+    "status": "same_story_history_not_new_user_testimony_or_independent_evidence"
+   },
+   "at": "2026-11-25T16:40:14.915770+00:00"
+  },
+  {
+   "seq": 23,
+   "run": "2a4d189fefa34c97a65848ee6e2a82bc",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 1 处待核共同细节。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:40:14.942626+00:00"
+  },
+  {
+   "seq": 24,
+   "run": "2a4d189fefa34c97a65848ee6e2a82bc",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 2 处待核共同细节。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:40:14.966846+00:00"
+  },
+  {
+   "seq": 25,
+   "run": "2a4d189fefa34c97a65848ee6e2a82bc",
+   "kind": "knowledge_proposal",
+   "payload": {
+    "proposal": {
+     "statement": "虚构材料 A 与 B 的第 3 处待核共同细节。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两份材料各自独立写成"
+     ],
+     "conditions": [
+      "只适用于此虚构任务"
+     ],
+     "alternatives": [
+      "只有一份材料时结论更弱"
+     ],
+     "falsifier": "若两份材料为同一份转述，则失去第二处依据。",
+     "revises": null
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   },
+   "at": "2026-11-25T16:40:14.994767+00:00"
+  }
+ ],
+ "dependencies": [
+  [
+   5,
+   2,
+   "premise"
+  ],
+  [
+   5,
+   3,
+   "premise"
+  ],
+  [
+   5,
+   4,
+   "premise"
+  ],
+  [
+   8,
+   4,
+   "premise"
+  ],
+  [
+   12,
+   3,
+   "premise"
+  ],
+  [
+   12,
+   4,
+   "premise"
+  ],
+  [
+   15,
+   3,
+   "premise"
+  ],
+  [
+   15,
+   4,
+   "premise"
+  ],
+  [
+   16,
+   3,
+   "premise"
+  ],
+  [
+   16,
+   4,
+   "premise"
+  ],
+  [
+   17,
+   3,
+   "premise"
+  ],
+  [
+   17,
+   4,
+   "premise"
+  ],
+  [
+   23,
+   3,
+   "premise"
+  ],
+  [
+   23,
+   4,
+   "premise"
+  ],
+  [
+   24,
+   3,
+   "premise"
+  ],
+  [
+   24,
+   4,
+   "premise"
+  ],
+  [
+   25,
+   3,
+   "premise"
+  ],
+  [
+   25,
+   4,
+   "premise"
+  ]
+ ],
+ "revisions": [],
+ "review_queue": []
+}

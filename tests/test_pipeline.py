@@ -163,6 +163,34 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             distill(self.store, "  ")
 
+    def test_distill_marks_the_unaccepted_draft_and_leaves_the_conclusion_alone(self):
+        """r111: this list is read to judge what a session produced.
+
+        r110 stored a session's landing point as model_generated/unverified. On
+        this screen it read exactly like a conclusion -- `[新] d-… v1 …` -- so a
+        person sampling the list could take the version nobody agreed to as
+        settled. The draft's line now says so in place; a conclusion keeps its
+        bytes.
+        """
+        self.add("开始前把任务缩成第一步，可能降低启动阻力。", candidate_id="d-conclusion",
+                 sources=[{"type": "unknown", "claim": "本次讨论会话形成的结论",
+                           "independence_group": "sess-a", "verification": "unknown"}])
+        self.add("对普通自行车，自动分配前后制动力可作为待检验的设计目标。", candidate_id="d-draft",
+                 sources=[{"type": "model_generated", "verification": "unverified",
+                           "claim": "会话结束时仍是待处理草稿的候选；用户没有明确认可这版措辞。",
+                           "independence_group": "sess-a"}])
+        report = distill(self.store, "sess-a")
+        by_id = {card["id"]: card for card in report["cards"]}
+        self.assertTrue(by_id["d-draft"]["unaccepted_draft"])
+        self.assertFalse(by_id["d-conclusion"]["unaccepted_draft"])
+        draft_line = next(line for line in report["lines"] if "d-draft" in line)
+        conclusion_line = next(line for line in report["lines"] if "d-conclusion" in line)
+        self.assertIn("[未认可草稿]", draft_line)
+        self.assertNotIn("未认可", conclusion_line)
+        self.assertTrue(conclusion_line.startswith("[新] d-conclusion v1 kind 未判定："))
+        # The draft is still listed: hiding it would put it back where nobody sees it.
+        self.assertEqual(2, len(report["cards"]))
+
 
 if __name__ == "__main__":
     unittest.main()

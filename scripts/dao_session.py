@@ -18,6 +18,19 @@ KEYS = {"情境":"situation", "张力":"tension", "代价":"price", "失效":"of
 class Refusal(ValueError):
     pass
 
+def answered(row: dict) -> bool:
+    """Whether the trace row itself records that the person's words answered this question.
+
+    Current `discuss` writes `collected: reading == "answer"` on every elicitation row and
+    `promoted: False` unconditionally, so `collected`/`reading` are the only honest
+    evidence; `promoted` is consulted only on traces written before those fields existed.
+    """
+    if "collected" in row:
+        return row.get("collected") is True
+    if "reading" in row:
+        return row.get("reading") == "answer"
+    return row.get("promoted") is True
+
 def load_trace(path: Path, person: str, sample: str):
     if sample not in {"acquaintances", "strangers"}: raise Refusal("sample: 只能是 acquaintances 或 strangers")
     if not person.strip(): raise Refusal("person: 不得为空")
@@ -52,16 +65,30 @@ def load_trace(path: Path, person: str, sample: str):
         if r.get("part") in PARTS: bypart.setdefault(r["part"], []).append(r)
     for p in PARTS:
         events = bypart.get(p, [])
-        promoted = [r for r in events if r.get("promoted") is True]
-        if not promoted: raise Refusal(f"{p}: 未晋升或没有有效回答")
-        answer = promoted[-1].get("answer")
+        # A part is exportable only when the trace itself records that the person's words
+        # answered it. Use the last such row; if any later row for this part is not
+        # collected, refuse rather than resurrect an earlier answer.
+        last_answered = next(
+            ((index, row) for index, row in reversed(list(enumerate(events))) if answered(row)),
+            None,
+        )
+        if last_answered is None:
+            raise Refusal(f"{p}: 未晋升或没有有效回答——轨迹里这件没有一条记成答过的回答（collected 不是 true）")
+        last_index, last_row = last_answered
+        if last_index != len(events) - 1:
+            later = events[last_index + 1]
+            raise Refusal(
+                f"{p}: 这件最后一条记录没有被记成答过（reading={later.get('reading')!r}），"
+                "不把更早的那句当答案"
+            )
+        answer = last_row.get("answer")
         if not isinstance(answer, str) or not answer.strip():
             raise Refusal(f"{p}: 晋升回答为空")
         if "\n" in answer or "\r" in answer:
             raise Refusal(f"{p}: 回答含换行，探针笔记无法逐字承载")
         if p == "张力" and any(char in answer for char in ('|', '"')):
             raise Refusal('张力: 回答含「|」或引号，原话字段无法逐字承载')
-        bypart[p] = promoted[-1]
+        bypart[p] = last_row
     tension = bypart["张力"]["answer"]
     raw_sides = re.split(r"\s*(?:↔|⇄|<->| vs\. | versus )\s*", tension)
     if len(raw_sides) == 1:

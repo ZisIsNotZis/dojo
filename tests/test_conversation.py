@@ -1,5 +1,6 @@
 import io
 import json
+import sqlite3
 import tempfile
 import threading
 import time
@@ -80,7 +81,7 @@ class LocalMockEndpoint:
                 self.end_headers()
                 try:
                     self.wfile.write(body)
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     pass
 
             def log_message(self, _format, *_args):
@@ -107,13 +108,11 @@ class LocalMockEndpoint:
 class ConversationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.store = Store(self.root / "dojo.sqlite3")
+        self.addCleanup(self.store.close)
         load_simulated_seeds(self.store)
-
-    def tearDown(self):
-        self.store.close()
-        self.temp.cleanup()
 
     def new_store(self, name):
         store = Store(self.root / name)
@@ -577,6 +576,101 @@ class ConversationTests(unittest.TestCase):
             freeze_materials(self.store, outdir)
         self.assertTrue((outdir / "target-no-dojo-b.md").is_file())
 
+    def test_frozen_c_packet_carries_when_each_source_entered_the_library(self):
+        """The packet a person hands to a model must say when each source arrived.
+
+        #1878: the same library printed `entered_at` on `export --mode c` and
+        nothing on the frozen C packet, so the artifact a real reader gets could
+        not answer "when did the evidence behind this arrive". Two cells: the
+        field must be there, and moving the ledger's entry time must move the
+        packet's bytes. The second cell is the one that fails on the old code --
+        it is what makes this a test of the fact and not of a word.
+        """
+        first = self.root / "packets-first"
+        freeze_materials(self.store, first)
+        before = (first / "target-with-retrieved-dojo-c.md").read_text(encoding="utf-8")
+        source_lines = [line for line in before.splitlines() if line.startswith("来源：")]
+        self.assertTrue(source_lines, "the packet must name the sources it retrieved")
+        for line in source_lines:
+            self.assertIn("entered_at: ", line, f"source line carries no entry time: {line}")
+
+        moved = "2019-01-01T00:00:00+00:00"
+        self.store.close()
+        connection = sqlite3.connect(self.root / "dojo.sqlite3")
+        with connection:
+            connection.execute(
+                "UPDATE events SET created_at = ? WHERE event = 'load_simulated_seed'", (moved,)
+            )
+        connection.close()
+
+        second = self.root / "packets-second"
+        reopened = Store(self.root / "dojo.sqlite3")
+        self.addCleanup(reopened.close)
+        freeze_materials(reopened, second)
+        after = (second / "target-with-retrieved-dojo-c.md").read_text(encoding="utf-8")
+        self.assertIn(f"entered_at: {moved}", after)
+        self.assertNotEqual(
+            before, after,
+            "moving when a source entered left the packet byte-identical: the packet is not "
+            "reading the entry time it claims to print",
+        )
+
+    def test_a_library_that_cannot_date_a_source_says_so_instead_of_printing_blank(self):
+        """#1929: two shapes of "the library does not know", and neither may be silent.
+
+        Measured on a copy of a real evidence library (`2026-11-12-demo`), not a fixture:
+        blanking an acquisition row's `created_at` made the packet print `entered_at: `
+        with nothing after it on three source lines -- a field that looks pinned and
+        dates nothing -- and deleting the row made one source line quietly shorter. In
+        both the reader of the packet is told the same thing (nothing), so he cannot
+        tell "this library cannot date this source" from "this packet never printed
+        dates".
+
+        Cell B is the one that fails on the old bytes: an empty `created_at` must count
+        as undetermined, not as an entry time that happens to be blank.
+        """
+        # B. the row exists but holds no time at all.
+        with self.store.transaction():
+            self.store.connection.execute(
+                "UPDATE events SET created_at='' WHERE event='load_simulated_seed' AND candidate_id='seed-m01'"
+            )
+        packets = self.root / "packets-blank"
+        result = freeze_materials(self.store, packets)
+        text = (packets / "target-with-retrieved-dojo-c.md").read_text(encoding="utf-8")
+        self.assertNotIn("entered_at: |", text, "a blank entry time was printed as if it were one")
+        blank_lines = [line for line in text.splitlines() if line.rstrip().endswith("entered_at:")]
+        self.assertEqual([], blank_lines, f"a source line ends in a dangling `entered_at:`: {blank_lines}")
+        self.assertIn("src-m01", result["undated_source_ids"],
+                      "the receipt claims every time came from the library, including the one it could not date")
+        self.assertIn("说不出来", text, "the packet drops the field without telling the reader why")
+
+        # A. the ledger has no record of that acquisition at all.
+        second = self.new_store("dojo-no-entry.sqlite3")
+        with second.transaction():
+            second.connection.execute("DELETE FROM events WHERE event='load_simulated_seed' AND candidate_id='seed-m02'")
+        packets2 = self.root / "packets-no-entry"
+        freeze_materials(second, packets2)
+        text2 = (packets2 / "target-with-retrieved-dojo-c.md").read_text(encoding="utf-8")
+        stated = [line for line in text2.splitlines() if line.startswith("来源入库时刻")]
+        self.assertTrue(stated, "a source with no ledger row is dropped silently")
+        self.assertIn("src-m02", stated[0], stated[0])
+
+    def test_a_frozen_packet_has_the_same_bytes_on_every_platform(self):
+        """#1918: a packet's bytes may not depend on which OS ran the freeze.
+
+        The shipped packets (`docs/packets/frozen-conversation-v1/` and `-v2/`)
+        are LF-only, and a packet gets diffed against an earlier one to see what
+        the library gained. Writing through text mode without `newline`
+        translated `\n` to CRLF on Windows, so re-freezing the same library
+        produced four files whose every line changed while not one word did.
+        """
+        outdir = self.root / "packets-bytes"
+        freeze_materials(self.store, outdir)
+        for name in ("source-contribution.md", "target-no-dojo-b.md",
+                     "target-with-retrieved-dojo-c.md", "challenge.md"):
+            raw = (outdir / name).read_bytes()
+            self.assertNotIn(b"\r", raw, f"{name} was written with platform line endings")
+            self.assertTrue(raw.endswith(b"\n"), f"{name} does not end with a newline")
 
 if __name__ == "__main__":
     unittest.main()

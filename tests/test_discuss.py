@@ -1,24 +1,28 @@
-import fcntl
 import io
 import inspect
 import json
 import os
-import pty
 import select
 import stat
 import struct
 import sys
 import tempfile
-import termios
 import time
-import tty
 import unittest
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+if os.name == "posix":
+    import fcntl
+    import pty
+    import termios
+    import tty
+
 from dojo.discuss import (
-    SYSTEM_PROMPT, _candidate_equivalent, _interactive_reader, _load_readline, _save_conclusion,
+    NEW_SESSION_LIMIT_NOTE, SYSTEM_PROMPT, _candidate_equivalent, _interactive_reader, _load_readline,
+    _save_conclusion,
     _trace_error, run_discuss, validate_conclusion,
 )
 from dojo.live import (
@@ -81,9 +85,7 @@ class FakeClient:
 
 class ConclusionWriteTests(unittest.TestCase):
     def test_a_second_session_reaching_the_same_conclusion_attaches_instead_of_versioning(self):
-        with tempfile.TemporaryDirectory() as temp:
-            store = Store(Path(temp) / "dojo.sqlite3")
-            self.addCleanup(store.close)
+        with tempfile.TemporaryDirectory() as temp, closing(Store(Path(temp) / "dojo.sqlite3")) as store:
             first, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
             self.assertIsNone(error)
             self.assertEqual(1, len(store.list_candidates()))
@@ -100,6 +102,198 @@ class ConclusionWriteTests(unittest.TestCase):
             self.assertEqual(["sess-a", "sess-b"], afterwards["sessions"])
             self.assertEqual("attach_source", store.history(first)["events"][-1]["event"])
 
+
+class EchoGateTests(unittest.TestCase):
+    """#1746: a card handed to a session and restated by it is not a second arrival.
+
+    The gate reads one thing -- a `reads` row naming (this card, this session) -- so each
+    test writes that row through `Store.record_read`, the same call `search`, `export`,
+    chat and (from this change) `discuss` use. `Store.add` raises `DuplicateContent` only
+    on a verbatim repeat, so the gate is only reachable that way; the last test asserts
+    that limit rather than describing it.
+    """
+
+    QUERY = "启动阻力 缩小任务"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.store = Store(Path(self.temp.name) / "dojo.sqlite3")
+        self.addCleanup(self.store.close)
+
+    def events(self, card):
+        return [row["event"] for row in self.store.history(card)["events"]]
+
+    def broadcast_ids(self):
+        return [row["id"] for row in self.store.broadcast(self.QUERY)["results"]]
+
+    def test_an_echoed_card_does_not_gain_a_second_independence_group(self):
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        self.assertEqual(["sess-a"], self.store.show(card)["candidate"]["sessions"])
+        self.assertEqual([], self.broadcast_ids(), "one session's word is not broadcast")
+
+        # The second session is handed the card, exactly as a wired discuss hands it.
+        self.store.record_read(card, "sess-b", surface="discuss")
+
+        notices = []
+        echoed, error = _save_conclusion(
+            self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(card, echoed, "an echo must not write a second card")
+        self.assertEqual([card], notices, "the refusal names the card it refused")
+        after = self.store.show(card)["candidate"]
+        self.assertEqual(["sess-a"], after["sessions"], "sess-b is not a second provenance group")
+        self.assertEqual(1, len(after["sources"]), "no second source was attached")
+        events = self.events(card)
+        self.assertNotIn("attach_source", events, "attach_source is the line the gate refuses")
+        self.assertIn("wording_accepted", events, "the user's agreement is still recorded")
+        self.assertEqual([], self.broadcast_ids(), "a one-session card stays out of broadcast")
+
+    def test_a_session_that_was_never_shown_the_card_still_attaches(self):
+        """The other direction: the gate must not become "never count a second session"."""
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        # Somebody else's read of the same card must not stand in for this session's.
+        self.store.record_read(card, "sess-c", surface="search")
+
+        notices = []
+        second, error = _save_conclusion(
+            self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(card, second)
+        self.assertEqual([], notices, "a session with no read row of its own was never refused")
+        after = self.store.show(card)["candidate"]
+        self.assertEqual(["sess-a", "sess-b"], after["sessions"])
+        self.assertEqual(2, len(after["sources"]))
+        self.assertEqual("attach_source", self.events(card)[-1])
+        self.assertEqual([card], self.broadcast_ids(), "two sessions now back it, so it may broadcast")
+
+    def test_a_different_conclusion_from_a_session_that_saw_the_card_is_still_written(self):
+        """Reading one card is not a licence to refuse everything else that session writes."""
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        self.store.record_read(card, "sess-b", surface="discuss")
+
+        other = dict(CONCLUSION)
+        other["statement"] = "先写下第一步要交付什么，可能比缩小任务更能降低启动阻力。"
+        notices = []
+        new_id, error = _save_conclusion(
+            self.store, other, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertNotEqual(card, new_id, "a new claim is a new card, not an echo")
+        self.assertEqual([], notices)
+        self.assertEqual(2, len(self.store.list_candidates()))
+
+    def test_a_library_whose_reads_were_never_logged_keeps_attaching(self):
+        """`holds_table: false` is not evidence of exposure; the gate stays open on absence."""
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        self.assertFalse(self.store.reads(card)["holds_table"], "this library has no read log yet")
+
+        notices = []
+        second, error = _save_conclusion(
+            self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(card, second)
+        self.assertEqual([], notices)
+        self.assertEqual(["sess-a", "sess-b"], self.store.show(card)["candidate"]["sessions"])
+
+    def test_an_equivalent_rewrite_walks_past_the_gate_and_gains_no_independence(self):
+        """The limit, asserted: this gate recognises verbatim echoes only.
+
+        A rewrite raises no `DuplicateContent`, so no gate at this point can see it -- and
+        it gains no independence either: it grows a second single-session card. Both halves
+        are asserted so a later reader cannot take this class to mean "echoes are blocked".
+        """
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        self.store.record_read(card, "sess-b", surface="discuss")
+
+        rewritten = dict(CONCLUSION)
+        rewritten["statement"] = "开始前把任务缩成一个能马上做的第一步，也许能减少启动时的阻力。"
+        rewritten["scope"] = ["明知目标却因为任务太大而拖延时"]
+        notices = []
+        new_id, error = _save_conclusion(
+            self.store, rewritten, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertNotEqual(card, new_id, "a rewrite is stored as its own card")
+        self.assertEqual([], notices, "no gate fired, because no duplicate was raised")
+        self.assertEqual(["sess-a"], self.store.show(card)["candidate"]["sessions"],
+                         "the rewrite added no source to the original card")
+        self.assertEqual(["sess-b"], self.store.show(new_id)["candidate"]["sessions"])
+
+    def test_reading_a_different_card_does_not_close_the_gate_for_this_one(self):
+        """The gate names (this card, this session), not "this session read something".
+
+        This is the shape a too-wide gate takes: `sess-b` has a read row, but for another
+        card, and then reaches this one on its own. A gate that asks "has this session read
+        anything" passes the echo test above and fails this one.
+        """
+        neighbour = dict(CONCLUSION)
+        neighbour["statement"] = "把每件事写成一句话，可能让判断变容易。"
+        other_card, error = _save_conclusion(self.store, neighbour, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        self.assertIsNone(error)
+        self.assertNotEqual(other_card, card)
+
+        self.store.record_read(other_card, "sess-b", surface="search")
+
+        notices = []
+        second, error = _save_conclusion(
+            self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
+            echo_notices=notices,
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(card, second)
+        self.assertEqual([], notices, "reading a different card is not being shown this one")
+        self.assertEqual(["sess-a", "sess-b"], self.store.show(card)["candidate"]["sessions"])
+
+    def test_discuss_records_that_it_handed_the_card_to_the_session(self):
+        """Discuss's exposure is written where discuss actually hands a card over.
+
+        Without this row the gate has no input on the one surface that echoes most, so the
+        test drives a real resumed session and reads the log afterwards rather than calling
+        `record_read` itself.
+        """
+        self.assertEqual(0, run_discuss(
+            self.store,
+            client=FakeClient([
+                result("先形成一条结论。", CONCLUSION),
+                result("这版与你的意思一致。", CONCLUSION, user_stance="accept"),
+            ]),
+            read_line=read_lines(["我有个想法", "对，就这样"]), output=io.StringIO(),
+        ))
+        first = self.store.list_candidates()[0]["id"]
+        path = next((Path(self.temp.name) / "sessions").glob("*.jsonl"))
+        self.assertEqual([], self.store.reads(first)["rows"], "the writing session logged no read")
+
+        self.assertEqual(0, run_discuss(
+            self.store, client=FakeClient([result("接着谈。")]), resume=path,
+            read_line=read_lines(["继续"]), output=io.StringIO(),
+        ))
+
+        log = self.store.reads(first)
+        self.assertTrue(log["holds_table"], "the resumed session recorded a read")
+        self.assertEqual(["discuss"], [row["surface"] for row in log["rows"]])
+        self.assertEqual([path.stem], [row["reader_session"] for row in log["rows"]])
 
 class DiscussTests(unittest.TestCase):
     def setUp(self):
@@ -118,6 +312,30 @@ class DiscussTests(unittest.TestCase):
     def rounds_only(self, records):
         """Elicitation turns are trace lines too; a round is a model round."""
         return [row for row in records if row.get("event") != "elicitation"]
+
+    def assert_only_unconfirmed_draft(self, statement):
+        """A session that ended on a version nobody accepted keeps that version as a draft.
+
+        r110: this is what used to be lost. The card must be distinguishable from an
+        accepted conclusion by machine (source type + verification), must not be
+        `discussable` (so retrieval cannot hand it to another session as material),
+        and must not have been counted as a written conclusion.
+        """
+        listed = self.store.list_candidates()
+        self.assertEqual(1, len(listed), "exactly one unconfirmed draft, and no conclusion")
+        state = self.store.show(listed[0]["id"])["candidate"]
+        self.assertEqual(statement, state["statement"])
+        # `status` is "draft" for an accepted card too (a fresh card is a draft until it
+        # is confirmed discussable), so asserting it here would prove nothing. The
+        # discriminator is the source: an accepted conclusion is recorded as
+        # type=unknown, an unaccepted version as model_generated/unverified.
+        self.assertEqual(["model_generated"], [source["type"] for source in state["sources"]])
+        self.assertEqual(["unverified"], [source["verification"] for source in state["sources"]])
+        self.assertIn("没有明确认可", state["sources"][0]["claim"])
+        return state
+
+    def assert_nothing_written(self):
+        self.assertEqual([], self.store.list_candidates())
 
     def assert_clean_discuss_output(self, output: str):
         cleaned = output.replace("会话原文仅保存在本地轨迹文件", "")
@@ -170,8 +388,10 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual(state["sessions"][0], state["sources"][0]["independence_group"])
         self.assertNotIn("我总在开始动手前就拖延", json.dumps(state, ensure_ascii=False))
         path, records = self.trace_records()
-        self.assertEqual(0o700, stat.S_IMODE(path.parent.stat().st_mode))
-        self.assertEqual(0o600, stat.S_IMODE(path.stat().st_mode))
+        # POSIX modes are not Windows ACLs.
+        if os.name == "posix":
+            self.assertEqual(0o700, stat.S_IMODE(path.parent.stat().st_mode))
+            self.assertEqual(0o600, stat.S_IMODE(path.stat().st_mode))
         rounds = self.rounds_only(records)
         self.assertEqual(3, len(rounds))
         first, second, end = rounds
@@ -188,16 +408,19 @@ class DiscussTests(unittest.TestCase):
         self.assertIsNone(second["pending_after"])
         self.assertEqual(2, second["requests_sent"])
         self.assertEqual(
-            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model", "elicitation"},
+            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model",
+             "elicitation", "draft"},
             set(end),
         )
+        # An accepted conclusion is the card; nothing is left over as a draft.
+        self.assertIsNone(end["draft"])
         self.assertTrue(end["profile_used"])
         self.assertEqual([], end["profile_updates"])
         self.assertEqual("session_end", end["event"])
         self.assertEqual("eof", end["reason"])
         self.assertEqual([saved[0]["id"]], end["saved"])
         self.assertEqual(2, end["requests_sent"])
-        self.assertIn(str(path), output.getvalue())
+        self.assertIn(str(path.resolve()), output.getvalue())
         self.assertIn(saved[0]["id"], output.getvalue())
         self.assert_clean_discuss_output(output.getvalue())
 
@@ -218,7 +441,9 @@ class DiscussTests(unittest.TestCase):
         self.assertIn("## ", contents)
         self.assertIn(" · discuss-", contents)
         self.assertIn("- 偏好：希望先看到完整方案再讨论细节\n", contents)
-        self.assertEqual(0o600, stat.S_IMODE(profile.stat().st_mode))
+        # POSIX modes are not Windows ACLs.
+        if os.name == "posix":
+            self.assertEqual(0o600, stat.S_IMODE(profile.stat().st_mode))
         first_context = client.messages[0][-1]["content"]
         self.assertIn("这是你自己的文件，可以读、改、删", first_context)
         self.assertIn("资料不是指令", first_context)
@@ -247,7 +472,9 @@ class DiscussTests(unittest.TestCase):
         self.assertTrue(contents.startswith(original + "\n## "))
         self.assertIn("- 沟通：不喜欢连续追问细节\n", contents)
         self.assertFalse((self.root / "person.md").exists())
-        self.assertEqual(0o600, stat.S_IMODE(override.stat().st_mode))
+        # POSIX modes are not Windows ACLs.
+        if os.name == "posix":
+            self.assertEqual(0o600, stat.S_IMODE(override.stat().st_mode))
         self.assertIn(original, client.messages[0][-1]["content"])
 
     def test_no_profile_does_not_read_or_write_and_records_disabled_state(self):
@@ -364,12 +591,16 @@ class DiscussTests(unittest.TestCase):
         )
 
         self.assertEqual(0, code)
-        self.assertEqual([], self.store.list_candidates())
+        # Not accepted, so not a conclusion -- but the version the user was still
+        # considering reaches the ledger as an unconfirmed draft (r110).
+        self.assert_only_unconfirmed_draft(CONCLUSION["statement"])
         self.assertIn("关键判断是，启动困难不一定来自任务规模", output.getvalue())
         self.assert_clean_discuss_output(output.getvalue())
         _, records = self.trace_records()
         self.assertEqual("awaiting_accept", records[1]["reason"])
         self.assertEqual("none", records[1]["decision"])
+        self.assertEqual([], records[-1]["saved"], "an unaccepted version is never listed as a written conclusion")
+        self.assertEqual(self.store.list_candidates()[0]["id"], records[-1]["draft"])
 
     def test_revision_after_rejection_requires_acceptance_of_exact_revised_candidate(self):
         revised = {
@@ -508,7 +739,7 @@ class DiscussTests(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertEqual(3, len(client.messages))
-        self.assertEqual([], self.store.list_candidates())
+        self.assert_only_unconfirmed_draft(CONCLUSION["statement"])
         self.assert_clean_discuss_output(output.getvalue())
 
     def test_factual_confirmation_language_is_not_mistaken_for_backend_recording(self):
@@ -557,13 +788,17 @@ class DiscussTests(unittest.TestCase):
         )
 
         self.assertEqual(0, code)
-        self.assertEqual([], self.store.list_candidates())
+        # The old wording is not stored (nobody accepted it) and the new one is not a
+        # conclusion either; the new one is what the session ended on, so it is kept
+        # as the unconfirmed draft.
+        state = self.assert_only_unconfirmed_draft(changed["statement"])
         _, records = self.trace_records()
         self.assertEqual("candidate_changed", records[1]["reason"])
         self.assertEqual("none", records[1]["decision"])
         self.assertEqual([], records[-1]["saved"])
+        self.assertNotIn(CONCLUSION["statement"], json.dumps(state, ensure_ascii=False))
 
-    def test_eof_before_acceptance_does_not_write_and_records_eof(self):
+    def test_eof_before_acceptance_keeps_the_pending_version_as_a_draft(self):
         client = FakeClient([result("我先复述这条结论。", CONCLUSION)])
         output = io.StringIO()
         code = run_discuss(
@@ -571,14 +806,15 @@ class DiscussTests(unittest.TestCase):
         )
 
         self.assertEqual(0, code)
-        self.assertEqual([], self.store.list_candidates())
+        # This is the 8ff1042f shape: the session ended on a version nobody accepted.
+        self.assert_only_unconfirmed_draft(CONCLUSION["statement"])
         _, records = self.trace_records()
         self.assertEqual("eof", records[-1]["reason"])
         self.assertEqual([], records[-1]["saved"])
         self.assertEqual("proposed_new_pending", records[0]["reason"])
         self.assertEqual(CONCLUSION["statement"], records[0]["pending_after"])
 
-    def test_request_limit_does_not_write_pending_candidate(self):
+    def test_request_limit_keeps_pending_as_draft_not_conclusion(self):
         client = FakeClient([result("先形成一条待复核结论。", CONCLUSION)])
         output = io.StringIO()
         with patch("dojo.discuss.MAX_MODEL_REQUESTS", 1):
@@ -589,10 +825,12 @@ class DiscussTests(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertEqual(1, len(client.messages))
-        self.assertEqual([], self.store.list_candidates())
+        # The user never got to answer, so this is a draft, not a conclusion.
+        self.assert_only_unconfirmed_draft(CONCLUSION["statement"])
         _, records = self.trace_records()
         self.assertEqual("limit", records[-1]["reason"])
         self.assertEqual(1, records[-1]["requests_sent"])
+        self.assertEqual([], records[-1]["saved"])
 
     def test_accept_without_previous_pending_and_reject_do_not_write(self):
         client = FakeClient([
@@ -607,12 +845,123 @@ class DiscussTests(unittest.TestCase):
         )
 
         self.assertEqual(0, code)
-        self.assertEqual([], self.store.list_candidates())
+        # The last round is an explicit rejection of that exact wording, so the draft
+        # path must refuse it: material the user turned down is not "still being
+        # considered". This is the arm that keeps the new predicate from degenerating
+        # into "save whatever is on the table".
+        self.assert_nothing_written()
         _, records = self.trace_records()
         self.assertEqual("proposed_new_pending", records[0]["reason"])
         self.assertEqual(CONCLUSION["statement"], records[0]["pending_after"])
         self.assertEqual("awaiting_accept", records[1]["reason"])
         self.assertEqual("stance_not_accept", records[2]["reason"])
+        self.assertIsNone(records[-1]["draft"])
+
+    def test_accepted_and_unaccepted_versions_of_the_same_claim_are_distinguishable(self):
+        """Same statement text, only the acceptance differs.
+
+        If the two shapes were stored identically, a reader could not tell a conclusion
+        from a stray draft, and this change would be silently inventing agreement.
+        """
+        shapes = {}
+        for accept in (True, False):
+            with tempfile.TemporaryDirectory() as temp:
+                with closing(Store(Path(temp) / "dojo.sqlite3")) as store:
+                    client = FakeClient([
+                        result("先形成一条待复核结论。", CONCLUSION),
+                        result("这版与你的意思一致。", CONCLUSION,
+                               user_stance="accept" if accept else "neutral"),
+                    ])
+                    run_discuss(store, client=client,
+                                read_line=read_lines(["提出一个想法", "嗯"]), output=io.StringIO())
+                    state = store.show(store.list_candidates()[0]["id"])["candidate"]
+                    shapes[accept] = (state["statement"], state["sources"][0]["type"],
+                                      state["sources"][0]["verification"])
+
+        self.assertEqual(shapes[True][0], shapes[False][0], "same claim text in both runs")
+        self.assertEqual(("unknown", "unknown"), shapes[True][1:])
+        self.assertEqual(("model_generated", "unverified"), shapes[False][1:])
+
+    def test_rejected_wording_is_refused_even_when_it_is_the_last_pending_version(self):
+        """The refusal arm: a pair that differs only in the stance of the last round.
+
+        Both runs have the same two turns and the same candidate on the table at EOF.
+        In one the user answers "no" to that exact wording; in the other the user adds
+        nothing about it. A predicate that saves both has deleted its own criterion,
+        so the pair is asserted together instead of the refusal alone.
+        """
+        for stance, expected_written in (("reject", 0), ("neutral", 1)):
+            with self.subTest(stance=stance):
+                with tempfile.TemporaryDirectory() as temp:
+                    with closing(Store(Path(temp) / "dojo.sqlite3")) as store:
+                        client = FakeClient([
+                            result("先形成一条待复核结论。", CONCLUSION),
+                            result("我把这版再读一遍。", CONCLUSION, user_stance=stance),
+                        ])
+                        code = run_discuss(
+                            store, client=client,
+                            read_line=read_lines(["提出一个想法", "这版…"]), output=io.StringIO(),
+                        )
+                        self.assertEqual(0, code)
+                        self.assertEqual(expected_written, len(store.list_candidates()))
+                        path = next((Path(temp) / "sessions").glob("*.jsonl"))
+                        records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+                        self.assertEqual("eof", records[-1]["reason"])
+                        self.assertEqual(expected_written, 1 if records[-1]["draft"] else 0)
+
+    def test_resuming_and_accepting_a_draft_rewrites_the_source_and_does_not_claim_a_falsehood(self):
+        """The draft says "the user did not accept this wording". If the user then accepts it.
+
+        Before this fix the resumed session hit `DuplicateContent` -> `attach_source`, which
+        correctly adds nothing for a session that already contributed, so the card still
+        asserted non-acceptance while the trace listed it under `saved`. A green here must
+        mean the stored source changed, not just that the run exited 0.
+        """
+        client = FakeClient([result("先复述一版。", CONCLUSION)])
+        code = run_discuss(self.store, client=client, read_line=read_lines(["我有个想法"]),
+                           output=io.StringIO())
+        self.assertEqual(0, code)
+        state = self.assert_only_unconfirmed_draft(CONCLUSION["statement"])
+        card_id = state["id"]
+        path, _ = self.trace_records()
+        self.assertIn("draft", json.loads(path.read_text(encoding="utf-8").splitlines()[-1]))
+        self.trace_records()
+
+        resume_client = FakeClient([result("这版与你的意思一致。", CONCLUSION, user_stance="accept")])
+        code = run_discuss(
+            self.store, client=resume_client, read_line=read_lines(["对，就这样"]),
+            output=io.StringIO(), resume=path,
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(1, len(self.store.list_candidates()), "accepting must not add a second card")
+        after = self.store.show(card_id)["candidate"]
+        self.assertEqual(["unknown"], [source["type"] for source in after["sources"]])
+        self.assertEqual(["unknown"], [source["verification"] for source in after["sources"]])
+        self.assertNotIn("没有明确认可", after["sources"][0]["claim"])
+        self.assertEqual(2, after["version"])
+        self.assertEqual(
+            ["add", "draft_accepted"],
+            [row["event"] for row in self.store.history(card_id)["events"]],
+        )
+
+    def test_cancel_does_not_leave_a_draft(self):
+        """A cancelled session is not a landing point; only a natural end is."""
+        client = FakeClient([result("我先复述这条结论。", CONCLUSION)])
+        answers = iter(["我总难以开始。"])
+
+        def read_line(_prompt):
+            try:
+                return next(answers)
+            except StopIteration:
+                raise KeyboardInterrupt
+
+        code = run_discuss(self.store, client=client, read_line=read_line, output=io.StringIO())
+
+        self.assertEqual(0, code)
+        self.assert_nothing_written()
+        _, records = self.trace_records()
+        self.assertEqual("cancel", records[-1]["reason"])
 
     def test_keyboard_interrupt_does_not_write_and_records_cancel(self):
         client = FakeClient([result("先形成一条待复核结论。", CONCLUSION)])
@@ -786,7 +1135,98 @@ class DiscussTests(unittest.TestCase):
         paths = list(custom.glob("*.jsonl"))
         self.assertEqual(1, len(paths))
         self.assertIn(str(paths[0]), output.getvalue())
-        self.assertEqual(0o700, stat.S_IMODE(custom.stat().st_mode))
+        # POSIX modes are not Windows ACLs.
+        if os.name == "posix":
+            self.assertEqual(0o700, stat.S_IMODE(custom.stat().st_mode))
+
+    def test_new_session_says_once_that_the_last_card_is_not_carried_in(self):
+        """#1721 measured that a new session is handed no card from the library at all.
+
+        The product now says so once, in the opening of a new session. Two things this
+        green has to mean: the sentence is printed exactly once (not scattered into two
+        slightly different phrasings), and it is not printed on `--resume`, where the
+        session history really is restored and the claim would be false.
+        """
+        client = FakeClient([result("先了解你现在的处境。")])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, read_line=read_lines(["一个想法"]), output=output,
+        )
+        self.assertEqual(0, code)
+        opening = output.getvalue()
+        self.assertEqual(1, opening.count(NEW_SESSION_LIMIT_NOTE))
+        # One place in the code, not one place in the output: the prompt the model reads
+        # must not carry a second copy the user is never shown.
+        self.assertNotIn(NEW_SESSION_LIMIT_NOTE, SYSTEM_PROMPT)
+        source = inspect.getsource(sys.modules["dojo.discuss"])
+        self.assertEqual(1, source.count(NEW_SESSION_LIMIT_NOTE))
+
+        path, _ = self.trace_records()
+        resumed = io.StringIO()
+        code = run_discuss(
+            self.store, client=FakeClient([result("接着刚才那条。")]), read_line=read_lines(["继续"]),
+            output=resumed, resume=path,
+        )
+        self.assertEqual(0, code)
+        self.assertNotIn(NEW_SESSION_LIMIT_NOTE, resumed.getvalue())
+
+    def test_session_end_states_provenance_counts_and_stays_silent_for_one_group(self):
+        """#1774: the closing line answers "how many sources", never "how many people".
+
+        Two directions, each able to fail alone. A card with two self-declared group
+        names gets one line saying the counts and that they are not a headcount; a card
+        with one source record and one group name gets no line at all, because that
+        shape was never read as two people and its output must keep its exact bytes.
+        """
+        source = {"type": "unknown", "claim": "本次讨论会话形成的结论",
+                  "verification": "unknown", "scope_note": "单一会话来源；不构成独立佐证。"}
+        two = self.store.add(
+            "交接前先把当前版本的范围写下来，能减少返工。", "abstract_idea",
+            candidate_id="d-two", scope=["交接"], session="sess-a",
+            sources=[dict(source, independence_group="sess-a")],
+        )
+        self.store.attach_source(two["id"], dict(source, independence_group="sess-b"), "sess-b")
+        one = self.store.add(
+            "交接前先写下当前范围；返工会少一些。", "abstract_idea",
+            candidate_id="d-one", scope=["交接"], session="sess-c",
+            sources=[dict(source, independence_group="sess-c")],
+        )
+
+        from dojo.discuss import provenance_sentence
+        two_reading = self.store.provenance_reading(two["id"], "sess-a")
+        one_reading = self.store.provenance_reading(one["id"], "sess-c")
+        self.assertTrue(two_reading["readable"])
+        self.assertFalse(one_reading["readable"], "one group name cannot be read as two people")
+        sentence = provenance_sentence(two_reading)
+        self.assertIn("2 条来源记录", sentence)
+        self.assertIn("不是人数", sentence)
+        # The sentence states counts. It must not name a person-count key of its own.
+        self.assertNotIn("2 个人", sentence)
+        self.assertNotIn("两个独立来源", sentence)
+        # A library with no read log says the count is unknown, not zero.
+        self.assertIsNone(two_reading["handout_rows"])
+        self.assertIn("没有读记录表", sentence)
+
+        # And the line is really printed by a session, exactly once. The session restates
+        # the two-group card verbatim, so it goes through `attach_source` and ends with
+        # that card id; the closing line then reads the counts off the ledger.
+        candidate = {
+            "statement": "交接前先把当前版本的范围写下来，能减少返工。",
+            "kind": "abstract_idea", "scope": ["交接"], "premises": [],
+            "alternatives": [], "contradictions": [], "unknowns": [],
+        }
+        output = io.StringIO()
+        code = run_discuss(
+            self.store,
+            client=FakeClient([result("这一版可以。", candidate),
+                               result("那就这样。", candidate, user_stance="accept")]),
+            read_line=read_lines(["交接前先写范围", "对"]), output=output,
+        )
+        self.assertEqual(0, code, output.getvalue())
+        printed = [line for line in output.getvalue().splitlines() if "来源记录" in line]
+        self.assertEqual(1, len(printed), "one line, once, at session end")
+        self.assertIn("不是人数", printed[0])
+        self.assertIn(two["id"], output.getvalue())
 
     def test_reasoning_effort_rejection_retries_without_field_and_traces_downgrade(self):
         class RejectingClient(FakeClient):

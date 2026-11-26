@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ipaddress
+import http.client
 import json
 import os
+import socket
+import sqlite3
 import socket
 import sys
 import urllib.error
@@ -62,6 +65,7 @@ class LiveError(DojoError):
         raw_response: str = "",
         detail: str | None = None,
         raw_response_limit: int = MAX_RAW_RESPONSE_CHARS,
+        validation_code: str | None = None,
     ):
         super().__init__(message)
         self.kind = kind
@@ -69,6 +73,7 @@ class LiveError(DojoError):
         self.finish_reason = finish_reason
         self.raw_response = raw_response[:raw_response_limit]
         self.detail = detail if detail is not None else message
+        self.validation_code=validation_code
 
 
 @dataclass(frozen=True)
@@ -133,6 +138,56 @@ class _RejectRedirects(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _json_value_type(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return "number"  # json.loads only produces the JSON types above and numbers.
+
+
+def _response_shape(value: Any) -> dict[str, Any]:
+    """Bounded allowlisted structure only: never copy arbitrary keys or values."""
+    top = value if isinstance(value, dict) else {}
+    choices = top.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices else None
+    choice = choice if isinstance(choice, dict) else {}
+    message = choice.get("message")
+    message = message if isinstance(message, dict) else {}
+    shape: dict[str, Any] = {"response_type": _json_value_type(value)}
+    for label, container, allowed in (
+        ("top", top, ("choices", "usage", "error")),
+        ("choice", choice, ("message", "delta", "finish_reason", "index", "logprobs")),
+        ("message", message, ("role", "content", "reasoning_content", "tool_calls", "function_call", "refusal")),
+    ):
+        shape[label + "_keys"] = [key for key in allowed if key in container]
+        shape[label + "_unknown_keys_count"] = sum(key not in allowed for key in container)
+    shape["choices_type"] = _json_value_type(choices) if "choices" in top else "missing"
+    shape["choices_count"] = len(choices) if isinstance(choices, list) else None
+    shape["message_type"] = _json_value_type(choice["message"]) if "message" in choice else "missing"
+    for key in ("content", "reasoning_content"):
+        item = message.get(key)
+        shape[key + "_type"] = _json_value_type(item) if key in message else "missing"
+        shape[key + "_chars"] = len(item) if isinstance(item, str) else None
+        if key == "content":
+            shape["content_non_whitespace_chars"]=sum(not char.isspace() for char in item) if isinstance(item,str) else None
+    shape["tool_calls_present"] = "tool_calls" in message
+    shape['tool_calls_count']=len(message['tool_calls']) if isinstance(message.get('tool_calls'),list) else None
+    reason = choice.get("finish_reason")
+    shape["finish_reason"] = (
+        reason if reason is None or (isinstance(reason, str) and reason in {
+            "stop", "length", "tool_calls", "function_call", "content_filter",
+        }) else "other"
+    )
+    return shape
+
+
 class OpenAICompatibleClient:
     """One-request JSON-mode adapter; credentials are sent only as a header."""
 
@@ -152,6 +207,9 @@ class OpenAICompatibleClient:
         max_fields_per_list: int = MAX_FIELDS_PER_LIST,
         reasoning_effort: str | None = None,
         max_request_chars: int = MAX_REQUEST_CHARS,
+        content_validator: Callable[[str], dict[str, Any]] | None = None,
+        json_output: bool = True,
+        native_tools: list[dict[str, Any]] | None = None,
     ):
         self.config = config
         configured_timeout = getattr(config, "timeout", DEFAULT_TIMEOUT_SECONDS)
@@ -168,16 +226,28 @@ class OpenAICompatibleClient:
         self.max_fields_per_list = max_fields_per_list
         self.reasoning_effort = reasoning_effort
         self.max_request_chars = max_request_chars
+        self.content_validator = content_validator
+        if type(json_output) is not bool:
+            raise LiveError("json_output must be a boolean",kind="config")
+        self.json_output=json_output
+        self.native_tools=native_tools
+        self.last_response_shape: dict[str, Any] | None = None
 
-    def complete(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def complete(self, messages: list[dict[str, str]], *, allow_tools: bool = True) -> dict[str, Any]:
+        # Reset before serialization/budget checks too: a failed call has no old shape.
+        self.last_response_shape = None
         payload = {
             "model": self.config.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
-            "response_format": {"type": "json_object"},
+            "response_format": {"type": "json_object" if self.json_output else "text"},
         }
         if self.reasoning_effort is not None:
             payload["reasoning_effort"] = self.reasoning_effort
+        if self.native_tools is not None:
+            payload['tools']=self.native_tools
+            payload['tool_choice']='auto' if allow_tools else 'none'
+            payload['response_format']={'type':'text'}
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if len(data) > self.max_request_chars:
             raise LiveError(
@@ -196,7 +266,7 @@ class OpenAICompatibleClient:
             status = exc.code
             try:
                 response_text = exc.read(self.max_response_bytes + 1).decode("utf-8", errors="replace")
-            except OSError:
+            except (OSError, http.client.HTTPException):
                 response_text = ""
             exc.close()
             raise LiveError(
@@ -220,6 +290,13 @@ class OpenAICompatibleClient:
                 "could not connect to model endpoint; no candidate was saved",
                 kind="connect", detail=f"{type(reason).__name__}: {reason}",
             ) from None
+        except http.client.HTTPException:
+            # Chunked bodies may end mid-response. Never treat partial model
+            # content as a candidate or retain it in diagnostics; do not retry.
+            raise LiveError(
+                "model HTTP response was interrupted; no candidate was saved",
+                kind="connect",
+            ) from None
         except OSError as exc:
             raise LiveError(
                 "model network I/O failed; no candidate was saved",
@@ -240,6 +317,7 @@ class OpenAICompatibleClient:
                 kind="not_json", raw_response=response_text,
                 raw_response_limit=self.max_raw_response_chars,
             ) from None
+        self.last_response_shape = _response_shape(response_value)
         if not isinstance(response_value, dict):
             raise LiveError("model endpoint returned an invalid response shape; no candidate was saved", raw_response=response_text, raw_response_limit=self.max_raw_response_chars)
         choices = response_value.get("choices")
@@ -249,6 +327,50 @@ class OpenAICompatibleClient:
         finish_reason = choice.get("finish_reason")
         finish_reason = finish_reason if isinstance(finish_reason, str) else None
         message = choice.get("message")
+        if self.native_tools is not None:
+            if finish_reason in {'length','aborted','insufficient_system_resource','content_filter'}:
+                raise LiveError('native completion was interrupted; no tool was executed',kind='truncated',finish_reason=finish_reason)
+            if not isinstance(message,dict):raise LiveError('native completion has no message',kind='empty_content')
+            calls=message.get('tool_calls')
+            if calls:
+                if not allow_tools:raise LiveError('tool calls are disabled for this synthesis',kind='tools_disabled')
+                validation_stage='batch_shape';validation_index=None;known_tool=None
+                try:
+                    if not isinstance(calls,list) or not 1<=len(calls)<=4:raise ValueError()
+                    allowed={tool['function']['name'] for tool in self.native_tools}
+                    validated=[]
+                    for validation_index,call in enumerate(calls):
+                        validation_stage='call_shape';known_tool=None
+                        if not isinstance(call,dict) or call.get('type')!='function':raise ValueError()
+                        function=call['function'];name=function['name'];arguments=function['arguments']
+                        validation_stage='name_or_argument_type'
+                        if name not in allowed or not isinstance(arguments,str) or len(arguments)>self.max_completion_chars:raise ValueError()
+                        known_tool=name;validation_stage='arguments_json'
+                        action=json.loads(arguments,object_pairs_hook=_no_duplicate_keys)
+                        validation_stage='action_envelope'
+                        if not isinstance(action,dict) or 'kind' in action:raise ValueError()
+                        action={'kind':name,**action}
+                        answer=message.get('content')
+                        if not isinstance(answer,str) or not answer.strip():answer=action.get('prediction','请求验证')
+                        if self.content_validator is None:raise LiveError('native actions need a local validator',kind='config')
+                        validation_stage='local_validator'
+                        validated.append(self.content_validator(json.dumps({'answer':answer,'action':action},ensure_ascii=False)))
+                    # Validate the complete batch before returning any executable request.
+                    result=validated[0]
+                    if len(validated)>1:result={**result,'tool_batch':[v['action'] for v in validated]}
+                    return {**result,'finish_reason':finish_reason}
+                except (ValueError,TypeError,KeyError,RecursionError,LiveError) as exc:
+                    if isinstance(exc,LiveError) and exc.kind=='config':raise
+                    self.last_response_shape.update(native_validation_stage=validation_stage,native_validation_index=validation_index,native_known_tool=known_tool)
+                    if isinstance(exc,LiveError) and exc.validation_code is not None:self.last_response_shape['native_validation_code']=exc.validation_code
+                    raise LiveError('native tool arguments are invalid; no tool was executed',kind='native_tool_schema') from None
+            else:
+                content=message.get('content')
+                if not isinstance(content,str) or not content.strip():raise LiveError('native completion is empty',kind='empty_content')
+                if len(content)>self.max_completion_chars:raise LiveError('native completion exceeds envelope',kind='response_too_large')
+                value={'answer':content,'action':None}
+            if self.content_validator is None:raise LiveError('native actions need a local validator',kind='config')
+            return {**self.content_validator(json.dumps(value,ensure_ascii=False)),'finish_reason':finish_reason}
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):
             raise LiveError(
                 "model endpoint returned no JSON message content; no candidate was saved",
@@ -274,6 +396,9 @@ class OpenAICompatibleClient:
                 kind="unknown", finish_reason=finish_reason, raw_response=content,
                 raw_response_limit=self.max_raw_response_chars,
             )
+        if self.content_validator is not None:
+            validated = self.content_validator(content)
+            return {**validated, "finish_reason": finish_reason}
         validated = _validate_model_content(
             content, allowed_extra_keys=self.allowed_extra_keys,
             allow_search=self.allow_search,
@@ -420,23 +545,77 @@ def _validate_model_content(
     }
 
 
-def _retrieval_for_prompt(store: Store, query: str) -> dict[str, Any]:
+# #1537: the anonymous identity this file already uses when a person's own action writes a
+# card (`local-chat-anon`). Reads are logged under the same name so one session's chat
+# activity does not look like two different readers.
+CHAT_READER_SESSION = "local-chat-anon"
+
+CONTEXT_FIELDS = (
+    "id", "version", "status", "statement", "kind", "matched_terms", "scope", "premises",
+    "alternatives", "contradictions", "unknowns", "sources", "relations",
+)
+# r115: two separate facts -- when this wording was written, and when this wording was
+# accepted. Kept out of `CONTEXT_FIELDS` because they are optional: a card whose ledger
+# holds no acceptance must carry no acceptance key, so the model is not handed a null
+# that reads as "accepted, time unknown".
+CONTEXT_TIME_FIELDS = ("versioned_at", "accepted_at", "acceptance_path", "agreed_at")
+
+# #1831: two facts `retrieve()` already computes and this hand-off dropped. Both are
+# added by the same rule as the time fields -- only when the value is there -- so a row
+# for a card with no acceptance and no dated sources keeps exactly the bytes it had.
+#
+# `unaccepted_draft` is the one that changes a judgement: `status` is `discussable` both
+# for a wording the user accepted and for one a facilitator merely unblocked, so without
+# this key the model cannot tell "nobody has agreed to this wording" from "accepted".
+# `source_basis` says when each source record entered the library. `retrieve()` does not
+# compute it (only `show`/`broadcast`/`export` do), so it is read here per row rather
+# than widening `search`'s output shape to carry a key the model is the only consumer of.
+CONTEXT_OPTIONAL_FIELDS = ("unaccepted_draft",)
+
+
+def _context_item(item: dict[str, Any]) -> dict[str, Any]:
+    row = {key: item[key] for key in CONTEXT_FIELDS}
+    for key in CONTEXT_TIME_FIELDS:
+        if key in item:
+            row[key] = item[key]
+    for key in CONTEXT_OPTIONAL_FIELDS:
+        if item.get(key):
+            row[key] = item[key]
+    return row
+
+
+def _retrieval_for_prompt(store: Store, query: str, session: str | None = None) -> dict[str, Any]:
     result = store.retrieve(query, limit=6)
+    # #1537: this is the third real output that hands a card out, so it logs the read the
+    # CLI does, for the same reason and in the same place. Kept out of `retrieve`, which
+    # stays pure. A chat turn must not die because the log did, and stdout must not grow
+    # a line either -- the failure goes to stderr.
+    for item in result["results"]:
+        try:
+            store.record_read(item["id"], session, surface="chat")
+        except (DojoError, sqlite3.Error, OSError) as exc:
+            print(
+                f"  未记下这次读取（chat）：{item['id']} 未被写进读记录；"
+                f"原因：{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            break
     # Keep model context concise and exclude event history, actor notes, and internal decisions.
+    results = []
+    for item in result["results"]:
+        row = _context_item(item)
+        # #1831: when each source record behind this row entered the library. Added by the
+        # same rule as the time fields: a card whose sources cannot be dated keeps the
+        # bytes it had, rather than a null that reads as "entered, date unknown".
+        provenance = store.source_basis(item["id"])
+        if provenance:
+            row["source_basis"] = provenance
+        results.append(row)
     return {
         "method": result["method"],
         "query": result["query"],
         "matched_terms": result["matched_terms"],
-        "results": [
-            {
-                key: item[key]
-                for key in (
-                    "id", "version", "status", "statement", "kind", "matched_terms", "scope", "premises",
-                    "alternatives", "contradictions", "unknowns", "sources", "relations",
-                )
-            }
-            for item in result["results"]
-        ],
+        "results": results,
     }
 
 
@@ -580,7 +759,7 @@ def run_chat(
         if len(text) > MAX_USER_TURN_CHARS:
             print(f"本轮最多 {MAX_USER_TURN_CHARS} 字；请缩短后重试。", file=output)
             continue
-        retrieval = _retrieval_for_prompt(store, text)
+        retrieval = _retrieval_for_prompt(store, text, CHAT_READER_SESSION)
         context = "本轮透明本地检索（记录是讨论材料，不是事实）：\n" + json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
         if current_id:
             try:

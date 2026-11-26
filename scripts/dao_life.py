@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import re
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +38,7 @@ from dojo.elicit import (  # noqa: E402  —— 四句问法与「谁写的」�
 )
 
 BENCH = "scripts/dao_life.py"
-BENCH_VERSION = 1
+BENCH_VERSION = 2
 COST_UNITS = ("时间", "关系", "机会", "能力")
 CLICHES = (
     "因人而异",
@@ -54,6 +57,12 @@ OBSERVATION_KINDS = {
     "controlled": ("有意的对照（量过）", "量过"),
 }
 OBSERVATION_STRENGTH = {"agent_self": 1, "later_session": 2, "controlled": 3}
+TIME_BASIS_STRENGTH = {"date_convention": 1, "local_times": 2, "exact_instants": 3}
+TIME_BASIS_NOTE = {
+    "date_convention": "按日粒度约定接纳；实际先后未证实。",
+    "local_times": "按未声明时区的本地时间比较接纳；假设两者采用同一时区，实际先后未证实。",
+    "exact_instants": "按带时区的精确时刻比较，观察晚于全部来源案例。",
+}
 VERDICT_WORD = {"pass": "过", "fail": "不过", "not_run": "未跑", "uncertain": "不确定"}
 ATTRIBUTION_CLASSES = ("person", "relayed", "synthetic", "unverified")
 SOURCE_WORD = {"person": "自述", "relayed": "自述（转述）", "synthetic": "模拟", "unverified": "传闻"}
@@ -85,13 +94,89 @@ def evaluate(rule: list[dict[str, Any]], situation: dict[str, Any]) -> dict[str,
     return None
 
 
+def _parse_time(value: str) -> date | datetime | None:
+    """Read explicit ISO dates/minute-or-finer timestamps; malformed values earn nothing."""
+    if not isinstance(value, str):
+        return None
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return date.fromisoformat(value)
+        if re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?",
+            value,
+        ):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    return None
+
+
 def later(observation_at: str, case_at: str) -> bool:
-    """案例多为日粒度；观察要严格晚于它。同一天时，观察必须写到时间。"""
-    if not observation_at or not case_at:
+    """Compare actual instants when available, not date-string order.
+
+    Preserve the library's day-granularity convention: a timed observation on
+    the case's date counts as later. For two timestamps, missing timezone on
+    only one side is incomparable, not evidence of temporal order.
+    """
+    observation = _parse_time(observation_at)
+    case = _parse_time(case_at)
+    if observation is None or case is None:
         return False
-    if observation_at[:10] != case_at[:10]:
-        return observation_at[:10] > case_at[:10]
-    return len(observation_at) > 10 and len(case_at) == 10
+    if isinstance(observation, datetime) and isinstance(case, datetime):
+        if (observation.tzinfo is None) != (case.tzinfo is None):
+            return False
+        return observation > case
+    observation_date = observation.date() if isinstance(observation, datetime) else observation
+    case_date = case.date() if isinstance(case, datetime) else case
+    if observation_date != case_date:
+        return observation_date > case_date
+    return isinstance(observation, datetime) and not isinstance(case, datetime)
+
+
+def _precision_detail(observation_at: str, case_times: list[str]) -> str:
+    """Which side of the weakest accepted pair actually lacks precision.
+
+    The old date_convention note said the reason was 'dates carry no exact
+    moment or timezone'. That is false for a timed observation checked against
+    a date-only case: the library holds `2026-10-23T13:11:00Z`. Naming the
+    coarse side is a measurement; asserting both were coarse was not.
+    """
+    parsed_obs = _parse_time(observation_at)
+    worst_case, worst_at = None, ""
+    for case_at in case_times:
+        parsed = _parse_time(case_at)
+        if not isinstance(parsed, datetime):
+            worst_case, worst_at = "case", case_at
+            break
+        if parsed.tzinfo is None and worst_case is None:
+            worst_case, worst_at = "local", case_at
+    if worst_case is None and isinstance(parsed_obs, datetime) and parsed_obs.tzinfo is None:
+        worst_case, worst_at = "local_observation", observation_at
+    if worst_case in ("case", "local"):
+        side = "只到日" if worst_case == "case" else "没写时区"
+        if not isinstance(parsed_obs, datetime):
+            return f"（两侧都粗：案例 {worst_at} {side}，观察 {observation_at} 也只到日）"
+        return f"（弱在案例那一侧：案例 {worst_at} {side}" + _obs_phrase(observation_at) + "）"
+    if worst_case == "local_observation":
+        return f"（弱在观察那一侧：观察 {observation_at} 没写时区）"
+    return ""
+
+
+def _obs_phrase(observation_at: str) -> str:
+    parsed = _parse_time(observation_at)
+    if not isinstance(parsed, datetime):
+        return f"，观察 {observation_at} 也只到日"
+    if parsed.tzinfo is None:
+        return f"，观察 {observation_at} 写到分但没写时区"
+    return f"，观察 {observation_at} 带时区"
+
+
+def _time_basis(observation_at: str, case_at: str) -> str:
+    """Describe an already accepted pair, without upgrading its precision."""
+    observation, case = _parse_time(observation_at), _parse_time(case_at)
+    if not isinstance(observation, datetime) or not isinstance(case, datetime):
+        return "date_convention"
+    return "exact_instants" if observation.tzinfo is not None and case.tzinfo is not None else "local_times"
 
 
 def source_classes(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> set[str]:
@@ -99,11 +184,6 @@ def source_classes(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> 
         (episodes.get(item.get("episode")) or {}).get("attribution", "")
         for item in dao.get("provenance") or []
     } - {""}
-
-
-def provenance_status_for(episode: dict[str, Any]) -> str:
-    """Display status is derived from the source event, never from extraction prose."""
-    return PROVENANCE_STATUS.get(episode.get("attribution"), "来源未声明")
 
 
 def base_word(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> str:
@@ -115,8 +195,50 @@ def base_word(dao: dict[str, Any], episodes: dict[str, dict[str, Any]]) -> str:
     return SOURCE_WORD["unverified"]
 
 
+def provenance_status_for(episode: dict[str, Any]) -> str:
+    """The word a stored provenance row must carry, read off the source event.
+
+    Two vocabularies, deliberately different: the 道图 prints a display word
+    (`自述（转述）`, `传闻`) that reads as a sentence, while the stored field keeps
+    the short form (`转述`, `未核`). The current tree deleted this table, so every
+    relayed or unverified source was stored as `自述` and rendered as lived
+    experience -- the defect K2's second review had already fixed upstream.
+    """
+    return PROVENANCE_STATUS.get(episode.get("attribution"), "来源未声明")
+
+
 def _add(checks: list[dict[str, Any]], name: str, ok: Any, detail: str = "") -> None:
     checks.append({"name": name, "ok": bool(ok), "detail": detail})
+
+
+PROVENANCE_KEYS = ("person", "episode", "status", "learned_from")
+
+
+def missing_provenance_keys(dao: dict[str, Any]) -> list[str]:
+    """Which provenance rows cannot be rendered at all, named by the key that is absent.
+
+    #1831: `render` read `item['person']` straight out of the row, so a row without
+    that key killed the page with a `TypeError` from inside a `sorted()` call while
+    `check_structure` passed the same entry. A judgement that passes the shape the
+    renderer crashes on is not judging the same object. Both sides now read this one
+    list: the checker fails those rows, the renderer refuses with the same names.
+    """
+    problems: list[str] = []
+    for index, item in enumerate(dao.get("provenance") or []):
+        for key in PROVENANCE_KEYS:
+            if key not in item or item[key] in (None, ""):
+                problems.append(f"{dao.get('id', '?')} 第 {index + 1} 条归属缺键 {key!r}")
+    return problems
+
+
+def require_provenance_keys(dao: dict[str, Any]) -> None:
+    """Refuse to render an entry whose provenance rows lack a required key."""
+    problems = missing_provenance_keys(dao)
+    if problems:
+        raise NoteError(
+            "; ".join(problems)
+            + "；一条归属必须写明谁（person）、哪件事（episode）、什么状态（status）、从哪学的（learned_from）"
+        )
 
 
 def check_structure(
@@ -188,6 +310,10 @@ def check_structure(
     )
     loose = [item.get("episode") for item in provenance if item.get("episode") not in episodes]
     _add(checks, "归属边指向真实事件", bool(provenance) and not loose, f"悬空：{loose}")
+    # #1831: the same defect the renderer used to crash on (`item['person']` with no
+    # key) is judged here too, so a passing entry is one the page can actually print.
+    incomplete = missing_provenance_keys(dao)
+    _add(checks, "每条归属都有渲染所需的四键", bool(provenance) and not incomplete, f"缺：{incomplete}")
     supported = [
         item for item in provenance if (episodes.get(item.get("episode")) or {}).get("attribution") != "unverified"
     ]
@@ -203,17 +329,29 @@ def check_structure(
         if (episodes.get(item.get("episode")) or {}).get("attribution") not in ATTRIBUTION_CLASSES
     ]
     _add(checks, "每条出处都写明了来源类别", bool(provenance) and not unknown_class, f"类别没写：{unknown_class}")
-    provenance_status_errors = [
+    status_errors = [
         f"{item.get('episode')}: {item.get('status')!r} != {provenance_status_for(episode)!r}"
         for item in provenance
         if (episode := episodes.get(item.get("episode")) or {})
-        and item.get("status") != provenance_status_for(episode)
+        and item.get('status') != provenance_status_for(episode)
     ]
     _add(
         checks,
         "存储归属状态与事件来源一致",
-        not provenance_status_errors,
-        f"状态不匹配：{provenance_status_errors}",
+        not status_errors,
+        f"状态不匹配：{status_errors}",
+    )
+    lived_claims = [
+        item.get('episode')
+        for item in provenance
+        if item.get('learned_from') == '亲历'
+        and (episodes.get(item.get("episode")) or {}).get("attribution") != "person"
+    ]
+    _add(
+        checks,
+        "「亲历」只印在他本人的原话上",
+        bool(provenance) and not lived_claims,
+        f"不是本人的原话却记成亲历：{lived_claims}",
     )
     tension_keys = {term["key"] for term in vocabulary.get("tensions") or []}
     move_keys = {term["key"] for term in vocabulary.get("moves") or []}
@@ -340,7 +478,7 @@ def check_field(
     observations: list[dict[str, Any]],
     at: str | None,
 ) -> dict[str, Any]:
-    latest_case = max((episodes.get(item.get("episode"), {}).get("at", "") for item in dao.get("provenance") or []), default="")
+    case_times = [episodes.get(item.get("episode"), {}).get("at", "") for item in dao.get("provenance") or []]
     rows = [row for row in observations if row.get("dao") == dao.get("id")]
     eligible: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -350,8 +488,8 @@ def check_field(
             reason = f"来源类别 {row.get('kind')!r} 不在三种里"
         elif row.get("elicited", False):
             reason = "是被问出来的，不是自然出现的"
-        elif not later(row.get("at", ""), latest_case):
-            reason = f"不晚于案例（案例 {latest_case}，观察 {row.get('at')}）"
+        elif not case_times or not all(later(row.get("at", ""), case_at) for case_at in case_times):
+            reason = f"不晚于全部案例或时间不可比较（案例 {case_times}，观察 {row.get('at')}）"
         elif row.get("kind") == "agent_self" and not (
             row.get("applied_in") and row.get("result") and row.get("could_have_gone_otherwise")
         ):
@@ -366,12 +504,17 @@ def check_field(
             "ran": None,
             "verdict": "not_run",
             "observation": None,
+            "time_basis": None,
             "rejected": rejected,
             "note": "没有一条晚于案例、也不是被问出来的观察；不拿「他说过很多次」顶替。",
         }
     best = sorted(eligible, key=lambda row: OBSERVATION_STRENGTH[row["kind"]])[-1]
     verdict = "pass" if best.get("matched") is True else ("fail" if best.get("matched") is False else "uncertain")
     label, _word = OBSERVATION_KINDS[best["kind"]]
+    time_basis = min(
+        (_time_basis(best["at"], case_at) for case_at in case_times),
+        key=TIME_BASIS_STRENGTH.__getitem__,
+    )
     return {
         "kind": "field",
         "ran": {
@@ -382,9 +525,13 @@ def check_field(
         },
         "verdict": verdict,
         "strength": label,
+        "time_basis": time_basis,
+        "time_basis_detail": _precision_detail(best.get("at", ""), case_times),
         "observation": best,
         "rejected": rejected,
-        "note": "观察晚于案例，且不是被问出来的；它证明的是一条相符或相悖的观察存在，不是这条道为真。",
+        "note": TIME_BASIS_NOTE[time_basis]
+        + (f"依据：{best['at_basis']}" if best.get("at_basis") else "")
+        + "观察不是被问出来的；它只记录一条相符或相悖的观察，不证明这条道为真。",
     }
 
 
@@ -463,7 +610,22 @@ def run_bench(
 
 
 def independent_groups(data: dict[str, Any]) -> dict[str, Any]:
-    """不同的人 × 不同的情境出处 × 无同源传递 × 各有案例；缺一不算一组。"""
+    """账本里手写了几个来源 id（去掉 attribution=unverified 的那些）。
+
+    #1792: 这个函数**不是**在数人。它只对 `provenance[].person` 这个手写字符串去重——
+    没有实名核验、没有按情境出处分开、没有查同源传递。原来那句 docstring
+    「不同的人 × 不同的情境出处 × 无同源传递 × 各有案例」描述的是想要的口径，
+    不是这份代码在算的东西，所以出口不能说「不同的人 N 个」：那会把一个手写 id
+    读成一个人。
+
+    `storage.independence()`（dojo/storage.py）是另一套口径：它按一张卡的来源组与
+    写作会话算 provenance，与这里不同源，两个数不可互换、不可相加。
+
+    #1831: 「案例」的口径取 OA（须有 `observed_action`）。只说「我也是」而拿不出自己
+    在什么处境里怎么做的那条，不算一个来源：同意一个命题是廉价的，说出自己做了什么才不廉价
+    （docs/proposal-knowledge-network.md:175）。真库 17 条事件 quote 与 observed_action
+    都是 17/17，所以这条在真库上不改变任何数字；它咬的是只有引语的那种形状。
+    """
     people: set[str] = set()
     classes: set[str] = set()
     episodes_by_id = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
@@ -471,6 +633,15 @@ def independent_groups(data: dict[str, Any]) -> dict[str, Any]:
         for item in dao.get("provenance") or []:
             episode = episodes_by_id.get(item.get("episode")) or {}
             if episode.get("attribution") == "unverified":
+                continue
+            if not episode.get("observed_action"):
+                # #1831 案例口径 = OA：没有已观察到的动作，就只有引语，不算一组。
+                continue
+            if not item.get("person"):
+                # #1831: a row with no `person` cannot be counted as an id, and adding
+                # None makes the caller's `sorted(people)` raise TypeError. The missing
+                # key is reported by `missing_provenance_keys` and fails `--check`; this
+                # function only has to stay readable while doing that.
                 continue
             people.add(item.get("person"))
             classes.add(episode.get("attribution", ""))
@@ -482,9 +653,20 @@ def independent_groups(data: dict[str, Any]) -> dict[str, Any]:
             "它不是一个人的道理，也不是共识，只能用来测这张库装不装得下第二个来源。"
         )
     else:
+        # The relayed clause only belongs on a library that has relayed rows; on a
+        # library without them it would describe a class that is not there.
+        relayed = (
+            "relayed 那一类的措辞是转述或整理的，不是本人的原话（一条 id 下的字也不一定出自那个人）。"
+            if "relayed" in classes
+            else ""
+        )
         line = (
-            f"独立来源 {len(people)} 组（不同的人 {len(people)} 个；曝光账本 {len(exposures)} 行）。"
-            "曝光未知按「不独立」算：这里是一个人的道理，不是共识。"
+            f"来源 id {len(people)} 个（账本里手写的不同来源 id；曝光账本 {len(exposures)} 行）。"
+            "这不是人数：id 是人手填的，系统没核过它后面是不是不同的人。"
+            "同一个人的两次自述只留一个 id，所以两个 id 可能是一个人。"
+            "只有引语、说不出自己在什么处境里怎么做的来源不计入（案例须有已观察到的动作）。"
+            + relayed
+            + "曝光未知按「不独立」算：能确定的是这里没有第二个被核过的来源，不是共识。"
         )
     return {
         "people": sorted(people),
@@ -514,6 +696,13 @@ def render(
 ) -> str:
     episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
     daos = data["daos"]["daos"]
+    # #1831: refuse before any of the page is built. The header below sorts
+    # `groups['people']` and `independent_groups()` reads `item['person']`, so a
+    # provenance row without that key used to surface as a `TypeError` from inside
+    # sorted() -- after part of the page had been assembled. Same helper the checker
+    # uses, so the two cannot drift apart.
+    for dao in daos:
+        require_provenance_keys(dao)
     needed = {item.get("dao"): item for item in data["observations"].get("needed") or []}
     groups = independent_groups(data)
     classes: set[str] = set()
@@ -609,6 +798,10 @@ def render(
     for dao in daos:
         state = states[dao["id"]]
         receipt = receipts[dao["id"]]
+        # #1831: a row missing `person`/`episode`/`status`/`learned_from` used to reach
+        # the f-string below and die as a `TypeError` inside sorted(). Name the entry and
+        # the missing key instead.
+        require_provenance_keys(dao)
         add(f"## 道{_ordinal(daos.index(dao))}　{dao['id']}　{dao['title']}")
         add("")
         add(f"> {dao['one_line']}")
@@ -632,8 +825,7 @@ def render(
         off = "；".join(f"当{item['when']}——{item['then']}" for item in dao["off"])
         add(f"| 失效 | {off} |")
         prov = "；".join(
-            f"{item['person']} · {item['episode']} · {provenance_status_for(episodes.get(item['episode']) or {})} · {item['learned_from']}"
-            for item in dao["provenance"]
+            f"{item['person']} · {item['episode']} · {provenance_status_for(episodes.get(item['episode']) or {})} · {item['learned_from']}" for item in dao["provenance"]
         )
         add(f"| 归属 | {prov} |")
         add("")
@@ -646,8 +838,6 @@ def render(
                 anchor += "　— 署名未核，只当旁证，不计入独立性"
             elif episode.get("attribution") == "synthetic":
                 anchor += "　— 模拟材料，不是某个人说过的"
-            elif episode.get("attribution") == "relayed" and episode.get("attribution_note"):
-                anchor += f"　— {episode['attribution_note']}"
             anchors.append(anchor)
         add("原话：" if not synthetic else "原话（模拟材料，写死的台词）：")
         add("")
@@ -704,6 +894,8 @@ def render(
                     f"落地 {VERDICT_WORD[field['verdict']]}（{field['strength']}）：{observation['prediction']} "
                     f"混杂未排除：{observation.get('confound', '（没写）')}"
                 )
+            detail = field.get("time_basis_detail") or ""
+            add(f"时间依据（{field['time_basis']}）：{field['note']}{detail}")
         grounding = needed.get(dao["id"])
         if grounding:
             add(f"要什么才能{'给这一格一条观察' if field['verdict'] == 'not_run' else '把这一格变强'}：{grounding['what']}（现在拿不到：{grounding['why_not']}；谁能补：{grounding['who']}）")
@@ -1116,6 +1308,10 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
             "这个命令不猜一个人是不是真的坐在那儿"
         )
     authored = {item.get("tension"): item for item in extraction.get("daos") or []}
+    # session.json is the conversation's own record of which parts the person answered.
+    # It is optional: a hand-written note library has none and keeps working. When present
+    # it is bound to this note and to this extraction, and it may not claim a part the
+    # note does not carry verbatim, in the order the questions were asked.
     session_path = root / "session.json"
     session_parts: dict[str, dict[str, dict[str, Any]]] = {}
     if session_path.exists():
@@ -1176,10 +1372,17 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                 "reading": author.get("reading", "读法是提炼那一步写的，不是笔记本身。"),
             }
         )
-        sources = author.get("part_sources") or {
-            "situation": "系统补", "tension": "系统补", "move": "他的原话",
-            "price": "系统补", "off": "系统补", "provenance": "他的原话",
-        }
+        sources = dict(
+            author.get("part_sources")
+            or {
+                "situation": "系统补",
+                "tension": "系统补",
+                "move": "他的原话",
+                "price": "系统补",
+                "off": "系统补",
+                "provenance": "他的原话",
+            }
+        )
         if session_path.exists():
             promoted = session_parts.get(tension["pair"], {})
             verbatim_lines = []
@@ -1216,7 +1419,10 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                         raise NoteError(f"作者冲突：{label} 的回答{reason}")
                     cursor = match_index + 1
                 elif sources.get(part) == "他的原话":
-                    raise NoteError(f"作者冲突：{tension['pair']} 的{labels[part]}在 extraction.json 声称他的原话，但 session.json 未晋升")
+                    raise NoteError(
+                        f"作者冲突：{tension['pair']} 的{labels[part]}在 extraction.json 声称他的原话，"
+                        "但 session.json 未晋升"
+                    )
                 sources[part] = "他的原话" if is_promoted else "系统补"
             # 动作的会话证据是方向陈述；归属的来源本身就是这场 session。
             if sources.get("move") == "他的原话":
@@ -1253,8 +1459,8 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
                     {
                         "person": person,
                         "episode": episode_id,
-                        "status": PROVENANCE_STATUS[attribution],
-                        "learned_from": "亲历" if attribution == "person" else "未记录",
+"status": PROVENANCE_STATUS[attribution],
+"learned_from": "亲历" if attribution == "person" else "未记录",
                         "exposure": "none-at-time",
                     }
                 ],
@@ -1287,6 +1493,7 @@ def build_library_from_note(root: Path) -> dict[str, Any]:
         "root": str(root),
         "derived_from_note": str(note["path"]),
         "note_sha256": hashlib.sha256(note["text"].encode("utf-8")).hexdigest(),
+        "extraction_sha256": digest(extraction),
     }
     return data
 
@@ -1476,6 +1683,16 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
         receipt = receipts[dao["id"]]
         state = status_of(dao, receipt, episodes)
         print(f"  {dao['id']}  v{dao['version']}  {state['line']}")
+        # r101: the line above says 落地 过 and nothing about what it stood on.
+        # The page carries the basis; a reader who only runs --check saw the
+        # verdict alone. Same fact, one line, own indentation -- the row
+        # format above is unchanged and still one line per dao.
+        landed = receipt["field"]
+        if landed["verdict"] != "not_run":
+            print(
+                "      落地依据（%s）：%s%s"
+                % (landed["time_basis"], landed["note"], landed.get("time_basis_detail") or "")
+            )
         for kind in ("structure", "falsifiable"):
             if receipt[kind]["verdict"] == "fail":
                 failures.append(
@@ -1488,6 +1705,10 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
             failures.append(f"{dao['id']}：落地未跑，但没写「要什么才能给这一格一条观察」")
     for dao_id in needed - {dao["id"] for dao in data["daos"]["daos"]}:
         failures.append(f"needed 里有一条指向不存在的道：{dao_id}")
+    # #1831: an entry whose provenance rows cannot be rendered is a failure here, named
+    # before anything tries to print the page.
+    for dao in data["daos"]["daos"]:
+        failures += missing_provenance_keys(dao)
     library_failures, summary = check_library(data)
     failures += library_failures
     counts = summary["refusal_counts"]
@@ -1529,6 +1750,135 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
     return failures
 
 
+
+HISTORY_COVERAGE = {
+    "mechanism": "append-only-v1",
+    "prior_history": "unknown_or_missing",
+}
+HISTORY_NOTICE = "追加历史自本机制起保留；之前历史未知或缺失，仅封存可取得的旧回执快照。"
+
+
+def input_digests(data: dict[str, Any], vocabulary: dict[str, Any]) -> dict[str, str]:
+    """Hash all logical inputs, including the previously omitted validation inputs."""
+    hashes = {name: digest(data.get(name, default)) for name, default in (
+        ("episodes", {}), ("daos", {}), ("observations", {}), ("exposures", {}),
+        ("map", {}), ("refusals", {"items": []}),
+        ("record_checks", {"checks": []}), ("promotions", {"promotions": []}),
+    )}
+    hashes["vocabulary"] = digest(vocabulary)
+    for name in ("note", "extraction"):
+        if data.get(name + "_sha256"):
+            hashes[name] = data[name + "_sha256"]
+    return hashes
+
+
+def history_bundle(data, receipts, at, inputs, vocabulary) -> dict[str, Any]:
+    episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
+    payload = {
+        "layer": "checks", "bench": BENCH, "bench_version": BENCH_VERSION,
+        "at": at, "inputs": inputs, "history_coverage": HISTORY_COVERAGE,
+        "daos": {dao["id"]: {
+            "id": dao["id"], "version": dao["version"], "digest": digest(dao),
+            "receipts": receipts[dao["id"]], "status": status_of(dao, receipts[dao["id"]], episodes),
+        } for dao in data["daos"]["daos"]},
+    }
+    page = render(data, receipts, at, inputs, vocabulary)
+    page += "\n## 回执历史覆盖\n\n" + HISTORY_NOTICE + "\n"
+    return {"schema_version": 1, "kind": "dao_receipt_run", "receipts": payload,
+            "map_markdown": page, "history_coverage": HISTORY_COVERAGE}
+
+
+def _json_bytes(value: Any) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _stage_bytes(path: Path, content: bytes) -> Path:
+    """Stage a complete file on the destination filesystem, never at its final name."""
+    fd, name = tempfile.mkstemp(prefix=".dao-pending-", suffix=".tmp", dir=path.parent)
+    staged = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if staged.read_bytes() != content:
+            raise OSError(f"临时文件校验失败：{staged}")
+        return staged
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+
+
+def _publish_immutable(path: Path, content: bytes) -> None:
+    try:
+        existing = path.read_bytes()
+    except FileNotFoundError:
+        pass
+    else:
+        if existing != content:
+            raise OSError(f"不可变历史冲突或损坏，拒绝覆盖：{path}")
+        return
+    staged = _stage_bytes(path, content)
+    try:
+        try:
+            os.link(staged, path)
+        except FileExistsError:
+            if path.read_bytes() != content:
+                raise OSError(f"不可变历史冲突或损坏，拒绝覆盖：{path}")
+        except OSError as error:
+            raise OSError(f"历史原子发布失败（要求同文件系统支持 os.link）：{path}：{error}") from error
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _atomic_projection(path: Path, content: bytes) -> None:
+    if path.exists() and path.read_bytes() == content:
+        return
+    staged = _stage_bytes(path, content)
+    try:
+        os.replace(staged, path)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+
+def _projection_has_history(history: Path, previous: Any) -> bool:
+    if not isinstance(previous, dict):
+        return False
+    for path in history.glob("*.json"):
+        if not re.fullmatch(r"[0-9a-f]{64}", path.stem):
+            continue
+        try:
+            recorded = load(path)
+        except (OSError, ValueError):
+            continue
+        if isinstance(recorded, dict) and recorded.get("kind") == "dao_receipt_run" and digest(recorded) == path.stem and recorded.get("receipts") == previous:
+            return True
+    return False
+
+
+def commit_history(root: Path, bundle: dict[str, Any]) -> None:
+    """Immutable bundle first, replaceable projections second; reruns repair a crash."""
+    history = root / "history"
+    history.mkdir(exist_ok=True)
+    projection = root / "receipts.json"
+    if projection.exists():
+        original = projection.read_bytes()
+        try:
+            previous = json.loads(original)
+        except (ValueError, UnicodeDecodeError):
+            previous = None
+        if not _projection_has_history(history, previous):
+            old_hash = hashlib.sha256(original).hexdigest()
+            legacy = {"schema_version": 1, "kind": "legacy_import",
+                      "receipts_sha256": old_hash, "receipts_hex": original.hex(),
+                      "history_coverage": HISTORY_COVERAGE}
+            _publish_immutable(history / f"legacy-{old_hash}.json", _json_bytes(legacy))
+    run_id = digest(bundle)
+    _publish_immutable(history / f"{run_id}.json", _json_bytes(bundle))
+    _atomic_projection(projection, _json_bytes(bundle["receipts"]))
+    _atomic_projection(root / "道图.md", bundle["map_markdown"].encode("utf-8"))
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(__doc__.strip().splitlines()[0])
@@ -1569,13 +1919,7 @@ def main(argv: list[str]) -> int:
         return 1
     try:
         data = load_library(root)
-        inputs = {
-            name: digest(data[name])
-            for name in ("episodes", "daos", "observations", "exposures", "map", "refusals")
-            if name in data
-        }
-        if data.get("note_sha256"):
-            inputs["note"] = data["note_sha256"]
+        inputs = input_digests(data, vocabulary)
         receipts = run_bench(data, at, vocabulary)
         failures = report_library(root, data, receipts)
         other = None
@@ -1588,8 +1932,10 @@ def main(argv: list[str]) -> int:
     if compare_dir is not None:
         other_receipts = run_bench(other, at, vocabulary)
         failures += report_library(compare_dir, other, other_receipts)
-        other_inputs = {name: digest(other[name]) for name in ("episodes", "daos", "observations", "exposures", "map")}
+        other_inputs = input_digests(other, vocabulary)
         comparison = load(root.parent / "comparison.json")
+        inputs["comparison"] = digest(comparison)
+        other_inputs["comparison"] = digest(comparison)
         given = (str(root.resolve()), str(compare_dir.resolve()))
         declared = (
             str((root.parent / comparison["a"]).resolve()),
@@ -1611,65 +1957,28 @@ def main(argv: list[str]) -> int:
     if failures:
         return 1
 
-    for target, payload_data, payload_receipts, payload_inputs in (
-        (root, data, receipts, inputs),
-    ):
-        target_episodes = {episode["id"]: episode for episode in payload_data["episodes"]["episodes"]}
-        payload = {
-            "layer": "checks",
-            "bench": BENCH,
-            "bench_version": BENCH_VERSION,
-            "at": at,
-            "inputs": payload_inputs,
-            "daos": {
-                dao["id"]: {
-                    "id": dao["id"],
-                    "version": dao["version"],
-                    "digest": digest(dao),
-                    "receipts": payload_receipts[dao["id"]],
-                    "status": status_of(dao, payload_receipts[dao["id"]], target_episodes),
-                }
-                for dao in payload_data["daos"]["daos"]
-            },
-        }
-        (target / "receipts.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        (target / "道图.md").write_text(
-            render(payload_data, payload_receipts, at, payload_inputs, vocabulary), encoding="utf-8"
-        )
-        print(f"写入 {target / 'receipts.json'}")
-        print(f"写入 {target / '道图.md'}")
-
+    # Prepare every output before any commit. Libraries commit independently.
+    targets = [(root, data, receipts, inputs)]
     if other is not None:
-        other_episodes = {episode["id"]: episode for episode in other["episodes"]["episodes"]}
-        payload = {
-            "layer": "checks",
-            "bench": BENCH,
-            "bench_version": BENCH_VERSION,
-            "at": at,
-            "inputs": other_inputs,
-            "daos": {
-                dao["id"]: {
-                    "id": dao["id"],
-                    "version": dao["version"],
-                    "digest": digest(dao),
-                    "receipts": other_receipts[dao["id"]],
-                    "status": status_of(dao, other_receipts[dao["id"]], other_episodes),
-                }
-                for dao in other["daos"]["daos"]
-            },
-        }
-        (compare_dir / "receipts.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        (compare_dir / "道图.md").write_text(render(other, other_receipts, at, other_inputs, vocabulary), encoding="utf-8")
-        print(f"写入 {compare_dir / 'receipts.json'}")
-        print(f"写入 {compare_dir / '道图.md'}")
-        (root / "对比.md").write_text(
-            render_compare(comparison, result, data, other, vocabulary, at), encoding="utf-8"
-        )
-        print(f"写入 {root / '对比.md'}")
+        targets.append((compare_dir, other, other_receipts, other_inputs))
+    prepared = [(target, history_bundle(content, checks, at, hashes, vocabulary))
+                for target, content, checks, hashes in targets]
+    comparison_text = render_compare(comparison, result, data, other, vocabulary, at) if other is not None else None
+    completed: list[str] = []
+    try:
+        for target, bundle in prepared:
+            commit_history(target, bundle)
+            completed.append(str(target))
+            print(f"已提交历史并更新投影：{target}")
+        if comparison_text is not None:
+            _atomic_projection(root / "对比.md", comparison_text.encode("utf-8"))
+            print(f"写入 {root / '对比.md'}")
+    except OSError as error:
+        print(f"写盘未完成：{error}")
+        print(f"已完成投影的库：{completed or '无'}；各库历史独立提交，未完成库也可能已有完整历史。")
+        print("未宣称全部成功；请原命令重跑恢复兼容投影。对比页仅在两库完成后更新。")
+        return 1
+
     return 0
 
 

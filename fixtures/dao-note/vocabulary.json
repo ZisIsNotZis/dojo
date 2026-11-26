@@ -1,0 +1,24 @@
+{
+  "layer": "extraction",
+  "version": 1,
+  "tensions": [
+    {
+      "key": "开始摩擦",
+      "gloss": "合成测试：开始前的准备负担",
+      "introduced_by": [
+        "dao-p-demo-T1"
+      ],
+      "reason": "合成笔记使用这一张力"
+    }
+  ],
+  "moves": [
+    {
+      "key": "降摩擦",
+      "gloss": "合成测试：减少一次准备动作",
+      "introduced_by": [
+        "dao-p-demo-T1"
+      ],
+      "reason": "与合成笔记的方向对应"
+    }
+  ]
+}

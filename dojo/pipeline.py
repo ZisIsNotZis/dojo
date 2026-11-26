@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .storage import (
-    NEGATIONS, Store, content_key, normalize_wording, wording_equivalent,
+    NEGATIONS, Store, content_key, is_unaccepted_draft, normalize_wording, wording_equivalent,
 )
 
 PASS_ORDER = ("classify", "locate", "challenge")
@@ -216,15 +216,25 @@ def distill(store: Store, session: str) -> dict[str, Any]:
         if classify.unavailable is not None:
             report["unavailable"]["classify"] = classify.unavailable
         kind_label = "kind 未判定" if classify.unavailable is not None else card["kind"]
+        # r111: this list is what a person reads to judge what the session produced.
+        # A card whose whole provenance is an unaccepted model-written wording is
+        # not one of the session's conclusions, so its line says so in place; a
+        # conclusion's line keeps exactly the bytes it had before.
+        draft = is_unaccepted_draft(card)
         report["counts"][verdict["type"]] += 1
         report["cards"].append({
             "id": card["id"], "version": card["version"],
             "statement": card["statement"], "kind": card["kind"],
             "kind_status": "unavailable" if classify.unavailable is not None else "recorded",
             "verdict": verdict["type"], "of": verdict["of"], "reason": verdict["reason"],
+            "unaccepted_draft": draft,
             "challenges": challenges,
         })
-        line = f"[{DISTILL_LABELS[verdict['type']]}] {card['id']} v{card['version']} {kind_label}：{card['statement']}"
+        line = (
+            f"[{DISTILL_LABELS[verdict['type']]}] {card['id']} v{card['version']} {kind_label}"
+            + (" [未认可草稿]" if draft else "")
+            + f"：{card['statement']}"
+        )
         if verdict["of"]:
             line += f"（对 {verdict['of']}：{verdict['reason']}）"
         report["lines"].append(line)

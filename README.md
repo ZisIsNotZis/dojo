@@ -59,14 +59,31 @@ python3 -m dojo show idea-alias      # canonical ID plus redirect chain
 python3 -m dojo unmerge idea-alias --reason '复核后撤销'
 ```
 
-Natural-language discussion against a model endpoint is opt-in and is the only path that touches the network:
+Reading a story's knowledge chain back is four read-only views, and none of them writes to the library. The ledger they read is authored as text (`fixtures/comparison-ledger.json`); the `*.sqlite3` it becomes is gitignored, so a checkout builds its own:
+
+```sh
+# each run gets its own new directory, so a second run never touches the first one's library
+DEMO=$(mktemp -d)
+DB=$DEMO/ledger.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --report 2 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --proposal 5 --synthetic
+```
+
+`--context` reads back what the story has not yet checked for source independence; its `omitted_events` (`[5, 15, 16, 17]`) are current proposals the view could not expand, and each is readable as-is by `--comparison`. `--comparison 5` returns `comparison_status: checked` with `source_events: [3, 4]` — a recorded judgement that two receipts were compared, not a certification. `--report 2` returns the user's own words with `epistemic_status: user_report_not_independently_verified`. `--proposal 5` returns the proposal's `statement` and `state`; its `report_review` is empty in this library, and empty means "nothing to list here", not a clean bill. Built with `--revision`, the same library also shows the replaced state, where `--comparison 5` refuses (exit code 2) and names #27 as the version to read instead. The four views are mutually exclusive — one flag per call. [`docs/cli-guide.md`](docs/cli-guide.md) is the full walk, including what each refusal means.
+
+Live chat/discussion, inquiry tools and bounded knowledge rechecks are explicit network paths. The legacy discussion entry is:
 
 ```sh
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # must match the endpoint's registered id
 # then set DOJO_LLM_API_KEY in this shell from your endpoint's key store; the repo never holds it
-python3 -m dojo discuss            # zero forms, zero y/n prompts; writes only on agreement
+python3 -m dojo discuss            # zero forms, zero y/n prompts; on agreement it writes the conclusion
 python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
+python3 -m dojo list               # a version nobody accepted is kept as `unaccepted_draft: true`
 ```
 
 ## What it can do now
@@ -79,7 +96,7 @@ python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
 - **Independence guard on broadcast.** `broadcast` suppresses cards whose only independent source is the session that wrote them, and cards written by the session asking; suppressed cards are listed with the reason rather than silently dropped.
 - **Idempotent end-of-session passes.** `pipeline --session <id>` runs `classify → locate → challenge` once per card per revision; a re-run writes nothing, and every pass only proposes.
 - **Bounded prompt export.** `export --mode b` (shared goal, no seeds) or `--mode c --id …` (goal plus explicitly chosen candidates) with `--budget-chars` as a hard character cap; exports carry no actor or judge notes.
-- **Discussion that stores the price.** `discuss` asks four things per rule — situation, tension, cost, failure — with the author of each part recorded and the weakest part capping the grade (`合写` whenever any part was filled by the system).
+- **Discussion that retains the price and its source.** `discuss` asks four things per rule — situation, tension, cost, failure — and records the exact free-text answer beside its question and field key. Collected answers are not automatically mapped to candidate content or promoted to “the user's own words”: until that mapping exists, model-generated candidate fields remain `系统补`. Useful user contributions are retained in the trace, not certified by a nonempty reply.
 - **A host that answers instead of stalling.** It infers the parameters you did not state and writes their conditions, does the arithmetic it can, and hands off real computation as a `## 计算交接单` section that lands on disk as `<session dir>/compute-<id>-<turn>.md` for an external runner — it has no code execution and never claims to have run something.
 - **Bounded requests.** Retrieval brings page text back with caps of 1200 characters per excerpt and 6000 per session; reasoning level is `DOJO_LLM_REASONING` (default `medium`); one request times out at 60 s and `DOJO_LLM_TIMEOUT` accepts 5–600.
 - **Local trace of every session.** One JSON line per turn: your words, the host's answer, the candidate, the stance decision and its reason, token counts, failures. Default on, `--no-trace` removes it entirely, `--resume <trace>` continues the same session.
@@ -156,7 +173,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md). In short: this is a scope-disciplined
 - Candidate lifecycle with provenance, immutable versions, reversible merge and split; lexical retrieval with merge redirects; duplicate refusal.
 - Broadcast independence guard, session-end `classify → locate → challenge` pipeline, bounded B/C prompt export.
 - Three-act offline demo, offline comparison replay, frozen-material generator.
-- `discuss`: zero-structure natural-language loop, write on the turn agreement happens, local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
+- `discuss`: zero-structure natural-language loop; the accepted version becomes the card, and a version nobody accepted is kept as an `unaccepted_draft` (source `model_generated`/`unverified`, not `discussable`, so no other session receives it as material). Local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
 - K1 "the life of one dao": the loop runs over one real person's record (13 daos, 9 materials that could not be written into a dao, 1 candidate, 1 self-contradicting pair, 26 record checks, 0 promotions), plus a second library that is synthetic by construction and says so.
 - A completed `discuss` session can be exported as the probe note; the session, not the handwritten extraction, decides which parts are his, and the library refuses an extraction that claims an unpromoted part.
 - A standard-library test suite covering the CLI, store, retrieval, discussion, demo, pipeline and the K1 loop.

@@ -12,8 +12,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DAO = ROOT / "docs" / "dao"
-DEMO = DAO / "probe-demo"
+FIXTURE = ROOT / "fixtures" / "dao-note"
 SPEC = importlib.util.spec_from_file_location("dao_life", ROOT / "scripts" / "dao_life.py")
 dao_life = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(dao_life)
@@ -24,11 +23,11 @@ AT = "2026-10-23T22:00:00Z"
 class NoteIngestTests(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="dojo-note-"))
-        shutil.copy(DAO / "vocabulary.json", self.dir / "vocabulary.json")
+        shutil.copy(FIXTURE / "vocabulary.json", self.dir / "vocabulary.json")
         self.session = self.dir / "session"
         self.session.mkdir()
-        shutil.copy(DEMO / "note.md", self.session / "note.md")
-        shutil.copy(DEMO / "extraction.json", self.session / "extraction.json")
+        shutil.copy(FIXTURE / "note.md", self.session / "note.md")
+        shutil.copy(FIXTURE / "extraction.json", self.session / "extraction.json")
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -74,7 +73,9 @@ class NoteIngestTests(unittest.TestCase):
     def test_a_note_library_is_derived_not_copied(self):
         self.assertEqual(self.run_command(), 0)
         # 没有生成 episodes.json / daos.json：笔记是唯一的事实出处，不做第二份拷贝
-        self.assertEqual(self.written(), ["receipts.json", "道图.md"])
+        self.assertEqual(self.written(), ["history", "receipts.json", "道图.md"])
+        self.assertFalse((self.session / "episodes.json").exists())
+        self.assertFalse((self.session / "daos.json").exists())
 
     # --- refusals --------------------------------------------------------
     def assert_refused(self, fragment):

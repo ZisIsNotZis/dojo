@@ -56,16 +56,16 @@ class RecordedLunaCompareTests(unittest.TestCase):
 
     def test_public_compare_command_works_offline_and_full_flag_is_available(self):
         default = subprocess.run(
-            [sys.executable, "-m", "dojo", "compare"], cwd=ROOT,
-            text=True, capture_output=True, timeout=10,
+            [sys.executable, "-X", "utf8", "-m", "dojo", "compare"], cwd=ROOT,
+            text=True, encoding="utf-8", capture_output=True, timeout=10,
         )
         self.assertEqual(0, default.returncode, default.stderr)
         self.assertIn("离线回放", default.stdout)
         self.assertNotIn("源头回答全文中完整的", default.stdout)
 
         full = subprocess.run(
-            [sys.executable, "-m", "dojo", "compare", "--full"], cwd=ROOT,
-            text=True, capture_output=True, timeout=10,
+            [sys.executable, "-X", "utf8", "-m", "dojo", "compare", "--full"], cwd=ROOT,
+            text=True, encoding="utf-8", capture_output=True, timeout=10,
         )
         self.assertEqual(0, full.returncode, full.stderr)
         self.assertIn("目前不能把“重试次数改为 3", full.stdout)

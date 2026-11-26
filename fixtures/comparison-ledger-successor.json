@@ -1,0 +1,84 @@
+{
+ "layer": "fixture",
+ "about": "给 base 账本追加一版后续提议（事件 #5 -> #27）。用来演示「已替代」那一态：旧版会指向当前版。",
+ "not": "这版由 dojo 自己的 Knowledge.accept 写入，不是手写的替换标记；但内容仍是夹具作者编写的。",
+ "story": "0f272e5f34244b328df1c80edfdde3df",
+ "synthetic": true,
+ "events": [
+  {
+   "seq": 26,
+   "run": "64d5df887811458b9772aaefe38c46c1",
+   "kind": "start",
+   "at": "2026-11-26T04:52:36.410994+00:00",
+   "payload": {
+    "synthetic": true,
+    "story": "0f272e5f34244b328df1c80edfdde3df",
+    "continued_from": "2a4d189fefa34c97a65848ee6e2a82bc",
+    "model": "offline-fixture",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 0,
+    "request_budget": 0
+   }
+  },
+  {
+   "seq": 27,
+   "run": "64d5df887811458b9772aaefe38c46c1",
+   "kind": "knowledge_proposal",
+   "at": "2026-11-26T04:52:36.416798+00:00",
+   "payload": {
+    "proposal": {
+     "statement": "接手者先读用户原报告并打开所引正文，能看见总结省略的适用条件；这版把范围收窄到已保存原始报告、正文可读的账本。",
+     "kind": "descriptive",
+     "method": "induction",
+     "premises": [
+      {
+       "event": 3,
+       "quote": "能发现总结里省略的适用条件",
+       "role": "evidence"
+      },
+      {
+       "event": 4,
+       "quote": "也指出同一处条件遗漏",
+       "role": "evidence"
+      }
+     ],
+     "assumptions": [
+      "两位试读者面对同一个虚构任务"
+     ],
+     "conditions": [
+      "只适用于已保存原始报告且正文可读的账本"
+     ],
+     "alternatives": [
+      "只读模型总结，不打开正文时结论更弱"
+     ],
+     "falsifier": "若两份材料实为同一份转述，则失去第二处依据。",
+     "revises": 5
+    },
+    "synthetic": true,
+    "epistemic_status": "model_proposal_not_certified"
+   }
+  }
+ ],
+ "dependencies": [
+  [
+   27,
+   3,
+   "premise"
+  ],
+  [
+   27,
+   4,
+   "premise"
+  ]
+ ],
+ "revisions": [
+  [
+   5,
+   27,
+   "显式知识提议修订；不是判真"
+  ]
+ ],
+ "review_queue": []
+}

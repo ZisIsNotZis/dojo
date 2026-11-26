@@ -55,14 +55,31 @@ python3 -m dojo confirm life-01 \
 python3 -m dojo search '摩擦 持续 行为'
 ```
 
-逐条读命中的 `matched_terms`、条件、来源、unknowns 和 contradictions。分数只计算不同查询词命中数，不代表可信度。草稿/撤回状态不返回；不匹配就接受空结果，不要换词直到“搜出答案”。
+逐条读命中的 `matched_terms`、条件、来源、unknowns 和 contradictions。分数只计算不同查询词命中数，不代表可信度。没被接受的草稿、撤回状态不返回；但你自己认可过的措辞即使还停在 `draft` 也会返回——那种命中带 `accepted_at`（那一版措辞被接受的时间）。被挑战、以及接受之后又改过措辞的卡不返回：接受绑的是当时那一版措辞，改后那句没被接受。
 
-`search` 与 `broadcast` 是同一次词汇检索的两个出口，差别只在要不要跨会话材料：`search` 返回所有可讨论命中，`broadcast` 额外拒收两类卡，并把拒收原因列在 `suppressed` 里而不静默丢弃——全部独立性来源就是写它的那一个会话的卡（写它的会话无论记在来源组里，还是只记在卡上），以及 `--session` 指名的那个会话自己写的卡（一场会话不把自己的话当别人的佐证）。每条命中带 `independence`：`independence_groups` 列出几个互不相同的来源组，`sessions` 列出写过它的会话，`provenance_status` 是 `cross_session`／`single_session`／`unidentified` 三者之一（最后一种是来源组只有一个且查不到它是会话，例如 seed，只在结果里点名而不拒收）。这些只做报告，不参与排序：
+`accepted_at` 是**这一刻记录下来的时间**，不一定是同意发生的时间：从轨迹里补记一条接受，写的是补记那一刻，可能与当时相差数周。若补记方知道真正的同意时刻，命中和导出头会多带一个 `agreed_at`（与 `accepted_at` 并存，不替换它）；没有这一项就是“当时那一刻没记”，不要把它当成 `accepted_at`——也不要反过来把 `accepted_at` 当同意时刻。
+
+判断“有没有人接受过”只看 `accepted_at` 在不在，不要看 `status`，也不要看 `unaccepted_draft`：`discussable` 只说明主持人标了可讨论，而 `unaccepted_draft: true` 只是一个形状标记：整张卡只有一条来源、且那条来源的类型是模型生成（`model_generated`）。它不看有没有人接受，也不一定全覆盖——只有一条 `unknown` 来源的卡就不带它。不匹配就接受空结果，不要换词直到“搜出答案”。
+
+`search` 与 `broadcast` 是同一次词汇检索的两个出口，差别只在要不要跨会话材料：`search` 返回所有可讨论命中，`broadcast` 额外拒收两类卡，并把拒收原因列在 `suppressed` 里而不静默丢弃——全部独立性来源就是写它的那一个会话的卡（写它的会话无论记在来源组里，还是只记在卡上），以及 `--session` 指名的那个会话自己写的卡（一场会话不把自己的话当别人的佐证）。`broadcast` 的每条命中带 `independence`：`independence_groups` 列出几个互不相同的来源，`named_groups` 只列来源上自己填的组名，`sessions` 列出写过它的会话，`provenance_status` 是 `cross_session`／`single_session`／`unidentified` 三者之一（最后一种是来源组只有一个且查不到它是会话，例如 seed，只在结果里点名而不拒收）。`search` 的命中**不带** `independence`：它是「有哪些可讨论的卡」这一面，不做独立性判断，所以从它读不出某张卡是不是一个会话自己的话。今天只有 `broadcast` 给这个块（`show` 也不带）。这些只做报告，不参与排序：
 
 ```sh
 python3 -m dojo broadcast '摩擦 持续 行为' --session life-anon-1
 python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 全部来源就是写它的那一个会话的卡会被拒
 ```
+
+`independence_groups` 数的是判决实际用到的来源，不是核验过的独立来源，也不是人数。一条来源算一处，按这几条决定它算在哪：
+
+1. 来源自己填了 `independence_group`，就按这个名字算（自填组名的清单另在 `named_groups`）。
+2. 来源没填组名，且它是在**同一次写入**里跟一个具名来源一起交上来的，就规到那一次的组名下——换了登记方式，没换见证人，不算第二处。
+3. 来源没填组名、同一次写入里也没有具名来源，才归给 `attach-source` 那个会话的 id。
+4. 会话 id 永远不会被加到一条已经填了组名的来源上（那会把两份各自具名的材料压成一份）。
+
+所以同一个见证人把同一份材料用两种登记方式交进来，只要两种方式在同一次写入里，就仍是一处。两个不同的组名仍然算两处——那是两个人或两份材料各自具名。组名和写它的会话 id 对不上时状态是 `unidentified`（例如 seed），而 `broadcast` 与 `export` 在独立性这一维上只拒 `single_session`，所以一张单会话的卡也能过闸，带着 `independent=false` 出去。
+
+这个数数的是**有几次各自具名的申报**，不是有几个独立见证人。界限在这里：同一模型的两次不同轮次各自填了组名，会印成两处独立来源——判据不看是谁生成的，只看向它申报了几次。（按来源类型把模型生成的两轮并成一处，会把「同一模型在不同处境下产生的两份材料」也压成一处，那是用生成者的身份去否定作者的申报，所以没有这么做。）因此要判断「是不是真有两次互不知情的独立确认」，不能只看这个数，得回到 `sources` 里各条的 `type`、`independence_group` 和进入时间上。
+
+`export` 除了独立性，还要求被选中的卡当前 `status` 是 `discussable`：只是被接受、但还没标可讨论的 `draft` 会被拒（`selected candidate is not currently discussable`）。这与检索面不同——检索会返回「自己认可过的 `draft`」，出口不会。两处要求不同是有意的：能搜到一张卡，不等于它能作为跨会话材料交出去。
 
 ## 会话末管线（`pipeline`）
 
@@ -132,3 +149,125 @@ unset DOJO_DB DOJO_EXPORTS WORK
 ```
 
 这段清理只在路径符合本指南的临时目录名前缀且其中存在本轮数据库时执行。用户可读的中文交互故事运行 `python3 -m dojo demo` 或 `sh scripts/demo.sh`；后台 JSON 存储回归走查（含 split、人工确认 merge/unmerge）改为 `sh scripts/storage-smoke.sh`。
+
+## 回到已有探究：先读原记录，再决定怎么续谈
+
+```sh
+python3 -m dojo --db "$DB" stories
+python3 -m dojo --db "$DB" stories "$STORY" --context
+python3 -m dojo --db "$DB" inquire --resume "$STORY"
+```
+
+`DB` 是已有探究库的路径；`STORY` 取自第一条命令输出的 `story` 字段。前两条只读，不调用模型；第三条在你输入后向配置的模型端点发送上下文。`--context` 展示有事件号的部分续谈候选原文，不是全量账本，也不是对最终模型上下文的逐字预览。先按 `epistemic_status` 区分用户报告、模型解释与工具回执，再选择一件可核验的事；用户报告和模型说法都不等于独立证实。`recorded_at` 是 Dojo 记录时刻，不是原文里的外部时刻；`missing` 或 `invalid` 只说时刻不可用，原记录仍在。
+
+`--context` 另有一块 `story_coverage`，回答接手时的第一个问题「下一步该核什么」：`unopened_search_sources` 列出**本故事实际检索回执里出现过、但账本里一次都没尝试读取**的 URL（最多四条，其余只给 `unopened_omitted` 计数）。已有 `read_source` 回执的 URL 不列为未读；回执本身不等于读到了正文。同一 URL 按去掉 `#片段` 后比较；只统计最近十二个工具回执内的成功检索。`latest_record_at` 只是本故事账本最新一条记录的写入时刻：它旧只说明这份视图旧，不说明外部正文旧。这个块**不**证明某 URL 现在可访问、正文没变、或与问题相关；没被列出来也不等于检索没返回过它。
+
+可见正文之后同一 URL 的读取失败仍看 `source_read_failures`。如果本视图没展示正文，`source_read_failures_without_visible_body` 会列出同一故事最近十二条工具回执中，同时有成功检索条目和明确连接、格式或 HTTP 读取失败的 URL（最多两条，另报省略数）。跟着 `event`、`read_url`、`error_kind` 看失败依据；`listed_source.search_event` 和 URL 是检索依据，可能比失败更晚。两条各有账本时刻及 `recorded_at_status`；缺失或无效时不补时。拒绝执行、未获读取许可和没有尝试都不报成读取失败。比如格式不支持时先找可读官方文本，不要把它当成正文过期，也无需当作从未核过的检索条目重新开始。
+
+回到已有调查，先看 `story_coverage.missing_independence.items` 的首行：`gap` 说缺什么，`have` 列所引事件号、URL 和状态，`next_check` 给下一步。比如唯一所引回执是 `source_type` 失败，先找可读的官方正文；如果已有一份可读材料，就去找独立形成且能核对同一说法的第二份材料。这个排序只看未被替代的知识提议所引的本故事账本事件，不限于本页恢复的候选正文。同一优先级内，待核对或有冲突的结论排在已记录支持比较的结论前面。最多五行，`omitted` 计全部省略结论；`omitted_pending` 计其中仍待核对或有冲突的结论；`omitted_unchecked` 只数其中**完全没有比较记录**（`open`）的条数；`omitted_events` 按事件号点名被省略的结论（最多四条，其余由 `omitted_events_hidden` 计数）。点名不等于看过它们，也不改变任何比较状态。模型续谈另有字符预算，省略计数覆盖两层截断，所列事件号保留原排序中最靠前的省略项。没有可排序提议时不出块。
+
+这是核对顺序，不是真假判定。用户报告、模型说法、检索和计算回执不当作独立的来源正文。同一 URL（去掉 `#片段`）只算一份；`independent` / `two_distinct_materials` 只指提议引用了两份不同 URL 的正文，没有明确比较记录时仍是 `comparison_status: open`，要核对是否独立形成、是否各自支持。不能解析或归属当前故事的前提标 `unknown`，不冒充零依据。每行的 `freshness` 也是 `unknown`：失败回执、检索结果、入账时刻都不能证明外部材料新旧或有效性。
+
+实际比较过两份正文后，再把结果明确记到这一版。以下命令**写入**指定的现有库，不联网、不调用模型；`PROPOSAL` 是 `conclusion_event`，`BASIS_READ` 是该版已作为依据引用的正文事件号，`OTHER_READ` 是另一份正文的回执号，不是 URL 或检索号。
+
+```sh
+python3 -m dojo --db "$DB" compare-sources "$STORY" "$PROPOSAL" "$BASIS_READ" "$OTHER_READ" \
+  --relation supports_independently --reason '写明两份材料各自如何形成，以及在哪个范围内支持本版说法'
+```
+
+- `supports_independently` 要求本版已引两份成功读取、不同 URL（去片段）的同故事正文。再次用 `stories "$STORY" --context`，本版显示 `checked`，已满足的独立性核对不再派回（无其他缺口时 `next_check: null`）。这是记录比较者的判断，不是程序认证；修订后不继承已核状态。
+- 发现反向正文时用 `--relation conflicts`，理由写明哪处不一致、需核哪项原始记录。另一回执可以是本版已经引用的正文，也可以是版本之后才读到、尚未引用的正文；记录进入现有复核队列。`contested` 优先显示冲突，`next_check` 指向两处回执，反向回执不计作第二处支撑。保留同一陈述且仍引用这两个回执的后版继续显示该冲突；换了陈述或比较对象，要就新内容重新核对。`comparisons` 最多展开最新四条，给出原目标版本、两回执号、通知号及比较理由。有冲突时只展示冲突比较；超出四条，`comparisons_omitted` 计其余冲突，`next_check` 仍先指向最新一对，再给省略条数及最近一条被省略冲突的通知号和两回执号。更早的只计数；未展开不是已解决。只有支持比较时，省略支持条目不会产生冲突提示。
+- 普通复核请求和自由文本不会自动署上以上标签。没有 `comparison` 的旧库**不迁移也依然可读**，只读入口不会写库，也不需要重建。只对明确的合成故事在写入及读回时保留 `--synthetic`。
+
+块里的两个计数容易被误读，说明一次：`decoded_events_in_this_view` 是这份视图解码出的事件总数（用户报告、模型答复、工具回执都算），**不是**读取次数；`visible_source_bodies` 才是本次候选里有可见正文的条数；`tool_receipts_in_this_view` 只数工具回执。这三个数各说各的，不要用一个去推另一个。
+
+### 回查一条提议的比较状态（`--comparison`）
+
+`--comparison` 是只读入口：给一个提议的事件号，看它当前那一版记了什么比较。不调用模型，不写库；读完库的字节不变。
+
+仓库里只有账本的内容（`fixtures/comparison-ledger.json`），`*.sqlite3` 被忽略规则挡在版本库外，所以检出里没有现成的库文件。第一步先把它造出来：
+
+```sh
+python3 -B fixtures/build_comparison_ledger.py /tmp/dojo-ledger.sqlite3
+```
+
+这个构建器不联网、不调用模型，把场景说明写成一份合成探究库；目标路径已存在就拒绝，换个名字或先删掉。下面每段都自带 `DB` 和 `STORY` 的取值，单独复制一段也能跑。
+
+```sh
+DB=/tmp/dojo-ledger.sqlite3
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 23 --synthetic
+```
+
+第一段输出里 `comparison_status` 是 `checked`，`comparisons` 的 `source_events` 是两处正文回执号（`[3, 4]`）；第二段的 #23 是 `open`——它引了两处正文，但**没有**比较记录，`next_check` 就是要核的那一件事。`checked` 只说明比较者记下了判断，不是程序认证；`open` 也不是「被证伪」，只是没有人记过这次核对。合成账本必须带 `--synthetic`，否则入口会说「没有可见的故事」——那不是库坏了，是默认视图不列合成记录。`$STORY` 这个 id 变化时不用改命令：上面那行 `python3 -c` 从 `stories --synthetic` 的 `story` 字段里取；`EVENT` 同理，取 `knowledge --synthetic` 的 `event` 字段。
+
+```sh
+DB=/tmp/dojo-ledger.sqlite3
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
+```
+
+`story_coverage.missing_independence.omitted_events` 点名的号（这份库里是 `[5, 15, 16, 17]`）都是本视图没展开的**当前**提议，能直接喂给 `--comparison`，不必先去读别的地方。留意 `items` 里显示的那几条全是 `open`，而省略的四个号全是 `checked`：被省略不是因为没核过，是视图放不下。
+
+要看到「已替代」那一态，再造一份带后续版本的库：
+
+```sh
+python3 -B fixtures/build_comparison_ledger.py /tmp/dojo-ledger-revised.sqlite3 --revision
+DB=/tmp/dojo-ledger-revised.sqlite3
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic || echo "（退出码 $? 是预期：这一版已被替代）"
+python3 -m dojo --db "$DB" stories "$STORY" --comparison 27 --synthetic
+```
+
+旧版这回不返回比较对象（退出码 2），提示里写着当前版的号：`事件 #5 的结论已被事件 #27 替代……当前版请用 stories STORY --comparison 27 查看`。照它再读 `--comparison 27` 就是当前版，状态是 `open`（新版还没有比较记录）。这条版本链是 `Knowledge.accept(revises=…)` 写进去的，不是手塞的标记。
+
+另外三种否定各说各的：不存在的事件号、属于其他故事的事件号、本故事里不是提议的事件号，各有自己的提示；读那句提示，别用退出码去猜是哪一种——三种都是 2，退出码分不开它们。`--comparison` 与 `--context`、`--report`、`--proposal` 互斥。
+
+### 读回一条用户报告与一条提议（`--report`、`--proposal`）
+
+`--comparison` 看的是「两份正文比过没有」。往回退一步还有两个只读入口：`--report` 读本故事一条用户报告的原话，`--proposal` 读一条提议的正文。两个都不调用模型，不写库。
+
+```sh
+DB=/tmp/dojo-ledger-read.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories "$STORY" --report 2 --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --proposal 5 --synthetic
+```
+
+`--report 2` 返回那条报告本身：`text` 是原话，`epistemic_status` 是 `user_report_not_independently_verified`，`attribution` 说它属于当前故事，`story_scope` 是 `same_story`。这条回复不是独立证实，`recorded_at` 只是 Dojo 记录时刻。
+
+`--proposal 5` 返回 `statement`、`state` 和 `report_review`。**这份仓内账本里 `report_review` 是空的，这是它的真实取值**：那一块列的是「本故事在这条提议之后又读到的用户报告」，本账本只有一条用户报告（#2），它比提议 #5 早，没有可列的。空只说明视图没有可列项，不是「核过没问题」，也不表示提议没引用任何报告。
+
+`--proposal` 不返回提议引用了哪条报告——它没有 `premises` 字段。要看引用关系，得读 `knowledge` 列表里的 `proposal.premises`，再拿那条报告号去 `--report` 原文：
+
+```sh
+python3 -m dojo --db "$DB" knowledge --synthetic 2>/dev/null \
+  | python3 -c 'import json,sys;print(json.dumps([x["proposal"]["premises"] for x in json.load(sys.stdin) if x["event"]==5][0], ensure_ascii=False))'
+```
+
+这一段列出 #5 的三条前提，头一条是 `{"event": 2, "quote": "希望后来者能看见原始报告", "role": "assumption"}`。`event: 2` 就是上一条命令读的那份报告，`quote` 在那份报告的 `text` 里逐字出现——两段命令可以互相核对，这就是「提议引用报告」在这个仓里唯一走得通的读法。`knowledge` 的那句「本库共 9 条知识提议记录……」写在标准错误，不混进 JSON；`2>/dev/null` 只是让终端干净，不影响结果。
+
+没有 `replacement` 的入口都不跟版本链。`--report` 和 `--proposal` 只返回手里那一条：一条提议被替代后，`--proposal` 照旧返回它并标 `state: superseded`，要看当前版得按版本链走下一步，也就是上一节 `--comparison` 用的那种读法。
+
+四个视图互斥：`--context`、`--report`、`--proposal`、`--comparison` 一次只能给一个，同时给两个会被参数解析挡下（退出码 2，给的是参数用法提示，不是本页讲的数据提示）。合成账本都要带 `--synthetic`，否则入口会说没有可见的记录——那不是库坏了。读不到时提示各不相同：报告不存在或不是用户报告，说「没有可见的用户报告」；提议不存在或不是知识提议，说「没有可见的知识提议」；属于其他故事另说。退出码都是 2，别用退出码去猜是哪一种。
+
+### 从检出照着走一遍：模拟材料与真实材料各自证明什么
+
+```sh
+DB=/tmp/dojo-ledger-walk.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
+STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
+python3 -m dojo --db "$DB" stories --synthetic
+python3 -m dojo --db "$DB" knowledge --synthetic
+python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
+python3 -B scripts/dao_life.py docs/dao/person-dojo --check
+python3 -B scripts/dao_life.py docs/dao/person-dojo --compare docs/dao/demo-strangers --check
+```
+
+前三组（先造库那几行）用的是**模拟材料**：每条记录都标着 `synthetic`，全部由夹具作者编写。它们证明的是入口本身说得清：故事、提议、候选正文能分开，四态（核过／没核／被替代／不存在或不是提议）各有名字，省略项按事件号点名。它们**不**证明任何一条研究结论，也不证明独立来源真的独立——库里那两份「材料」是同一支笔写的场景。
+
+后两条用的是**一个人的真实材料**（`docs/dao/person-dojo`）。它证明的是这张库能把出处、修订和未核都印在面上：`--check` 会印出 13 条道里 3 条落地有观察、10 条「未跑」，另有 9 条材料写不成道被拒收；`--compare` 与 `docs/dao/demo-strangers`（模拟材料）逐对比 13 对，共有张力 0 对，第二个来源带来的张力是「开始摩擦」。它证明的**不是**共识，也**不是**第二个人的道理：库里只有 1 个来源 id、晋升 0 条，「合写 13」是一个状态，不是赞许。`--check` 不写盘。
+
+检出里 `docs/evidence/**` 下的 `*.sqlite3` 多是合成会话的账本。碰到不是探究库的 SQLite（例如 `docs/evidence/m1.7-caps/live-store.sqlite3`），`stories`、`questions`、`knowledge` 会说明它是另一种库、列表为空说的是「不是那种库」而不是「库里没有」；三个入口都只读，不改文件。

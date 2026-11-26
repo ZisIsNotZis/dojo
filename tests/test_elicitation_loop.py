@@ -1,17 +1,19 @@
 """四句问法接进讨论：写在同意那一轮仍然立刻发生，之后才问，问不出来就不填。
 
 这一支测的是「接进去之后纪律没丢」：同一个写入规则、同一份轨迹、没有表单；
-以及一场提前结束的会话只留下它该留下的那几件。
+以及一场提前结束的会话只留下实际收集的原话；收集不等于候选字段已锚定。
 """
 
 import io
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from dojo.discuss import run_discuss
+from dojo.discuss import _load_resume_trace, run_discuss
 from dojo.elicit import QUESTIONS
+from dojo.live import MAX_DISCUSS_USER_TURN_CHARS
 from dojo.storage import Store
 
 CONCLUSION = {
@@ -98,12 +100,14 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(["情境", "张力", "代价", "失效"], [row["part"] for row in events])
         for row in events:
             self.assertIn(QUESTIONS[row["part"]]["ask"], output)
-            self.assertTrue(row["promoted"])
+            self.assertFalse(row["promoted"])
+            self.assertTrue(row["collected"])
         end = self.elicitation_end()
-        self.assertEqual(["情境", "张力", "代价", "失效"], end["promoted"])
+        self.assertEqual([], end["promoted"])
+        self.assertEqual(["情境", "张力", "代价", "失效"], end["collected"])
         self.assertEqual(4, end["turns"])
-        self.assertEqual("他的", end["authorship"])
-        self.assertEqual("他的（六件都来自他这次说的）", end["line"])
+        self.assertEqual("系统的", end["authorship"])
+        self.assertEqual("系统的（六件都是系统补的）", end["line"])
 
     def test_the_conclusion_is_written_at_the_accept_turn_before_any_question(self):
         seen = []
@@ -127,15 +131,16 @@ class ElicitationLoopTests(unittest.TestCase):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)
         end = self.elicitation_end()
-        self.assertEqual(["情境", "张力"], end["promoted"])
+        self.assertEqual([], end["promoted"])
+        self.assertEqual(["情境", "张力"], end["collected"])
         self.assertEqual([], end["supplied"])
         self.assertEqual(3, end["turns"])  # 情境 1 轮、张力 1 轮、代价第 1 轮就 EOF
-        self.assertEqual("他的原话", end["part_sources"]["situation"])
-        self.assertEqual("他的原话", end["part_sources"]["tension"])
+        self.assertEqual("系统补", end["part_sources"]["situation"])
+        self.assertEqual("系统补", end["part_sources"]["tension"])
         self.assertEqual("系统补", end["part_sources"]["price"])
         self.assertEqual("系统补", end["part_sources"]["off"])
-        self.assertEqual("合写", end["authorship"])
-        self.assertIn("系统补了 代价、失效", end["line"])
+        self.assertEqual("系统的", end["authorship"])
+        self.assertEqual(set(end["part_sources"]), set(end["unanchored"]))
 
     def test_nothing_is_filled_when_the_person_answers_nothing(self):
         code, _ = self.run_session(["讲一条做法", "对", "", "", "", "", "", "", "", ""])
@@ -144,19 +149,21 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual([], end["promoted"])
         self.assertEqual(["情境", "张力", "代价", "失效"], end["supplied"])
         self.assertEqual(8, end["turns"])
-        self.assertEqual("合写", end["authorship"])
+        self.assertEqual("系统的", end["authorship"])
         self.assertEqual(1, len(self.store.list_candidates()), "问不出来时也不能多出一条结论")
 
-    def test_each_part_records_the_question_his_answer_and_the_promotion(self):
+    def test_each_part_records_the_question_and_raw_answer_without_promotion(self):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "", "", "", "", "", ""])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         first = events[0]
         self.assertEqual("情境", first["part"])
+        self.assertEqual("situation", first["field"])
         self.assertEqual(1, first["turn"])
         self.assertEqual(QUESTIONS["情境"]["ask"], first["question"])
         self.assertEqual("上次是把一套检查交给别人的时候", first["answer"])
-        self.assertTrue(first["promoted"])
+        self.assertFalse(first["promoted"])
+        self.assertTrue(first["collected"])
         follow_up = [row for row in events if row["part"] == "张力" and row["turn"] == 2][0]
         self.assertEqual(QUESTIONS["张力"]["follow_ups"]["none"], follow_up["question"])
         self.assertFalse(follow_up["promoted"])
@@ -176,13 +183,153 @@ class ElicitationLoopTests(unittest.TestCase):
             self.assertNotIn(forbidden, output)
 
     def test_a_resumed_trace_knows_the_questions_already_ran(self):
-        from dojo.discuss import _load_resume_trace
-
         self.run_session(["讲一条做法", "对", "上次是这样", "少了判断", "", "", "", "", ""])
         path = next((self.root / "sessions").glob("*.jsonl"))
         state = _load_resume_trace(path)
         self.assertTrue(state["elicitation_done"])
-        self.assertEqual(["情境", "张力"], state["elicitation_promoted"])
+        self.assertEqual([], state["elicitation_promoted"])
+        self.assertEqual(["情境", "张力"], state["elicitation_collected"])
+
+    def test_unrelated_and_useful_answers_are_collected_not_candidate_sources(self):
+        answers = [
+            "  今天晚饭吃面条，与这个问题完全无关。  ",
+            "要么把持续检查交给系统，要么留住自己每次判断的机会，不能同时拿满。",
+            "昨天上线时，我为了复核系统回执多花了半小时。",
+            "上周系统拿不到现场数据时就该停，不能继续自动检查。",
+        ]
+        code, _ = self.run_session(["讲一条做法", "对", *answers])
+        self.assertEqual(0, code)
+        events = self.elicitation_events()
+        self.assertEqual(answers, [event["answer"] for event in events])
+        self.assertEqual(["situation", "tension", "price", "off"], [event["field"] for event in events])
+        self.assertTrue(all(event["collected"] for event in events))
+        self.assertFalse(any(event["promoted"] for event in events))
+        end = self.elicitation_end()
+        self.assertEqual([], end["promoted"])
+        self.assertEqual(["情境", "张力", "代价", "失效"], end["collected"])
+        self.assertTrue(all(source == "系统补" for source in end["part_sources"].values()))
+        self.assertEqual("系统的", end["authorship"])
+        candidate = self.store.show(end["entry"])["candidate"]
+        self.assertEqual(CONCLUSION["statement"], candidate["statement"])
+        self.assertTrue(all(source["type"] == "unknown" for source in candidate["sources"]))
+        self.assertTrue(all(source["verification"] == "unknown" for source in candidate["sources"]))
+
+    def test_bounded_raw_answer_is_not_silently_truncated_at_4000(self):
+        answer = "  " + "经" * (MAX_DISCUSS_USER_TURN_CHARS - 4) + "  "
+        self.assertLessEqual(len(answer), MAX_DISCUSS_USER_TURN_CHARS)
+        self.run_session(["讲一条做法", "对", answer])
+        event = self.elicitation_events()[0]
+        self.assertEqual(answer, event["answer"])
+        self.assertTrue(event["collected"])
+        self.assertFalse(event["promoted"])
+
+    def test_oversized_answer_is_explicitly_rejected_without_partial_collection(self):
+        oversized = "超" * (MAX_DISCUSS_USER_TURN_CHARS + 1)
+        code, output = self.run_session(["讲一条做法", "对", oversized, "一次有效长度的原话"])
+        self.assertEqual(0, code)
+        self.assertIn("未收录原文，也未截断保存", output)
+        events = self.elicitation_events()
+        rejected, collected = events[:2]
+        self.assertIsNone(rejected["answer"])
+        self.assertEqual("user_turn_too_large", rejected["error"])
+        self.assertEqual(len(oversized), rejected["answer_chars"])
+        self.assertFalse(rejected["collected"])
+        self.assertFalse(rejected["promoted"])
+        self.assertEqual("一次有效长度的原话", collected["answer"])
+        self.assertEqual(2, collected["turn"])
+        self.assertNotIn(oversized[:4000], json.dumps(self.trace(), ensure_ascii=False))
+
+    def test_legacy_promotions_do_not_become_resumed_authorship_guarantees(self):
+        self.run_session(["讲一条做法", "对", "今天晚饭吃面条，与这个问题完全无关。"])
+        path = next((self.root / "sessions").glob("*.jsonl"))
+        records = self.trace()
+        for row in records:
+            if row.get("event") == "elicitation":
+                row.pop("collected", None)
+                row["promoted"] = row["reading"] == "answer"
+            if row.get("event") == "session_end":
+                summary = row["elicitation"]
+                summary.pop("collected", None)
+                summary["promoted"] = ["情境", "张力", "代价", "失效"]
+                summary["part_sources"] = {key: "他的原话" for key in summary["part_sources"]}
+                summary["authorship"] = "他的"
+        path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in records), encoding="utf-8")
+        original_bytes = path.read_bytes()
+        state = _load_resume_trace(path)
+        self.assertEqual(original_bytes, path.read_bytes())
+        self.assertTrue(state["elicitation_done"])
+        self.assertEqual([], state["elicitation_promoted"])
+        self.assertEqual(["情境"], state["elicitation_collected"])
+        output = io.StringIO()
+        self.assertEqual(0, run_discuss(
+            self.store, client=FakeClient([]), resume=path,
+            read_line=read_lines([]), output=output,
+        ))
+        self.assertNotIn(QUESTIONS["情境"]["ask"], output.getvalue())
+        self.assertTrue(path.read_bytes().startswith(original_bytes))
+        end = self.elicitation_end()
+        self.assertEqual([], end["promoted"])
+        self.assertEqual(["情境"], end["collected"])
+        self.assertEqual("系统的", end["authorship"])
+        self.assertTrue(all(source == "系统补" for source in end["part_sources"].values()))
+
+    def test_the_accepting_line_s_moment_reaches_the_ledger(self):
+        """r1638: the live conversation also states *when* it was agreed, not just when written.
+
+        `record_acceptance` used to carry only the write time, so an acceptance agreed
+        before a long model call dated the reply. The turn now keeps the moment the
+        user's line arrived and hands it to the writer. The clock is driven here so the
+        two facts are forced apart -- inside one second they would compare equal and the
+        test could not tell "used the arrival" from "used the write time".
+        """
+        from unittest.mock import patch
+
+        ticks = iter(range(200))
+        base = datetime(2026, 10, 17, 22, 52, 0, tzinfo=timezone.utc)
+        real = datetime
+
+        class Clock(real):
+            @classmethod
+            def now(cls, tz=None):
+                return base + timedelta(seconds=10 * next(ticks))
+
+        output = io.StringIO()
+        with patch("dojo.discuss.datetime", Clock):
+            code = run_discuss(
+                self.store, client=FakeClient(TWO_TURNS), read_line=read_lines(["讲一条做法", "对"]),
+                output=output, environ={}, no_profile=True,
+            )
+        self.assertEqual(0, code)
+        card = self.store.list_candidates()[0]["id"]
+        event = [e for e in self.store.history(card)["events"] if e["event"] == "wording_accepted"][-1]
+        self.assertIn("agreed_at", event["details"],
+                      "the conversation route must state the moment it agreed, not only when it wrote")
+        agreed = event["details"]["agreed_at"]
+        basis = self.store.time_basis(card)
+        self.assertEqual(agreed, basis["agreed_at"])
+        # The discriminating fact is the order, not a particular tick: a writer that
+        # stamped the write time would have produced two equal strings, which is exactly
+        # the state this test has to be able to call out. Both values are ticks of the
+        # driven clock, so the comparison is on a clock this test owns.
+        self.assertLess(agreed, basis["accepted_at"],
+                        "the agreement happened while the user was typing, before the write")
+        self.assertEqual(0, (datetime.fromisoformat(agreed) - base).seconds % 10,
+                         "the moment came from this test's clock, not the host's")
+
+    def test_legacy_event_promotions_without_summary_are_also_untrusted(self):
+        self.run_session(["讲一条做法", "对", "真实的回答材料"])
+        path = next((self.root / "sessions").glob("*.jsonl"))
+        records = self.trace()
+        for row in records:
+            if row.get("event") == "session_end":
+                row.pop("elicitation", None)
+            elif row.get("event") == "elicitation":
+                row.pop("collected", None)
+                row["promoted"] = row["reading"] == "answer"
+        path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in records), encoding="utf-8")
+        state = _load_resume_trace(path)
+        self.assertEqual([], state["elicitation_promoted"])
+        self.assertEqual(["情境"], state["elicitation_collected"])
 
 
 if __name__ == "__main__":
