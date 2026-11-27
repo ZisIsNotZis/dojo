@@ -49,7 +49,7 @@ class TheEntryPointRuns(unittest.TestCase):
         for name in ("dojo", "docs", "scripts"):
             shutil.copytree(ROOT / name, work / name)
         source = (work / "dojo" / "discuss.py").read_text(encoding="utf-8")
-        stripped = source.replace('print("\\n主持人> " + SHAPE, file=output)\n', "")
+        stripped = source.replace('print("\\n主持人> " + shape_text(trace_is_open), file=output)\n', "")
         self.assertNotEqual(source, stripped, "the shape print was not found to remove")
         (work / "dojo" / "discuss.py").write_text(stripped, encoding="utf-8")
         copy_entry = work / "docs" / "evidence" / "2026-11-27-entry-shape" / "verify.py"

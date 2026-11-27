@@ -184,6 +184,32 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertNotIn("合写", block,
                          "the block promises 合写, which this entry never records")
 
+    def test_the_shape_says_what_happens_only_when_the_session_keeps_a_trace(self):
+        """With --no-trace the opening says nothing is kept; the block must agree."""
+        answers = ["上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"]
+        output = io.StringIO()
+        code = run_discuss(
+            self.store,
+            client=FakeClient(TWO_TURNS),
+            read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
+            output=output,
+            no_trace=True,
+        )
+        self.assertEqual(0, code)
+        text = output.getvalue()
+        self.assertIn("会话原文轨迹已关闭", text)
+        block = None
+        first_q = text.find(QUESTIONS["情境"]["ask"])
+        if first_q > 0:
+            head = text[:first_q]
+            marker = head.rfind("主持人> ")
+            block = head[head.rfind("主持人> ", 0, marker) + len("主持人> "):marker]
+        self.assertIsNotNone(block, "the shape was never printed")
+        self.assertNotIn("会留在本场记录", block,
+                         "the shape promises retention in a session that keeps no trace")
+        self.assertIn("不保存原文", block,
+                      "the shape does not say the transcript is off")
+
     def test_an_early_end_leaves_exactly_the_parts_it_should(self):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)

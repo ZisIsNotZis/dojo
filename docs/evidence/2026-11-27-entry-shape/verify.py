@@ -62,7 +62,7 @@ def read_lines(lines):
     return read_line
 
 
-def session_output(answers=("", "", "", "")):
+def session_output(answers=("", "", "", ""), no_trace=False):
     """Run the real entry. `answers` is what he types at the four parts."""
     temp = tempfile.TemporaryDirectory()
     root = Path(temp.name)
@@ -75,6 +75,7 @@ def session_output(answers=("", "", "", "")):
                                result("那我们把它写成这一条。", CONCLUSION, user_stance="accept")]),
             read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
             output=out,
+            no_trace=no_trace,
         )
         recorded = None
         sessions = sorted((root / "sessions").glob("*.jsonl")) if (root / "sessions").is_dir() else []
@@ -118,6 +119,10 @@ def main() -> int:
     # The same entry when he answers all four: the block claims his words stay in the
     # session but the card still credits the system. Both halves have to be true.
     code_answered, text_answered, recorded_answered = session_output(ALL_FOUR)
+    # And with --no-trace: the opening says the transcript is off, so the block must not
+    # then promise his words are kept. This is the second receipt's arm.
+    code_off, text_off, recorded_off = session_output(ALL_FOUR, no_trace=True)
+    block_off = shape_block(text_off)
     if code != 0:
         print("FAIL  入口没有正常结束（rc=%d）" % code, file=sys.stderr)
         return 1
@@ -146,6 +151,11 @@ def main() -> int:
         "答完四件后卡片仍记系统所写": answered_line.startswith("系统的"),
         "答完四件后原文仍留在轨迹里": bool((recorded_answered or {}).get("collected")),
         "全不答也不会卡住": code_answered == 0 and code == 0,
+        # Retention off: no trace on disk, and the block has to say so instead of
+        # repeating the promise the opening just contradicted.
+        "关记录时没有轨迹": recorded_off is None and code_off == 0,
+        "关记录时不许诺保存原文": block_off is not None and "会留在本场记录" not in block_off,
+        "关记录时说清楚原文不存": block_off is not None and "不保存原文" in block_off,
     })
     print(json.dumps({"exit_code": code, "shape_block": block,
                       "chars": len(block), "checks": checks,
