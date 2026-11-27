@@ -570,7 +570,14 @@ def main() -> int:
           bool(ending) and "桌上仍是" in ending[0]
           and "没有人认可过" not in ending[0], ending[0] if ending else repeat_screen[-400:])
 
-    repeated_trace = sorted((early_root / "sessions").glob("*.jsonl"))[-1]
+    # By content, not by name: session ids are random, so "the last file" is whichever
+    # uuid sorts last. This picked the wrong session on a clean export and the check
+    # failed there while passing in the working tree.
+    repeated_trace = next(
+        path for path in (early_root / "sessions").glob("*.jsonl")
+        if any(json.loads(line).get("event") == "handout"
+               for line in path.read_text(encoding="utf-8").splitlines())
+    )
     repeated_shown = cli("transcript", str(repeated_trace))
     check("J4 回看这样说时也不说「没有人认可过」",
           repeated_shown.returncode == 0 and "没有人认可过" not in repeated_shown.stdout
