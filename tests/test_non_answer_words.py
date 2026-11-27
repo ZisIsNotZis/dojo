@@ -53,7 +53,8 @@ class SoftEndingsAreStillNonAnswers(unittest.TestCase):
         """
         for phrase in ("我不知道", "我也不清楚", "我不太清楚", "我忘了", "我记不清了",
                        "我也说不好", "不太清楚", "说不清楚", "记不清了", "没印象",
-                       "说不上来", "我不确定", "我拿不准", "我真的不知道", "我有点不清楚"):
+                       "说不上来", "我不确定", "我拿不准", "我真的不知道", "我有点不清楚",
+                       "我一点都不清楚", "我一点也不确定", "我没有", "我没什么", "都行"):
             with self.subTest(phrase=phrase):
                 self.assertEqual("none", classify_answer(phrase), phrase)
 
@@ -62,7 +63,9 @@ class SoftEndingsAreStillNonAnswers(unittest.TestCase):
         for phrase in ("我不太清楚别人会怎么做，但上次是我自己盯的",
                        "我不知道他会不会来看回执",
                        "我忘了通知，所以那天没人知道系统跑完了",
-                       "我没印象有谁复核过，反正后来是我不放心才翻的日志"):
+                       "我没印象有谁复核过，反正后来是我不放心才翻的日志",
+                       "没有通知就没人知道", "我没有别的意思", "没有再复核系统",
+                       "我没有看"):
             with self.subTest(phrase=phrase):
                 self.assertEqual("answer", classify_answer(phrase), phrase)
 

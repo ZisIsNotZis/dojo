@@ -89,7 +89,11 @@ NON_ANSWERS = (
 )
 # A degree softener that leaves the same declaration behind, so it maps to the shorter
 # form instead of vanishing: 不太清楚 is 不清楚, 不很确定 is 不确定.
-NON_ANSWER_SOFTENERS = {"不太": "不", "不很": "不", "不怎么": "不", "有点": "", "有点儿": ""}
+NON_ANSWER_SOFTENERS = {
+    "不太": "不", "不很": "不", "不怎么": "不",
+    "一点都不": "不", "一点也不": "不", "一点儿也不": "不",
+    "有点": "", "有点儿": "",
+}
 # What may sit in front of a listed non-answer without making it a different sentence:
 # the subject (我 / 我们), a softening of degree (不太 / 不很 / 有点), and connectives that
 # add no material (也 / 都 / 真的 / 确实). Stripped one at a time, and what is left still
