@@ -155,7 +155,10 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual([], end["skipped"])
         self.assertEqual([], end["supplied"])
         line = self.closing_line(text)
-        self.assertIn("四件你都答了", line)
+        self.assertIn("四件你都说了原话", line)
+        # Not "you answered all four": the program checked that the replies were not
+        # empty, not that they hit the question. Asserted separately below.
+        self.assertNotIn("四件你都答了", line)
         for part in PART_ORDER:
             self.assertNotIn(f"{part} 没答出来", line)
             self.assertNotIn(f"你说跳过 {part}", line)
@@ -174,8 +177,9 @@ class ClosingLineTests(unittest.TestCase):
         # "四件都落在你说过的话上".
         self.assertNotIn("四件都落在你说过的话上", text)
         self.assertNotIn("四件你都答了", line)
+        self.assertNotIn("说了原话", line)
 
-    def test_answered_skipped_and_unanswered_are_three_different_words(self):
+    def test_heard_skipped_and_unanswered_are_three_different_words(self):
         code, text = self.run_session(MIXED)
         self.assertEqual(0, code)
         end = self.recorded()
@@ -183,7 +187,7 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(["张力"], end["skipped"])
         self.assertEqual(["代价"], end["supplied"])
         line = self.closing_line(text)
-        self.assertIn("你答了 情境、失效", line)
+        self.assertIn("你在 情境、失效 上说了原话", line)
         self.assertIn("你说跳过 张力", line)
         self.assertIn("没答出来 代价", line)
         # Order comes from PART_ORDER, not from the order the lists filled up.
@@ -200,9 +204,11 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(list(PART_ORDER), end["supplied"])
         line = self.closing_line(text)
         self.assertIn("没答出来", line)
-        self.assertNotIn("你答了", line)
-        # Nothing was answered, so nothing may be said about where answers went.
-        self.assertNotIn("这些回答", line)
+        self.assertNotIn("说了原话", line)
+        # Nothing was said, so nothing may be said about where the words went, and the
+        # "this does not judge whether you hit" line would be about nothing.
+        self.assertNotIn("这些原话", line)
+        self.assertNotIn("答没答到点上", line)
 
     # ---- the sentence must not claim the answers reached the card -----------------
 
@@ -246,7 +252,7 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(["情境"], end["collected"])
         line = self.closing_line(text)
         self.assertIsNotNone(line, "提前结束的人没有拿到回执")
-        self.assertIn("你答了 情境", line)
+        self.assertIn("你在 情境 上说了原话", line)
         self.assertIn("问到 张力 时你结束了输入", line)
         self.assertNotIn("没答出来 张力", line,
                          "他把输入结束在张力那一问上，没说答不出来")
@@ -345,7 +351,7 @@ class ClosingLineTests(unittest.TestCase):
 
     def test_the_pure_function_names_three_outcomes_in_part_order(self):
         line = closing_text(["情境", "失效"], ["张力"], ["代价"])
-        self.assertIn("你答了 情境、失效", line)
+        self.assertIn("你在 情境、失效 上说了原话", line)
         self.assertIn("你说跳过 张力", line)
         self.assertIn("没答出来 代价", line)
         self.assertIn("没有写进卡片", line)
@@ -390,11 +396,12 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(["代价", "失效"], end["declined"])
         self.assertEqual([], end["supplied"])
         line = self.closing_line(text)
-        self.assertIn("你答了 情境", line)
+        self.assertIn("你在 情境 上说了原话", line)
         self.assertIn("你说跳过 张力", line)
         self.assertIn("你说剩下的先不答 代价、失效", line)
         self.assertNotIn("没答出来", line)
         self.assertNotIn("你答了 情境、张力", line)
+        self.assertNotIn("张力 上说了原话", line)
         # The last two questions were never put to him, so they are not on screen.
         shown = self.host_lines(text)
         self.assertNotIn(QUESTIONS["代价"]["ask"], shown)
@@ -454,7 +461,7 @@ class ClosingLineTests(unittest.TestCase):
         events = [row for row in self.trace() if row.get("event") == "elicitation"]
         self.assertEqual(answer, events[0]["answer"])
         self.assertEqual("answer", events[0]["reading"])
-        self.assertIn("四件你都答了", self.closing_line(text))
+        self.assertIn("四件你都说了原话", self.closing_line(text))
 
     def test_a_named_count_drops_exactly_that_many_and_the_rest_is_still_asked(self):
         """"接下来两题先跳过" covers two questions, not the whole remainder (#3363)."""
@@ -555,7 +562,7 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(list(PART_ORDER), end["collected"])
         self.assertEqual([], end["uncertain"])
         self.assertIn("好，退回「情境」。", text)
-        self.assertIn("四件你都答了", self.closing_line(text))
+        self.assertIn("四件你都说了原话", self.closing_line(text))
         readings = [row["reading"] for row in self.trace()
                     if row.get("event") == "elicitation" and row.get("part") == "情境"]
         self.assertEqual(["answer", "undo", "answer"], readings)
@@ -614,7 +621,7 @@ class ClosingLineTests(unittest.TestCase):
         self.assertEqual(end["collected"], resumed["elicitation_collected"])
         self.assertEqual(end["declined"], resumed["elicitation_declined"])
         self.assertEqual(2, resumed["elicitation_declined_count"])
-        self.assertIn("你答了 失效", self.closing_line(text))
+        self.assertIn("你在 失效 上说了原话", self.closing_line(text))
 
     def test_the_whole_set_forms_read_as_one_outcome(self):
         for phrase in ("这几题我想先跳过", "这几题先跳过吧", "剩下几件先跳过",

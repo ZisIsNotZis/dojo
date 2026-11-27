@@ -166,26 +166,32 @@ def main() -> int:
     card_fixed = bool(with_card) and all(row == with_card[0] for row in with_card)
 
     checks = {
+        # 2026-11-28: the bucket's word changed from 你答了 to 说了原话, because a
+        # realistic run showed 你答了 claiming the questions were answered when only
+        # "not empty / not a skip / not a wind-down" was ever checked. The fact this
+        # check is about -- the receipt and the trace agree on all four -- is unchanged.
         "全答时与轨迹一致": (
             end_all["collected"] == list(PART_ORDER) and end_all["skipped"] == []
-            and "四件你都答了" in line_all
+            and "四件你都说了原话" in line_all
         ),
         "全跳时与轨迹一致且不说答了": (
             end_skip["collected"] == [] and end_skip["skipped"] == list(PART_ORDER)
-            and "你说跳过" in line_skip and "你答了" not in line_skip
+            and "你说跳过" in line_skip and "说了原话" not in line_skip
             and "四件都落在你说过的话上" not in text_skip
         ),
         "答/跳/没答三种结局分得开": (
             end_mixed["collected"] == ["情境", "失效"]
             and end_mixed["skipped"] == ["张力"]
             and end_mixed["supplied"] == ["代价"]
-            and named(line_mixed, "你答了") == ["情境", "失效"]
+            # The word is now "你在 A、B 上说了原话" -- names before the phrase, so
+            # `named()` (which reads after a marker) cannot be used here.
+            and "你在 情境、失效 上说了原话" in line_mixed
             and named(line_mixed, "你说跳过") == ["张力"]
             and named(line_mixed, "没答出来") == ["代价"]
         ),
         "全部空着时不谈回答去了哪": (
             end_blank["collected"] == [] and end_blank["supplied"] == list(PART_ORDER)
-            and "你答了" not in line_blank and "这些回答" not in line_blank
+            and "说了原话" not in line_blank and "这些原话" not in line_blank
         ),
         "跳过请求被识别为跳过而不是回答": (
             classify_answer(SKIP) == "skip"
@@ -197,7 +203,7 @@ def main() -> int:
         ),
         "提前结束也拿得到回执，且不说四件问完了": (
             end_stop["collected"] == ["情境"]
-            and "你答了 情境" in line_stop and "没问到" in line_stop
+            and "你在 情境 上说了原话" in line_stop and "没问到" in line_stop
             and "四件问完了" not in line_stop
         ),
         "关记录时不说留在本场记录里": (

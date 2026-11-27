@@ -194,7 +194,9 @@ def main() -> int:
             and summary_rest["skipped"] == ["张力"]
             and summary_rest["declined"] == ["代价", "失效"]
             and summary_rest["supplied"] == []
-            and "你答了 情境" in line_rest and "你答了 情境、张力" not in line_rest
+            # 2026-11-28: the bucket word is now 说了原话; see the closing-line slice.
+            and "你在 情境 上说了原话" in line_rest
+            and "情境、张力 上说了原话" not in line_rest
             and QUESTIONS["代价"]["ask"] not in host(text_rest)
             and QUESTIONS["失效"]["ask"] not in host(text_rest)
         ),
@@ -215,7 +217,7 @@ def main() -> int:
             and summary_mat["declined"] == []
             and events_mat[0]["reading"] == "answer"
             and events_mat[0]["answer"] == MATERIAL[0]
-            and "四件你都答了" in line_mat
+            and "四件你都说了原话" in line_mat
         ),
         "每件只有一个结局词": all(
             all(count <= 1 for count in part_counts(line).values())

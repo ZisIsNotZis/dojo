@@ -95,6 +95,39 @@ python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
 python3 -m dojo list               # a version nobody accepted is kept as `unaccepted_draft: true`
 ```
 
+### Opening a session on an earlier card, and continuing one
+
+`--card ID` hands the session one card you already have. The opening names the sentence, the
+version it replaced, his reason, and the sources; the first request that reaches the model
+carries the same four, marked as material rather than as your latest words. Repeating the
+sentence back does not count as a second independent source: the handout writes the read row
+that the echo gate reads.
+
+```sh
+python3 -m dojo discuss --card c1 --resume discuss-<id>.jsonl   # refused: a card is a start-of-session choice
+python3 -m dojo discuss --card c9                               # a typo is answered locally, not by the endpoint
+```
+
+```text
+无法续跑：--card 与 --resume 不能同时使用。
+无法开始讨论：这张卡读不出来（candidate not found: c9）；未发送网络请求。
+```
+
+`--resume TRACE` continues the session that wrote that trace, appends to the same file, and
+keeps the card this session was *opened* with -- not whichever version the library holds after
+a later `revise`. It needs the trace the session itself wrote (`sessions/discuss-<32 hex>.jsonl`
+under the library's directory, or wherever `DOJO_SESSIONS` points), and it cannot be combined
+with `--no-trace`, because the trace is the thing being continued.
+
+```sh
+python3 -m dojo discuss --resume sessions/discuss-0123456789abcdef0123456789abcdef.jsonl
+```
+
+Without an endpoint both flags still do their local part and say which part failed: the card is
+read before the endpoint is required, so `无法启动讨论：未配置 DOJO_LLM_BASE_URL，未发送网络请求。`
+means the card was fine. The full run -- screen and payload -- is in
+[`docs/evidence/2026-11-28-card-handoff/WALK.md`](docs/evidence/2026-11-28-card-handoff/WALK.md).
+
 ## What it can do now
 
 - **Candidate ledger with provenance.** Each record carries statement, kind, premises, scope, alternatives, contradictions, unknowns, and structured sources — never a raw chat transcript.
@@ -106,7 +139,7 @@ python3 -m dojo list               # a version nobody accepted is kept as `unacc
 - **Independence guard on broadcast.** `broadcast` suppresses cards whose only independent source is the session that wrote them, and cards written by the session asking; suppressed cards are listed with the reason rather than silently dropped.
 - **Idempotent end-of-session passes.** `pipeline --session <id>` runs `classify → locate → challenge` once per card per revision; a re-run writes nothing, and every pass only proposes.
 - **Bounded prompt export.** `export --mode b` (shared goal, no seeds) or `--mode c --id …` (goal plus explicitly chosen candidates) with `--budget-chars` as a hard character cap; exports carry no actor or judge notes.
-- **Discussion that retains the price and its source.** `discuss` asks four things per rule — situation, tension, cost, failure — and records the exact free-text answer beside its question and field key. Collected answers are not automatically mapped to candidate content or promoted to “the user's own words”: until that mapping exists, model-generated candidate fields remain `系统补`. Useful user contributions are retained in the trace, not certified by a nonempty reply. When the four questions finish — or the session stops early — one closing line says what happened to each part and where the answers went: they stay in this session's record, and the card is the sentence written before the questions, which the questions never rewrite. Every part gets exactly one word, and the word is the one for what actually happened: answered; asked to skip; the input ended while that question was on screen (not “you could not answer it”); put aside by a request covering the questions still to come; asked twice with nothing usable back; or never asked. A request for the questions still to come is read as a scope, not assumed: “接下来两题先跳过” lays down two and the last one is still asked, “这几题我想先跳过” lays down whatever is left, and a request whose count cannot be read leaves the remaining questions *asked* rather than ending the session on the person's behalf. “先跳过这一题” and its plain-speech variants read as a request to skip that question, not as an answer; material that talks about a rule — "我跳过这一步的时候就会出错", "剩下的流程我都不讲给新人听" — is still an answer.
+- **Discussion that retains the price and its source.** `discuss` asks four things per rule — situation, tension, cost, failure — and records the exact free-text answer beside its question and field key. Collected answers are not automatically mapped to candidate content or promoted to “the user's own words”: until that mapping exists, model-generated candidate fields remain `系统补`. Useful user contributions are retained in the trace, not certified by a nonempty reply. When the four questions finish — or the session stops early — one closing line says what happened to each part and where the answers went: they stay in this session's record, and the card is the sentence written before the questions, which the questions never rewrite. Every part gets exactly one word, and the word is the one for what actually happened: *his words were kept* (the line says “你在 X 上说了原话”, not “你答了” — the program checked that the reply was not empty, not that it hit the question, and it says so on screen); asked to skip; the input ended while that question was on screen (not “you could not answer it”); put aside by a request covering the questions still to come; asked twice with nothing usable back; or never asked. A request for the questions still to come is read as a scope, not assumed: “接下来两题先跳过” lays down two and the last one is still asked, “这几题我想先跳过” lays down whatever is left, and a request whose count cannot be read leaves the remaining questions *asked* rather than ending the session on the person's behalf. “先跳过这一题” and its plain-speech variants read as a request to skip that question, not as an answer; material that talks about a rule — "我跳过这一步的时候就会出错", "剩下的流程我都不讲给新人听" — is still an answer.
 - **A host that answers instead of stalling.** It infers the parameters you did not state and writes their conditions, does the arithmetic it can, and hands off real computation as a `## 计算交接单` section that lands on disk as `<session dir>/compute-<id>-<turn>.md` for an external runner — it has no code execution and never claims to have run something.
 - **Bounded requests.** Retrieval brings page text back with caps of 1200 characters per excerpt and 6000 per session; reasoning level is `DOJO_LLM_REASONING` (default `medium`); one request times out at 60 s and `DOJO_LLM_TIMEOUT` accepts 5–600.
 - **Local trace of every session.** One JSON line per turn: your words, the host's answer, the candidate, the stance decision and its reason, token counts, failures. Default on, `--no-trace` removes it entirely, `--resume <trace>` continues the same session.
