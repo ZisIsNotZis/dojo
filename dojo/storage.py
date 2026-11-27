@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+from .commands import quote
+
 
 KINDS = {"abstract_idea", "experience_claim", "application", "question", "counterexample"}
 STATUSES = {"draft", "discussable", "challenged", "withdrawn", "superseded"}
@@ -63,13 +65,17 @@ def _command_path(path: Path) -> str:
 
     #1921: a hint is only useful if following it works. A path with a space, pasted
     unquoted into `--db <path>`, arrives as two arguments and fails on a different
-    error than the one it was meant to fix. Quoted only when it needs to be -- most
-    paths stay as short as they read.
+    error than the one it was meant to fix. The old body wrapped every such path in
+    double quotes, which is not enough for `$`, a backtick or a quote in the name, and
+    disagreed with every other command the program prints; the rules now live in
+    `dojo/commands.py` (#3419).
     """
-    text = str(path)
-    if any(character.isspace() or character in '"\'' for character in text):
-        return f'"{text}"'
-    return text
+    return quote(str(path))
+
+
+def _seed_command(path: Path) -> str:
+    """`seed`, naming this library, for a refusal that tells the reader to create one."""
+    return f"python3 -m dojo --db {_command_path(path)} seed"
 
 
 def _agreed_at(value: str | None) -> str | None:
@@ -151,7 +157,7 @@ class Store:
                 raise DojoError(
                     f"database does not exist: {self.path}\n"
                     "这个库还不存在。先创建并写入四条模拟 seed（只写这个路径，不会碰其他库）：\n"
-                    f"  python3 -m dojo --db {_command_path(self.path)} seed"
+                    "  " + _seed_command(self.path)
                 )
             # #1921: `--db <a directory>` reached sqlite, which answered
             # `unable to open database file` -- no path in it, and no way to tell which
@@ -213,7 +219,7 @@ class Store:
                     "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name"
                 )]
                 self.connection.close()
-                command = f"python3 -m dojo --db {_command_path(self.path)} seed"
+                command = _seed_command(self.path)
                 if not others:
                     # No tables at all: this file is a new (or emptied) library, and
                     # seeding it is the step that makes it one. The names it will create

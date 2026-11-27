@@ -142,6 +142,43 @@ python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jso
 
 四件问完时那句回执会点名这条命令，所以「原话留在本场记录里」不需要先学会 JSONL 才用得上。
 
+### 屏幕上的命令复制出来就能跑
+
+这个程序印的每条命令都是给你复制的 —— 在哪个目录粘都行，按真终端那样做变量和历史展开。
+带空格、单引号、`$` 或反引号的路径也是一个参数：
+
+```sh
+DB="$(mktemp -d)/我的 库/my dojo's.sqlite3"
+mkdir -p "$(dirname "$DB")"
+python3 -m dojo --db "$DB" add --id c1 --kind abstract_idea \
+  --statement "把持续检查交给系统，人这一侧只保留随时可以推翻的位置。" \
+  --scope "一个人已经抽身、只在自己想推翻时回来时"
+python3 -m dojo --db "$DB" show c1
+```
+
+在那个库上开一场讨论，结束时屏幕印的是（真实运行录下来的，见
+[`docs/evidence/2026-11-28-printed-commands/WALK.md`](docs/evidence/2026-11-28-printed-commands/WALK.md)）：
+
+```text
+这一场没有写下被认可的卡片；结束时留了一张未认可的草稿：d-1e56e2a1614c（系统整理的那一版，
+没有人认可过）。先看它：python3 -m dojo --db "/tmp/x/我的 库/my dojo's.sqlite3" show d-1e56e2a1614c
+回看这一场说了什么：python3 -m dojo --db "/tmp/x/我的 库/my dojo's.sqlite3" transcript "/tmp/x/我的 库/sessions/discuss-….jsonl"
+```
+
+粘这条命令，在哪个目录打开的都是**那个库**里的草稿；不带 `--db` 它会去读默认库，回你
+`candidate not found`。
+
+没有短形式：**每条卡片和回看命令都写绝对路径，不看环境变量。** 印出去的那行在哪儿粘都得
+是同一件事，而「默认库」恰恰是各个终端不同意的那件事：`DOJO_DB=chosen.sqlite3` 在每个
+目录指不同的文件，只给一条命令设的变量在下一个终端里根本不在，而一个平常用另一个库的
+终端也不是印出这行的那一个。`--db 相对路径/dojo.sqlite3` 同理写全。轨迹路径也一律绝对，
+因为 `$DOJO_SESSIONS` 也可能是相对的。
+
+代价是常见情况下那行更长。愿意付这个代价的原因：有短形式时，从默认库开始的一场把
+`--resume` 粘到一个用另一个库的 shell，会以 0 退出，**并把这场对话的后半段写进那个库**。
+
+库路径从不写进轨迹——你说了什么就是什么，跟那个文件放在哪台机器上无关。
+
 ## 现在能做什么
 
 - **带出处的候选账本。** 每条记录带表述、类型、前提、范围、替代路线、矛盾、未知和结构化来源——从不保存原始聊天全文。

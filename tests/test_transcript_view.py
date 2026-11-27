@@ -16,6 +16,7 @@ What these tests refuse to accept:
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -134,11 +135,18 @@ class TranscriptTests(unittest.TestCase):
         self.assertIsNotNone(line)
         self.assertIn("留在本场记录里", line)
         command = self.named_command(line)
-        self.assertTrue(command.startswith("python3 -m dojo transcript "), command)
-        self.assertIn(str(self.trace()), command)
+        # `--db` is on this line because the session ran on a named library: pasted
+        # without it, the view would print card commands for the default library
+        # (#3419). The line still ends with `transcript <trace>`.
+        tokens = shlex.split(command)
+        self.assertEqual(["python3", "-m", "dojo"], tokens[:3], command)
+        self.assertEqual("--db", tokens[3], command)
+        self.assertEqual(str(self.store.path), tokens[4], command)
+        self.assertEqual("transcript", tokens[5], command)
+        self.assertEqual(str(self.trace()), tokens[6], command)
 
         # The command the receipt printed, run as printed.
-        done = self.run_cli(*command.split()[3:])
+        done = self.run_cli(*tokens[3:])
         self.assertEqual(0, done.returncode, done.stderr)
         for words in (OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF):
             self.assertIn(words, done.stdout)
@@ -179,7 +187,7 @@ class TranscriptTests(unittest.TestCase):
         # Naming a file that holds the first part and saying the rest did not land are
         # both true; what is refused is pretending the whole session is in there.
         command = self.named_command(line)
-        done = self.run_cli(*command.split()[3:])
+        done = self.run_cli(*shlex.split(command)[3:])
         self.assertEqual(0, done.returncode, done.stderr)
         self.assertIn("你说：讲一条做法", done.stdout)
 

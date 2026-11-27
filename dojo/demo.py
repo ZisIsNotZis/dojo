@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TextIO
 
+from .commands import dojo
 from .storage import SEEDS, DojoError, Store, load_simulated_seeds
 
 
@@ -433,7 +434,7 @@ def freeze_materials(store: Store, output_directory: str | Path) -> dict[str, ob
         raise ValueError(
             f"这个库（{store.path}）里没有四条模拟 seed，这次检索也没有命中任何候选"
             f"（库里共 {len(present)} 张卡）。对同一个库运行：\n"
-            f"  python3 -m dojo --db {store.path} seed\n"
+            f"  {dojo('seed', db=store.path)}\n"
             "再重跑 freeze-materials。"
         )
     output_path = Path(output_directory).expanduser()

@@ -21,10 +21,10 @@ Three things this view refuses to do:
 from __future__ import annotations
 
 import json
-import shlex
 from pathlib import Path
 from typing import Any
 
+from . import commands
 from .elicit import PART_KEYS, PART_ORDER, classify_answer
 from .tracefile import split_lines
 
@@ -210,11 +210,6 @@ def load(path: Path) -> dict[str, Any]:
     }
 
 
-def command(path: Path) -> str:
-    """The copyable command that shows this trace again."""
-    return "python3 -m dojo transcript " + shlex.quote(str(path))
-
-
 ENDINGS = {
     "eof": "输入结束了",
     "limit": "到了本场请求上限",
@@ -224,9 +219,26 @@ ENDINGS = {
 }
 
 
-def render(view: dict[str, Any]) -> str:
+def _card_command(database: str | Path | None, candidate_id: str) -> str:
+    """`show <id>`, naming the library when it is not the default one.
+
+    The view is store-free and stays store-free: it cannot check the card. What it can do
+    is avoid printing a command that would read a different library than the session used,
+    which is what `python3 -m dojo show d-...` did for a session opened with `--db`
+    (#3419: measured `candidate not found` on a draft the session had just written).
+    """
+    return commands.dojo("show", candidate_id, db=commands.library_argument(database))
+
+
+def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
     """The screen a person reads. Facts first; the one judgement this view makes is
-    that it does not make one about whether an answer fit its question."""
+    that it does not make one about whether an answer fit its question.
+
+    `database` is the library this view was asked about -- the one the caller's command
+    line named. It is passed in rather than read out of the trace: the trace records what
+    he said, and a host's SQLite path is not part of that. Omitted or equal to the default
+    library, the commands print their short form.
+    """
     lines: list[str] = []
     lines.append(f"会话 {view['session']} 的原话回看（{view['records']} 条记录）")
     lines.append("这是这一场留下的记录，不是库里的结论。")
@@ -281,7 +293,7 @@ def render(view: dict[str, Any]) -> str:
     if view["saved"]:
         lines.append("这一场写下的卡片：" + "、".join(view["saved"]))
         lines.append("这几张卡是写下的那几句；四件回答没有改写它们，回看也不说它们已被认可。")
-        lines.append("    逐张看：python3 -m dojo show " + shlex.quote(view["saved"][0]))
+        lines.append("    逐张看：" + _card_command(database, view["saved"][0]))
     elif view["draft"]:
         # The ending row's `draft` can name a card this session merely kept on the table:
         # `_draft_conclusion` hits `DuplicateContent` when the wording is the one that was
@@ -311,7 +323,7 @@ def render(view: dict[str, Any]) -> str:
             lines.append("草稿是系统按你的话整理的那一版，没有人认可过它——它恰恰是最该你自己看一眼的那张。")
         # A bare id is not something a first-time reader can act on; this view exists
         # because that gap had already shipped once.
-        lines.append("    看它：python3 -m dojo show " + shlex.quote(view["draft"]))
+        lines.append("    看它：" + _card_command(database, view["draft"]))
     elif view["complete"]:
         lines.append("这一场没有写下卡片。")
     else:
@@ -327,18 +339,27 @@ def render(view: dict[str, Any]) -> str:
     if view["partial_tail"]:
         lines.append("最后一行只写了一半（写的时候断了），这一行没有算进来。")
 
+    # Which library the commands above are about. Named only when `--db` was given: with
+    # no library on the command line there is nothing to say, and a sentence about the
+    # default location would be noise on the common path.
+    if commands.library_argument(database) is not None:
+        lines.append("卡片命令带的是这个库：" + str(commands.absolute(database)))
     lines.append("")
     lines.append("这些话是材料，不是结论：回看只说你说过什么，不判哪句答到了点上，也不代表你认可了哪条结论。")
     if view.get("resumable"):
         # Never print a command that is going to be refused.
         lines.append("这一份不能接着谈：" + view["resumable"] + "。")
     else:
-        lines.append("接着谈这一场：python3 -m dojo discuss --resume " + shlex.quote(str(view["path"])))
+        lines.append(
+            "接着谈这一场：" + commands.dojo("discuss", "--resume",
+                                              commands.absolute(view["path"]),
+                                              db=commands.library_argument(database))
+        )
     return "\n".join(lines) + "\n"
 
 
-def load_and_render(path: Path) -> str:
-    return render(load(path))
+def load_and_render(path: Path, *, database: str | Path | None = None) -> str:
+    return render(load(path), database=database)
 
 
-__all__ = ["TranscriptError", "PART_READINGS", "load", "render", "command", "load_and_render"]
+__all__ = ["TranscriptError", "PART_READINGS", "load", "render", "load_and_render"]

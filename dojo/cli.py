@@ -790,7 +790,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 print(json.dumps(payload, ensure_ascii=False, indent=2))
             else:
-                sys.stdout.write(render(view))
+                # The library named by `--db` (or $DOJO_DB or the default) is local
+                # command context, passed through so the card commands this screen
+                # prints open the library the reader was asking about. It is not read
+                # out of the trace: the record of what he said keeps no host path.
+                sys.stdout.write(render(view, database=db_path))
             return 0
         if args.command == "chat":
             config = LiveConfig.from_environment()

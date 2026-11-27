@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import stat
 import sys
 import time
@@ -20,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 from urllib.parse import urlparse
 
+from . import commands
 from .elicit import (
     PART_KEYS,
     PART_ORDER,
@@ -1831,7 +1831,8 @@ def run_discuss(
                     # words are not on disk, so a view command would point at an empty
                     # file.
                     where=(
-                        "python3 -m dojo transcript " + shlex.quote(str(trace_path))
+                        commands.dojo("transcript", commands.absolute(trace_path),
+                                      db=commands.library_argument(store.path))
                         if trace_path is not None and kept_now is not False else None
                     ),
                 ),
@@ -2093,16 +2094,18 @@ def run_discuss(
                 print(
                     "这一场结束时桌上仍是 " + draft_id + " 那句话；本场没有写成新卡片。"
                     "这张卡以前就被认可过（库里有它的确认记录）；本场又把它说了一遍，"
-                    "在库里给它添了一条本场来源。看它：python3 -m dojo show "
-                    + shlex.quote(draft_id),
+                    "在库里给它添了一条本场来源。看它："
+                    + commands.dojo("show", draft_id,
+                                    db=commands.library_argument(store.path)),
                     file=output,
                 )
             else:
                 print(
                     "这一场没有写下被认可的卡片；结束时留了一张未认可的草稿："
                     + draft_id
-                    + "（系统整理的那一版，没有人认可过）。先看它：python3 -m dojo show "
-                    + shlex.quote(draft_id),
+                    + "（系统整理的那一版，没有人认可过）。先看它："
+                    + commands.dojo("show", draft_id,
+                                    db=commands.library_argument(store.path)),
                     file=output,
                 )
         if trace_path is None:
@@ -2112,9 +2115,13 @@ def run_discuss(
             # And the way back into it, on the same screen. The receipt for the four
             # questions already names this command; a session that ends earlier has the
             # same words on the same record.
+            # With `--db`, this line has to carry it too: the view prints card commands of
+            # its own, and a view started without `--db` has no library to pass on -- it
+            # would print `show d-...` for a draft only this library holds (#3419).
             print(
-                "回看这一场说了什么：python3 -m dojo transcript "
-                + shlex.quote(str(trace_path)),
+                "回看这一场说了什么："
+                + commands.dojo("transcript", commands.absolute(trace_path),
+                                db=commands.library_argument(store.path)),
                 file=output,
             )
         return code

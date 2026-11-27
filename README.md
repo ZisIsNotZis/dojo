@@ -148,6 +148,49 @@ python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jso
 The receipt at the end of the four questions names this command, so the sentence "your words
 stay in this session's record" can be acted on without learning the JSONL format first.
 
+### The commands on screen work as pasted
+
+Every command this program prints is meant to be copied — from any directory, with the
+shell history and variable expansion that a real terminal applies. A path with a space, a
+single quote, `$` or a backtick arrives as one argument:
+
+```sh
+DB="$(mktemp -d)/a library's $HOME dir/my dojo's.sqlite3"
+mkdir -p "$(dirname "$DB")"
+python3 -m dojo --db "$DB" add --id c1 --kind abstract_idea \
+  --statement "把持续检查交给系统，人这一侧只保留随时可以推翻的位置。" \
+  --scope "一个人已经抽身、只在自己想推翻时回来时"
+python3 -m dojo --db "$DB" show c1
+```
+
+What a session opened on that library prints when it ends (recorded from a real run, see
+[`docs/evidence/2026-11-28-printed-commands/WALK.md`](docs/evidence/2026-11-28-printed-commands/WALK.md)):
+
+```text
+这一场没有写下被认可的卡片；结束时留了一张未认可的草稿：d-1e56e2a1614c（系统整理的那一版，
+没有人认可过）。先看它：python3 -m dojo --db "/tmp/x/a library's $HOME dir/my dojo's.sqlite3" show d-1e56e2a1614c
+回看这一场说了什么：python3 -m dojo --db "/tmp/x/a library's $HOME dir/my dojo's.sqlite3" transcript "/tmp/x/a library's $HOME dir/sessions/discuss-….jsonl"
+```
+
+Pasting that line opens the draft in *that* library, from whatever directory you are in.
+Without `--db` it would read the default one and answer `candidate not found`.
+
+There is no short form: **every card and view command names the file, absolutely, and the
+environment is not consulted.** A printed line has to mean the same thing wherever it is
+pasted, and "the default library" is exactly what terminals disagree about:
+`DOJO_DB=chosen.sqlite3` names a different file in every directory, a variable set for one
+command is absent in the next terminal, and a terminal that usually works on another
+library is not the one the line came from. `--db whatever/dojo.sqlite3` is spelled out for
+the same reason. Trace paths are absolute too, since `$DOJO_SESSIONS` can be relative.
+
+The cost is a longer line on the common path. The reason to pay it: with the short form,
+pasting `--resume` from a session started on the default library into a shell that uses
+another library exited 0 *and* appended the second half of that conversation to that other
+library.
+
+The library path is never written into the trace: the record of what you said stays a
+record of what you said, wherever the file happens to live.
+
 ## What it can do now
 
 - **Candidate ledger with provenance.** Each record carries statement, kind, premises, scope, alternatives, contradictions, unknowns, and structured sources — never a raw chat transcript.

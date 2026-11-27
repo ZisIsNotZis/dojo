@@ -25,6 +25,7 @@ What has to hold, all at once:
 """
 import io
 import json
+import shlex
 import unittest
 from pathlib import Path
 import tempfile
@@ -267,20 +268,38 @@ class TheEndOfASession(unittest.TestCase):
         return code, output.getvalue()
 
     def test_the_exit_names_the_draft_and_the_command_that_shows_it(self):
+        """The line has to name the draft *and* the library it lives in.
+
+        Asserting on `python3 -m dojo show` alone was the shape this check had until
+        #3419; it stayed green while the command it matched read the default library.
+        What matters is that the card and the library are both on the line, and the
+        library named is the one this store is.
+        """
         code, text = self.run_early_exit()
         self.assertEqual(0, code)
         draft_line = next(line for line in text.splitlines() if "草稿" in line)
-        self.assertIn("python3 -m dojo show", draft_line)
+        self.assertIn("python3 -m dojo", draft_line)
+        self.assertIn(" show ", draft_line)
         draft_id = draft_line.split("草稿：", 1)[1].split("（", 1)[0]
-        self.assertIn(draft_id, text)
+        self.assertIn(draft_id, draft_line)
+        self.assertIn(str(self.store.path), draft_line,
+                      "the command names no library, so it reads the default one")
 
     def test_the_exit_names_the_way_back_into_the_words(self):
         code, text = self.run_early_exit()
         self.assertEqual(0, code)
-        self.assertIn("python3 -m dojo transcript", text)
+        self.assertIn("dojo", text)
         command = [line for line in text.splitlines()
                    if line.startswith("回看这一场说了什么：")][0]
-        path = command.split("transcript ", 1)[1]
+        self.assertIn(" transcript ", command)
+        # The read-back command has to be pasted, by a shell, into a view whose own card
+        # commands still open this library -- so it carries `--db` (#3419). Command and
+        # path are extracted with a real shell parse rather than a split on a space.
+        tokens = shlex.split(command.split("：", 1)[1])
+        self.assertEqual(["python3", "-m", "dojo"], tokens[:3], tokens)
+        self.assertIn("--db", tokens, "without --db the view cannot name the library")
+        self.assertEqual(str(self.store.path), tokens[tokens.index("--db") + 1])
+        path = tokens[tokens.index("transcript") + 1]
         self.assertTrue(Path(path).exists(), "the printed command names a real file")
 
     def test_no_trace_prints_no_transcript_command(self):
