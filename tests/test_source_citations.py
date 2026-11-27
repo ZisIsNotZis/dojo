@@ -186,7 +186,15 @@ class EveryShippedLibraryIsChecked(unittest.TestCase):
                       "the citation reading is not printed; a reader cannot see it happened")
 
     def test_no_shipped_episode_is_left_unverified(self):
-        """Every episode in the repository resolves its commit here, or says why not."""
+        """Every episode resolves its commit -- where a history exists to resolve it against.
+
+        A frozen extract has no `.git`, so the commits cannot be looked up there. That
+        is a different fact from "the commits are gone", and this test must not turn
+        it into a pass: it checks the working tree, and says so by skipping where the
+        question cannot be asked.
+        """
+        if not (ROOT / ".git").exists():
+            self.skipTest("no .git here: a frozen extract cannot resolve commits")
         for library in LIBRARIES:
             data = {"episodes": json.loads(
                 (ROOT / "docs" / "dao" / library / "episodes.json").read_text(encoding="utf-8"))}
