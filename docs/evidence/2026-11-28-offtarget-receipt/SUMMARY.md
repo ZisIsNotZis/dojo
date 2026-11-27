@@ -87,16 +87,30 @@ note.md：     - [probe-T1] … | 情境: 我觉得这里关键是通知得做�
 ## 证据
 
 ```
-python3 docs/evidence/2026-11-28-offtarget-receipt/verify.py   # 15 项全 OK，退 0
-python3 -B -m unittest tests.test_offtarget_receipt              # 10 项 OK
+python3 docs/evidence/2026-11-28-offtarget-receipt/verify.py   # 17 项全 OK，退 0
+python3 -B -m unittest tests.test_offtarget_receipt              # 11 项 OK
 python3 -B -m unittest tests.test_readme_card_entry              # 4 项 OK
 python3 -B -m unittest discover -s tests                         # Ran 1214 / OK
-python3 .scratch/3389/redarm_offtarget.py .                       # 8 条臂全红
+python3 .scratch/3389/redarm_offtarget.py .                       # 9 条臂全红
 python3 .scratch/3389/probe_offtarget.py .                        # 真实 CLI 的屏幕、轨迹、导出
 ```
 
 `verify.py` 的每一项同时读屏幕、轨迹和库。C8–C11 是**防过度收紧**的对照：说跳过、没答出来、
 一句没说这三种情况各自保留自己的词，判语在不该出现时不出现。
+
+### 顺着同一类缺陷又量到一处（本片一并修了）
+
+「原话留在哪」这句还看另一个开关：`kept`。它以前取自**循环开始前**的一次读数
+（`trace_is_open`）。所以如果轨迹写到一半失败（磁盘满、权限、文件被删），后面的原话根本
+没落盘，回执却仍然说「这些原话留在本场记录里」——和「原话在上面」是同一类：对一个不
+存在的东西作承诺。现在 `kept` 在出回执那一刻读，并且是三态：
+
+- 开着一路写成功 → 「这些原话留在本场记录里，没有写进卡片。」
+- 一开始就没开（`--no-trace`）→ 「这场不留原文，这些原话只在这次对话里用过。」
+- **开过但中途写失败** → 「本场轨迹中途写入失败，先说的几句可能留在记录里，后说的没有写进去。」
+
+第三句既不谎称留着，也不谎称整场没轨迹（前几轮确实在文件里）。`verify.py` C14/C15、
+`test_a_trace_that_dies_mid_session_is_not_reported_as_kept` 与红臂 I 钉住它。
 
 ### 红臂（`.scratch/3389/redarm_offtarget.py`）
 
@@ -112,6 +126,7 @@ python3 .scratch/3389/probe_offtarget.py .                        # 真实 CLI �
 | F 说原话写进了卡片 | 原话不进卡片 |
 | G 回执又指向屏幕上不存在的原话 | 管道里不往上看 |
 | H 不留轨迹时也说原话留在记录里 | 关掉轨迹时不提记录 |
+| I 轨迹中途死了还说留在记录里 | 中途失败时三态措辞 |
 
 臂 G、H 是复核之后加的：`11ba996` 的回执说「原话在上面，你自己看」，而管道里跑的会话
 从不回显他打的字（`--no-trace` 时更是哪里都没写）。详见下面「改了什么」。

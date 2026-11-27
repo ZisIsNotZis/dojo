@@ -276,7 +276,7 @@ def shape_text(kept: bool) -> str:
 
 def closing_text(
     collected: list[str], skipped: list[str], supplied: list[str], *,
-    kept: bool = True, unfinished: list[str] | None = None,
+    kept: bool | None = True, unfinished: list[str] | None = None,
     stopped_at: str | None = None, declined: list[str] | None = None,
     uncertain: list[str] | None = None,
     declined_stated: int | None = None, spoken_stop: bool = False,
@@ -376,6 +376,11 @@ def closing_text(
         head = opener + ("；".join(pieces) + "。" if pieces else "四件都没答。")
     if not said:
         use = ""  # Nothing was said, so do not say where the words went.
+    elif kept is None:
+        # The trace was open when the session began and closed part-way through (a
+        # failed write). Some of his words may be on disk and the later ones certainly
+        # are not, so neither "kept" nor "not kept" is true for all of them.
+        use = "本场轨迹中途写入失败，先说的几句可能留在记录里，后说的没有写进去。"
     elif kept:
         # Where the words actually are, said as a fact about this session rather than as
         # a gesture at the screen. A piped session (`echo ... | dojo discuss`) never puts
@@ -932,6 +937,10 @@ class _SessionTrace:
     def __init__(self, path: Path, *, resume: bool = False):
         self.path = path
         self.file = None
+        # How many records actually reached the file. The receipt reads this to tell
+        # "nothing was written" apart from "the first half was written and then the
+        # file died", which are different promises to make to the person.
+        self.written = 0
         self.warned = False
         self.warning: str | None = None
         descriptor = None
@@ -970,6 +979,7 @@ class _SessionTrace:
         try:
             self.file.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n")
             self.file.flush()
+            self.written += 1
         except OSError as exc:
             self._warn(exc)
 
@@ -1738,7 +1748,17 @@ def run_discuss(
             print(
                 "\n主持人> " + closing_text(
                     state["collected"], state["skipped"], missed,
-                    kept=trace_is_open, unfinished=never or None,
+                    # Read now, not from the start-of-run flag: a write that failed
+                    # mid-session closes the file, and the words after that point are
+                    # not on disk. `trace_is_open` was captured before the loop, so a
+                    # failed write still got a receipt promising they were kept -- the
+                    # same defect as pointing at a line that was never printed.
+                    kept=(
+                        None if (trace is not None and trace.file is None
+                                and trace.written > 0)
+                        else trace is not None and trace.file is not None
+                    ),
+                    unfinished=never or None,
                     stopped_at=stopped_at, declined=state["declined"] or None,
                     declined_stated=state["declined_stated"],
                     uncertain=state["uncertain"],

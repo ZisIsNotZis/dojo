@@ -254,5 +254,47 @@ class OffTargetAnswerTests(unittest.TestCase):
             self.assertIn(OFF_PRICE, kept)
 
 
+    def test_a_trace_that_dies_mid_session_is_not_reported_as_kept(self):
+        """The same defect one layer down: a promise about a file that is not there.
+
+        `kept` used to come from a flag read before the loop started, so a write that
+        failed on the second question still produced "这些原话留在本场记录里" for words
+        that never reached the file. Simulate the write failure at the file object and
+        read what the receipt says.
+        """
+        from dojo import discuss as discuss_module
+
+        output = io.StringIO()
+        real = discuss_module._SessionTrace.append
+        calls = {"n": 0}
+
+        def dying(self, value):
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                # Same path the code takes on a real OSError: warn once, close, stop.
+                self._warn(OSError("no space left on device"))
+                return
+            real(self, value)
+
+        discuss_module._SessionTrace.append = dying
+        try:
+            code = run_discuss(
+                self.store,
+                client=FakeClient([PROPOSE, ACCEPT]),
+                read_line=read_lines(["讲一条做法", "对，就这么定", OFF_SITUATION,
+                                      ON_TENSION, OFF_PRICE, OFF_OFF]),
+                output=output,
+            )
+        finally:
+            discuss_module._SessionTrace.append = real
+
+        self.assertEqual(0, code)
+        text = output.getvalue()
+        line = self.closing_line(text)
+        self.assertIsNotNone(line)
+        # The words after the failure are not on disk, so the line may not promise they
+        # are, and it must not pretend the session had no trace at all either.
+        self.assertNotIn("留在本场记录里", line)
+        self.assertIn("轨迹中途写入失败", line)
 if __name__ == "__main__":
     unittest.main()

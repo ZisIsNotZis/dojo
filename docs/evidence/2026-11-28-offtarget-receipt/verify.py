@@ -207,6 +207,35 @@ def main() -> int:
           "你在 情境、失效 上说了原话" in pure and "你说跳过 张力" in pure
           and "没答出来 代价" in pure and "你答了" not in pure, pure)
 
+    # The same defect one layer down: a promise about a file that is not there. The
+    # receipt's `kept` used to come from a flag read before the loop, so a write that
+    # failed mid-session still produced "留在本场记录里" for words that were not saved.
+    from dojo import discuss as discuss_module
+
+    real = discuss_module._SessionTrace.append
+    calls = {"n": 0}
+
+    def dying(trace, value):
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            trace._warn(OSError("no space left on device"))
+            return
+        real(trace, value)
+
+    fifth = Library(root / "e")
+    discuss_module._SessionTrace.append = dying
+    try:
+        code5, text5 = fifth.run([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
+        line5 = closing(text5)
+    finally:
+        discuss_module._SessionTrace.append = real
+        fifth.close()
+    check("C14 轨迹中途写不进去时不说原话留在记录里",
+          code5 == 0 and "轨迹中途写入失败" in line5
+          and "留在本场记录里" not in line5, line5)
+    check("C15 那句也不谎称整场没有轨迹",
+          "这场不留原文" not in line5, line5)
+
     print()
     if failures:
         print("%d 项不成立。" % len(failures))
