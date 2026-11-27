@@ -272,6 +272,10 @@ class AReaderCanReachTheChain(unittest.TestCase):
         # carry them, or the next reader believes the first version was right.
         self.assertIn("两个反例", loop)
         self.assertIn("test_recheck_counterexamples", loop)
+        # The second re-check found two more boundaries; the record must carry them.
+        self.assertIn("按**所指的那个版本**核对", loop)
+        self.assertIn("test_recheck_boundaries", loop)
+        self.assertIn("无组别的来源要保留会话判据", loop)
 
 
 

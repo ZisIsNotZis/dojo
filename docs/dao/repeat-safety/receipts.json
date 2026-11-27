@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-27T06:00:00Z",
+  "at": "2026-11-27T10:10:00Z",
   "bench": "scripts/dao_life.py",
   "bench_version": 2,
   "daos": {
@@ -48,7 +48,7 @@
           "limit": "这一格证明的是结构：边界一改，动作就变。两个处境在世界上是否真的不同，还要读回执的人判。",
           "notes": [],
           "ran": {
-            "at": "2026-11-27T06:00:00Z",
+            "at": "2026-11-27T10:10:00Z",
             "by": "scripts/dao_life.py/simulate-v2",
             "on_digest": "088a3f9a9633",
             "on_version": 1
@@ -76,7 +76,7 @@
             "strength_note": "这一格是「判断说出它不该用在哪」。它比多一个正例弱：只说明边界是真的，不说明判据在边界之内都对。"
           },
           "ran": {
-            "at": "2026-11-27T06:00:00Z",
+            "at": "2026-11-27T10:10:00Z",
             "by": "scripts/dao_life.py/field-v2",
             "on_digest": "088a3f9a9633",
             "on_version": 1
@@ -88,15 +88,17 @@
           "verdict": "pass"
         },
         "sources": {
+          "checked_at_commit": 1,
           "failures": [],
           "kind": "sources",
-          "line": "出处核对 1 条：引语 1 条逐字落在它写的行内；commit 在本仓可解析 1 条，不可解析 0 条。",
+          "line": "出处核对 1 条：引语 1 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 1 条，按所指版本核对 1 条，不可解析 0 条。",
           "ran": {
             "by": "scripts/dao_life.py/sources-v2",
             "git": true
           },
           "rows": [
             {
+              "checked_at": "commit",
               "commit": "1af799f",
               "commit_state": "resolved",
               "id": "ep-2026-10-23-detach",
@@ -222,7 +224,7 @@
           "failures": [],
           "kind": "structure",
           "ran": {
-            "at": "2026-11-27T06:00:00Z",
+            "at": "2026-11-27T10:10:00Z",
             "by": "scripts/dao_life.py/structure-v2",
             "on_digest": "088a3f9a9633",
             "on_version": 1
@@ -273,7 +275,7 @@
     "episodes": "ce13c7551bb283c6e2f4418521e64fafa3e7c2eeec16bff905623667cad04991",
     "exposures": "e06d885017d3407dfd8217bde2ddfa9803d6af28483e0efe1d0aaa8e773f51bd",
     "map": "eacf8199b4d563a0e0705fcba75f718ef2f77a533db9e2a5c85b494fa61bd960",
-    "observations": "eeb4ea9158ac645748e5a975a7030ca5296963d028941e5c97152dbe5a099a26",
+    "observations": "518ce6ca666a542ddba36831213fcf3f595133371401691d6ea0d2ab9fd2d6bd",
     "promotions": "50d072f0d35ac6ea91969809f3749c3cc239d688ff4ff0b07b84326c8c75bec2",
     "record_checks": "43cb86666e84046fa7e40f49144fce465b14431b14c24591d3166d6d5a0cf849",
     "refusals": "2a6f9d40d264c1347095eee55f3f8ad167fe95ac6b0ffef57bcab86124387aed",

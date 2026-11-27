@@ -30,10 +30,10 @@
       "elicited": false,
       "applied_in": "第二个决定：dojo/storage.py 的 attach_source 把「这个会话是否已经贡献过」当判据。用这条判断去问：这里该按会话判，还是按来源判？",
       "prediction": "会话相同不是重放的理由：一个带着新 independence_group 的来源必须被收录。而同一 group 的第二个来源，按仓库自己的 independence() 只是同一条 provenance，应当仍是静默 no-op。",
-      "result": "改前（09eca15）：同一个会话下换一个来源，rc 0、无事件、卡上来源仍是 1 个，第二个来源丢了。改后：事件 ['add', 'attach_source']，卡上来源 ['src-group-a', 'src-group-b']；同一个来源再来一次，状态不变 = True、事件也不加 = True；同一 group 的第二个来源仍算一条 provenance = True。",
-      "could_have_gone_otherwise": "我第一版把判据换成「来源对象是否相同」，并把同一个来源再来一次改成写 attach_source.repeat。两条已发布的测试当场红了：它们钉的是「attach 同一份 provenance 两次是静默 no-op，状态与事件都不变」。那条契约是对的——重放不写账是这张库一直的约定——所以改法退回，只保留真正的缺陷修复。这件事本身是这条判断的边界：判「是不是重放」可以更细，但细到改变已发布的对外行为就不是我能单方面决定的。",
+      "result": "改前（09eca15）：同一个会话下换一个**具名新分组**的来源，rc 0、无事件，来源丢了。现在：事件 [add, attach_source]，卡上来源 [src-group-a, src-group-b]；同一来源再来一次状态与事件都不变；无组别来源仍按会话判——同一会话的第三条不记账（第二轮复核指出我一度把这条判据整个删掉，已修）。",
+      "could_have_gone_otherwise": "两轮复核各指出一次：第一轮我改得太细（同一份 provenance 写 .repeat），被已发布测试挡回；第二轮我改得太粗（把会话判据整个删掉），无组别来源的重复被记成新来源。最后的判据分两问：具名分组按组判，无组别来源按交它的会话判。",
       "matched": true,
-      "strength_note": "这是这条判断在本切片里唯一一处先改错、又被已发布测试纠正回来的地方。改前读数取自未改动的 09eca15，不是回忆；纠正的证据是 tests/test_storage.py 里那两条测试，不是我的判断。",
+      "strength_note": "这是这条判断在本切片里唯一一处被两轮复核各纠正一次的地方。改前读数取自未改动的 09eca15，两次纠正的证据都是测试与 CLI 读数，不是我的判断。",
       "confound": "判据同时从「会话」换成「仓库自己的 independence()」，所以这一格证明的是「按来源所在的 group 判」比「按会话判」对，不证明任何按请求判重的做法都对。"
     },
     {

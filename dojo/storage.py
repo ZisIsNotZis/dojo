@@ -633,6 +633,14 @@ class Store:
             if any(_same_provenance(item, source_value, session, state, events)
                    for item in state.get("sources", [])):
                 return state
+            # A group-less source has no key of its own, so the acquiring session is
+            # its only identity: a session that already contributed is replaying,
+            # which is what the public version did and what a published test pins. A
+            # source naming a group is keyed by that group, so a fresh one is recorded
+            # even when the session has spoken before -- that was the defect.
+            named = source_value.get("independence_group")
+            if (not named or named == "unknown") and session and session in state.get("sessions", []):
+                return state
             self._source_ids_available([source_value])
             state["sources"] = list(state.get("sources", [])) + [source_value]
             if session:

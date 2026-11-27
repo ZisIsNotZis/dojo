@@ -1543,6 +1543,21 @@ def _squash(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
 
+def _blob_at(root: Path, commit: str, path: str) -> str | None:
+    """The file's text at `commit`, or None when git cannot give it."""
+    try:
+        done = subprocess.run(["git", "show", commit + ":" + path],
+                              cwd=str(root), capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    try:
+        return done.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool = True) -> dict[str, Any]:
     """Does every cited quote actually sit where the record says it does?
 
@@ -1617,12 +1632,29 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
             row["quote"] = "unrecorded"
             failures.append(f"{row['id']} 没有写清出处（path/ref）：引语无处可查")
             continue
-        try:
-            text = (root / path).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            row["quote"] = "unreadable"
-            failures.append(f"{row['id']} 的出处 {path} 读不出来：引语无法核对")
-            continue
+        commit = source.get("commit") or ""
+        # The quote is checked against the file *at the cited revision*, when there is
+        # one to ask. A working-tree lookup answers a different question: two commits
+        # can share a path while the sentence arrives in the second one, and a reader
+        # who follows the citation to the first would not find it.
+        text = None
+        if git and commit and episode.get("attribution") != "synthetic":
+            blob = _blob_at(root, commit, path)
+            row["checked_at"] = "commit" if blob is not None else "working-tree"
+            text = blob if blob is not None else None
+        else:
+            row["checked_at"] = "working-tree"
+        if text is None:
+            try:
+                text = (root / path).read_text(encoding="utf-8")
+                if row["checked_at"] == "commit":
+                    # The commit resolved but the file or its bytes were not readable
+                    # there; the working tree cannot stand in for that revision.
+                    row["checked_at"] = "working-tree"
+            except (OSError, UnicodeDecodeError):
+                row["quote"] = "unreadable"
+                failures.append(f"{row['id']} 的出处 {path} 读不出来：引语无法核对")
+                continue
         wanted = _squash(quote)
         lines = text.splitlines()
         span = None
@@ -1656,7 +1688,6 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
                 )
             else:
                 row["quote"] = "found"
-        commit = source.get("commit") or ""
         if episode.get("attribution") == "synthetic":
             row["commit_state"] = "not-required"
         elif not commit:
@@ -1687,9 +1718,11 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
         "rows": rows,
         "failures": failures,
         "unresolved_commits": unresolved,
+        "checked_at_commit": sum(1 for r in rows if r.get("checked_at") == "commit"),
         "line": (
             f"出处核对 {len(rows)} 条：引语 {sum(1 for r in rows if r['quote'] == 'found')} 条逐字落在它写的行内；"
             f"commit 在本仓可解析且含有该文件 {sum(1 for r in rows if r['commit_state'] == 'resolved')} 条，"
+            f"按所指版本核对 {sum(1 for r in rows if r.get('checked_at') == 'commit')} 条，"
             f"不可解析 {len(unresolved)} 条"
             + (
                 "（这些只核到引语，没核到版本：不是提交不在库里，就是那个修订上没有这份文件）。"
