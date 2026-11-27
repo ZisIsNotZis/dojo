@@ -91,7 +91,20 @@ SKIP_PATTERNS = (
     r"^(?:那|就|先|我|麻烦|请)*(?:先)?(?:跳过|略过)(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)?(?:吧|了|一下|啦)?$",
     r"^(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)(?:就|先)?(?:跳过|略过)(?:吧|了|一下)?$",
     r"^(?:下一|换一|另)(?:题|个|件|条|步|问)$",
-    r"^(?:不想说|不想回答|不想讲|不说了|不答了|不回答|答不上来)(?:了|吧|啦)?$",
+    r"^(?:我|那|好)?(?:就|先)?(?:不想说|不想回答|不想讲|不说了|不答了|不回答|答不上来)(?:了|吧|啦)?$",
+    # The review found these three reaching the entry point as `answer`, and they are
+    # about *this question*, not about the conversation: they name a question (这题/这道题/
+    # 这一题) and say it is done or has nothing more in it. Reading them as `stop` would
+    # claim he ended the whole session, which he did not say; `skip` is the exact fact.
+    # `个` is the classifier after 这/那, not the noun: `这个` + `问题` was read as
+    # `这` + `个`, leaving `问题先不聊了`, which nothing accepted. Measured, not assumed.
+    r"^(?:这|那|此)(?:个|一|道)?(?:问题|题|件|问)"
+    r"(?:就|先|我|也)?(?:到(?:这|至)这?(?:里|儿)?(?:为止|就)?|算了|就这样)(?:吧|了|啦)*$",
+    r"^(?:这|那|此)(?:个|一|道)?(?:问题|题|件|问)"
+    r"(?:我)?(?:也)?(?:没什么|没有)(?:要|可|想)?(?:补充|说|讲|聊|问)的(?:了|吧|啦)?$",
+    # "这个问题先不聊了": the subject is the question, so it is this-question material.
+    r"^(?:这|那|此)(?:个|一|道)?(?:问题|题|件|问)"
+    r"(?:就|先)?(?:别|不)(?:再)?(?:说|聊|讲|谈)(?:了|吧|啦)?$",
     # Asking is how people ask. "能先跳过这一题吗" is the same request with a question
     # mark; it used to be recorded as his answer to the part (measured at the entry
     # point). Only a request whose whole clause *starts* with the asking is allowed.
@@ -115,19 +128,28 @@ SKIP_PATTERNS = (
 # 与 `skip` 的分界：`不想说`「不说了」是这一题不答（已有的跳过），而 `不想聊了`
 # 「先到这吧」是这场不聊了。前者说的是问题，后者说的是谈话。
 STOP_PATTERNS = (
-    # 算了／算了，先不说了／算了不聊了
-    r"^(?:那|好|还是)?算了(?:，?(?:就|先|也)?(?:别|不)?(?:说|聊|讲|谈|问)(?:了|吧|啦)?)?$",
-    # 先到这吧／就到这儿／到这里为止／说到这儿吧
-    r"^(?:那|就|先|我)?(?:先|就)?(?:说)?(?:到|至)这(?:里|儿|块)?(?:为止|就|吧|了|啦)*$",
-    r"^(?:那|就|先)?(?:先|就)?(?:说)?到这(?:里|儿)?(?:为止|吧|了|啦)+$",
+    # 算了／算了吧／算了算了／算了，先不说了／算了不聊了
+    # `算了吧` and `算了算了` used to fall through to `answer`, and the previous slice's
+    # SUMMARY said that was harmless ("不会说错话，只是不够好"). The review measured it:
+    # both reach the entry point, land in `collected`, and the receipt then says
+    # "你答了 情境、张力". That is the same defect the slice existed to remove, so the
+    # claim is withdrawn rather than softened -- see the superseded-by note in that
+    # slice's SUMMARY.
+    r"^(?:那|好|还是)?算了(?:算了)?(?:，?(?:就|先|也)?(?:别|不)?(?:说|聊|讲|谈|问))?(?:了|吧|啦)?$",
+    # 先到这吧／就到这儿／到这里为止／说到这儿吧／今天先到这儿／先聊到这儿吧
+    r"^(?:那|就|先|我|今天|今晚|现在)?(?:先|就)?(?:说|聊|讲)?(?:到|至)这(?:里|儿|块)?(?:为止|就|吧|了|啦)*$",
+    r"^(?:那|就|先)?(?:先|就)?(?:说|聊|讲)?到这(?:里|儿)?(?:为止|吧|了|啦)+$",
     # 就说这么多吧／就说这些／就聊到这儿
     r"^(?:那|就|先)?(?:就|先|不)?(?:说|聊|讲)(?:这|那|这么|那么)?(?:多|些|点)(?:吧|了|啦|就行|就好)?$",
     # 先这样吧／就这样吧／今天先这样
     r"^(?:那|好|今天|今晚|现在)?(?:就|先)(?:这样|这么着)(?:吧|了|啦)?$",
-    # 我没什么要补充的／没什么可说的了
+    # 我没什么要补充的／没什么可说的了／我说完了
     r"^(?:我)?(?:也)?(?:没什么|没有)(?:要|可|想)?(?:补充|说|讲|聊|问)的(?:了|吧|啦)?$",
-    # 先撤了／我得走了／我先走了／先走一步
-    r"^(?:那|好|我|今天|今晚)?(?:先|就)?(?:撤了|撤|走了|走一步|得走|要走了|得走了)(?:吧|了)?$",
+    r"^(?:那|好|我)?(?:就|先)?(?:说|讲|聊)完了(?:吧|了)?$",
+    # 别说了／别聊了：he is asking for the talking to stop, not answering the part
+    r"^(?:那|好|你|咱们|我们)?(?:就|先)?别(?:再)?(?:说|聊|讲|问)(?:了|吧|啦)?$",
+    # 先撤了／我得走了／我该走了／我先走了／先走一步
+    r"^(?:那|好|我|今天|今晚)?(?:先|就)?(?:撤了|撤|走了|走一步|得走|要走了|得走了|该走了|该走)(?:吧|了)?$",
     # 不想聊了／先不聊了／不聊了：他说的是谈话，不是这一题
     r"^(?:那|好|我)?(?:先|就|今天|今晚)?(?:不|别)想?(?:再)?聊(?:了|吧|啦)?$",
 )

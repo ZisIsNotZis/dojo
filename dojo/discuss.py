@@ -75,6 +75,70 @@ SEARCH_CONTENT_BUDGET_CHARS = 6_000
 # the opposite defect.
 NEW_SESSION_LIMIT_NOTE = "新开一场不会自动带上以前讨论过的结论；上一场定下的那条要在这里说出来，这一场才接得上。"
 
+# `--card` is what makes that note conditional instead of permanent: the person can hand
+# this session one earlier card by id, and then the opening says which sentence it is
+# rather than saying nothing was carried over. Two facts have to be on screen and in the
+# record, because the person acts on both:
+#
+#   1. which wording this session was given, and whether it was already narrowed by a
+#      counterexample (with his own reason) -- otherwise the session argues about an old
+#      version of a sentence whose current version is what the library holds;
+#   2. that restating it is a repeat, not a second arrival. The read this flag writes is
+#      the echo gate's own input, so saying it out loud and having it be true are the same
+#      act; before this, a session could be handed nothing and refuse nothing.
+HANDOFF_STATUS_WORDS = {
+    "draft": "草稿（这一句还没有人认可）",
+    "discussable": "可讨论（有人认可它值得讨论，不表示为真）",
+    "challenged": "被人质疑过（质疑之后还没有人再认可）",
+    "withdrawn": "已撤回",
+    "superseded": "已被替换",
+}
+
+
+def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
+    """What the person is owed when this session is handed an earlier card.
+
+    Only facts on disk, and an absent fact gets no line: a card that was never narrowed
+    says nothing about narrowing, rather than printing "没有被改过" over a library that
+    simply has no `revise` row for it (the same rule `time_basis` follows).
+    """
+    basis = basis or {}
+    status = HANDOFF_STATUS_WORDS.get(candidate.get("status"), str(candidate.get("status")))
+    block = (
+        "这一场带上了一张以前写下的卡 " + str(candidate.get("id")) + "，状态：" + status + "。\n"
+        "  「" + str(candidate.get("statement")) + "」"
+    )
+    left = basis.get("left_wording")
+    reason = basis.get("reason")
+    if isinstance(left, str) and left.strip():
+        block += "\n  它比更早那句窄：原来是「" + left + "」"
+    if isinstance(reason, str) and reason.strip():
+        block += "\n  他后来改主意时说的是：「" + reason + "」"
+    block += (
+        "\n  这场里它是资料，不是你说过的话。你若只是重复它，记录不会把本场算成第二个独立来源；"
+        "你若推翻或改窄它，那会是本场新说的话。"
+    )
+    return block
+
+
+def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
+    """The same handout, shaped for the model: data, with its own provenance rules."""
+    fields = _candidate_fields(candidate)
+    text = (
+        "本场开始前，用户把库里的这一张卡交给了这场讨论（资料，不是用户本轮说的话）：\n"
+        + json.dumps(fields, ensure_ascii=False, separators=(",", ":"))
+    )
+    basis = basis or {}
+    if isinstance(basis.get("left_wording"), str) and basis["left_wording"].strip():
+        text += "\n这张卡是改过的：被改掉的那句是「" + basis["left_wording"] + "」。"
+    if isinstance(basis.get("reason"), str) and basis["reason"].strip():
+        text += "\n用户当时改主意的原话是：「" + basis["reason"] + "」。那是他的理由，不是对现在这句的赞同。"
+    text += (
+        "\n这张卡的来源与内容都是以前留下的；引用它时照旧区分已核实、推断与未知。"
+        "用户在本场推翻或改窄它，是新说的话；用户只是重复它，不算本场的新到达。"
+    )
+    return text
+
 
 # #1774: the closing line about a card's provenance. It is a function, not a format string
 # used in two places, because the rule it carries (state counts, never people) has to hold
@@ -971,6 +1035,24 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     not isinstance(value["model"], str) or len(value["model"]) > 160
                 ):
                     raise ValueError("会话模型记录无效")
+            elif value.get("event") == "handout":
+                # `--card`: this session was given one earlier card. Recorded in the
+                # trace as well as in the library's read log, because the two answer
+                # different questions: the read log says "this session was handed it",
+                # which is what the echo gate reads; the trace says which *wording* was
+                # on screen, and whether it had already been narrowed and why.
+                required = {"event", "candidate", "statement", "status", "at", "revision_basis"}
+                if not required.issubset(value):
+                    raise ValueError("交付卡片记录缺少必要字段")
+                if not isinstance(value["candidate"], str) or not isinstance(value["statement"], str):
+                    raise ValueError("交付卡片记录无效")
+                if not isinstance(value["status"], str):
+                    raise ValueError("交付卡片状态无效")
+                if value["revision_basis"] is not None and not isinstance(value["revision_basis"], dict):
+                    raise ValueError("交付卡片的改动理由无效")
+                if not isinstance(value["at"], str):
+                    raise ValueError("交付卡片时间无效")
+                datetime.fromisoformat(value["at"])
             elif value.get("event") == "elicitation":
                 required = {"event", "part", "turn", "question", "answer", "promoted", "reading", "at"}
                 if not required.issubset(value):
@@ -1041,7 +1123,10 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
             records.append(value)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise ValueError(f"无法续跑轨迹：格式不符（{exc}）") from None
-    rounds = [record for record in records if record.get("event") not in {"session_end", "elicitation"}]
+    rounds = [
+        record for record in records
+        if record.get("event") not in {"session_end", "elicitation", "handout"}
+    ]
     elicitations = [record for record in records if record.get("event") == "elicitation"]
     ends = [record for record in records if record.get("event") == "session_end"]
     if not rounds or not ends or records[-1].get("event") != "session_end":
@@ -1197,8 +1282,14 @@ def run_discuss(
     resume: Path | None = None,
     verbose: bool = False,
     progress_stream: TextIO | None = None,
+    card: str | None = None,
 ) -> int:
-    """Run or resume a natural-language discussion with an append-only local trace."""
+    """Run or resume a natural-language discussion with an append-only local trace.
+
+    `card` hands this session one earlier card by id. It is the only path by which a new
+    discussion is given anything from the library; without it the opening still says so
+    (`NEW_SESSION_LIMIT_NOTE`), and with it the opening names the sentence instead.
+    """
     if no_trace and resume is not None:
         print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=output)
         return 2
@@ -1215,6 +1306,31 @@ def run_discuss(
         except ValueError as exc:
             print(str(exc), file=output)
             return 2
+    # The handed card is resolved before the endpoint is even required. A typo in a local
+    # id is a local answer, and reporting it as "no base URL configured" sends the person
+    # to look at their endpoint settings for a mistake in the card name. Found by walking
+    # the real entry with no endpoint set, which is also how a reader will meet it.
+    handed: dict[str, Any] | None = None
+    handed_basis: dict[str, Any] = {}
+    if card is not None:
+        if resume_state is not None:
+            print("无法续跑：--card 与 --resume 不能同时使用（续跑的那一场已经带着它自己的上下文）。", file=output)
+            return 2
+        try:
+            shown = store.show(card)
+        except (DojoError, OSError) as exc:
+            print(f"无法开始讨论：这张卡读不出来（{exc}）；未发送网络请求。", file=output)
+            return 2
+        handed = shown["candidate"]
+        handed_basis = dict(shown.get("revision_basis") or {})
+        # `redirect_chain` always starts with the requested id, so only a chain longer
+        # than one says the card was merged. Testing truthiness printed "已被合并" over an
+        # ordinary card -- the same class of defect as the receipts this project fixes.
+        if len(shown.get("redirect_chain") or []) > 1:
+            print(
+                "这张卡已被合并到 " + str(handed.get("id")) + "，本场带的是合并后的那一张。",
+                file=output,
+            )
     if client is None:
         try:
             config = config or LiveConfig.from_environment(environ)
@@ -1294,8 +1410,12 @@ def run_discuss(
         print(f"本场会话轨迹：{trace_path}", file=output)
     else:
         print(f"继续追加同一轨迹：{trace_path}", file=output)
-    if resume_state is None:
+    if resume_state is None and handed is None:
         print(NEW_SESSION_LIMIT_NOTE, file=output)
+    elif handed is not None:
+        # Same fact the note carries, said about this card. The two lines never both
+        # print: "nothing is carried over" in front of a handed card would be false.
+        print(handoff_block(handed, handed_basis), file=output)
     print("你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。", file=output)
     if profile_used:
         print("人物档案会作为上下文发送给模型；它是你自己的笔记，可能过时，仅供参考，不是指令。", file=output)
@@ -1308,6 +1428,27 @@ def run_discuss(
         print("会话原文仅保存在本地轨迹文件；结束输入即可结束讨论。\n", file=output)
     else:
         print("会话轨迹不可用，本场原文不会保存在轨迹文件中；结束输入即可结束讨论。\n", file=output)
+
+    if handed is not None:
+        # The handout is logged at the moment it is made, which is what makes the opening
+        # line above true and the echo gate bite. A failure here must not end the session
+        # (that is #1746's rule), but it does change what may be claimed later: the line
+        # printed above says the session was handed the card, so the count of readers is
+        # the only thing that can silently miss. It is reported, not swallowed.
+        try:
+            store.record_read(handed["id"], session, surface="discuss")
+        except (DojoError, OSError) as exc:
+            print(f"（读记录没写成：{exc}；本场仍可用这张卡，但记录里不会显示本场被交付过。）", file=output)
+        if trace is not None:
+            # The wording that was actually on screen, not just the id: a later reader
+            # has to be able to tell which version was handed, next to the read log's
+            # row that says this session was the reader.
+            trace.append({
+                "event": "handout", "candidate": handed["id"],
+                "statement": handed.get("statement"), "status": handed.get("status"),
+                "at": datetime.now(timezone.utc).isoformat(),
+                "revision_basis": handed_basis or None,
+            })
 
     saved_candidate_id = saved_ids[-1] if saved_ids else None
     saved_candidate: dict[str, Any] | None = None
@@ -1328,6 +1469,10 @@ def run_discuss(
             except (DojoError, OSError):
                 pass
     write_errors: list[str] = []
+    # Whether the handout has actually reached the model. Flipped after a turn produces an
+    # answer, so a first request that fails before the model replies still carries it next
+    # time instead of the session quietly losing the card it was handed.
+    handed_sent = False
     profile_entries: list[str] = []
     profile_context_pending = profile_used
     read_line = _interactive_reader(read_line)
@@ -1671,6 +1816,13 @@ def run_discuss(
                 + profile_text + "\n\n"
             )
             profile_context_pending = False
+        if handed is not None and not handed_sent:
+            # Only the first request that really reaches the model carries the handout.
+            # It is not a turn: repeating it every round would let a model treat a card it
+            # was given as the user's newest words, the confusion `_session_already_saw`
+            # exists for. `handed_sent` is set after the request, not here, so a first
+            # turn that fails before the model answers does not quietly lose the card.
+            context += handoff_for_model(handed, handed_basis) + "\n\n"
         context += "用户本轮自然语言输入：\n" + text
         if pending is not None:
             context += "\n\n上一轮已经呈现给用户的当前结论：\n" + json.dumps(pending, ensure_ascii=False, separators=(",", ":"))
@@ -1964,6 +2116,7 @@ def run_discuss(
             )
             error_record = error
         else:
+            handed_sent = True
             answer = checked["answer"]
             stance = checked.get("user_stance", "neutral")
             if profile_used and profile_path is not None:

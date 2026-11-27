@@ -18,7 +18,10 @@ import unittest
 from pathlib import Path
 
 from dojo.discuss import closing_text, run_discuss
-from dojo.elicit import PART_ORDER, QUESTIONS, classify_answer, is_back_request
+from dojo.elicit import (
+    PART_ORDER, QUESTIONS, classify_answer, is_back_request, is_skip_request,
+    is_stop_statement,
+)
 from dojo.storage import Store
 
 CONCLUSION = {
@@ -267,6 +270,53 @@ class ClosingLineTests(unittest.TestCase):
         for phrase in ("先跳过这一题", "跳过", "这题先跳过", "下一题", "不想说",
                        "先跳过这一题，我还没想好", "跳过吧。"):
             self.assertEqual("skip", classify_answer(phrase), phrase)
+
+    def test_the_wind_down_forms_the_review_found_never_become_material(self):
+        """Twelve sentences that reached the entry point as `answer`.
+
+        Measured on `a4b16b7` by a read-only reviewer: each one landed in `collected` and
+        the receipt then said "你答了 情境、张力" while the session kept asking. The
+        previous slice's SUMMARY called that harmless ("不会说错话，只是不够好"); it was
+        not. The claim is withdrawn and these are pinned.
+
+        The split matters and is asserted, not just the fact that they are not `answer`:
+        a sentence naming a question (这题/这个问题) is a decision about *this question*
+        (`skip`); 算了 / 我该走了 / 别说了 is a decision about the *conversation*
+        (`stop`). Reading the first group as `stop` would claim he ended the session.
+        """
+        for phrase in ("算了吧", "算了算了", "我该走了", "我说完了", "今天先到这儿",
+                       "先聊到这儿吧", "别说了"):
+            self.assertEqual("stop", classify_answer(phrase), phrase)
+        for phrase in ("这题就到这儿吧", "这一题我没什么要补充的", "这道题算了",
+                       "我不说了", "这个问题先不聊了"):
+            self.assertEqual("skip", classify_answer(phrase), phrase)
+            # The order in `classify_answer` is the防线 here: `is_skip_request` runs
+            # before `is_stop_statement`, so even a sentence both recognisers would claim
+            # reads as `skip`. Made explicit because an arm that adds a stop pattern and
+            # stays green looks like a hole until you know why (the reviewer's G/H arms).
+            self.assertTrue(is_skip_request(phrase), phrase)
+            # Not just "skip wins for now": the *stop* recogniser must not claim it
+            # either. With only the ordering asserted, adding a stop pattern that also
+            # matches this sentence stayed green (arm E), so the arm had to be made
+            # compound to say anything. This is the sentence-level version of that.
+            self.assertFalse(is_stop_statement(phrase), phrase)
+
+    def test_the_length_gate_is_not_the_thing_holding_the_boundary(self):
+        """The reviewer's arm I: deleting `len(core) > 12` left 34 tests and verify green.
+
+        A guard no test asserts is a guard nobody would notice losing. This asserts what
+        it actually does -- it only ever *narrows*, and the whole-sentence patterns carry
+        the boundary on their own -- by checking a long sentence that patterns would
+        reject anyway, and a long sentence whose *prefix* is a wind-down.
+        """
+        from dojo.elicit import STOP_PATTERNS, _normalize_skip
+        long_prefix = "先到这吧，那次我们从周三一直聊到天黑才把事情定下来"
+        self.assertEqual("answer", classify_answer(long_prefix), long_prefix)
+        # No stop pattern matches it even with the length gate out of the way: the
+        # boundary is the whole-sentence anchor, not the character count.
+        core = _normalize_skip(long_prefix)
+        self.assertFalse(any(__import__("re").fullmatch(pattern, core) for pattern in STOP_PATTERNS))
+        self.assertGreater(len(core), 12)
 
     def test_material_that_merely_mentions_skipping_is_still_an_answer(self):
         # 失效那件要的原话正是这种句子，不能把它当成跳过请求。

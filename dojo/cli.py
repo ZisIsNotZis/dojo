@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -233,6 +234,10 @@ def _parser() -> argparse.ArgumentParser:
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
     discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
+    discuss.add_argument(
+        "--card", metavar="ID", default=None,
+        help="把库里已有的一张卡交给这一场（屏幕说清是哪句、有没有改过；本场只是重复它不算新来源）",
+    )
     discuss.add_argument(
         "--verbose", action="store_true",
         help="在 stderr 打印模型请求、检索与写卡的实时进度（不影响主持人输出与轨迹）",
@@ -765,11 +770,32 @@ def main(argv: list[str] | None = None) -> int:
             if args.no_trace and args.resume:
                 print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=sys.stderr)
                 return 2
+            if args.card and args.resume:
+                print("无法续跑：--card 与 --resume 不能同时使用。", file=sys.stderr)
+                return 2
             if args.resume:
                 try:
                     _load_resume_trace(Path(args.resume).expanduser())
                 except ValueError as exc:
                     print(str(exc), file=sys.stderr)
+                    return 2
+            # A name the person typed by hand is settled against the local library before
+            # the endpoint is read. Walked at the real entry with no DOJO_LLM_BASE_URL
+            # set: the refusal used to be "no base URL configured" for a mistyped card
+            # id, which sends the reader to their endpoint settings for a mistake in a
+            # card name.
+            #
+            # Opened `readonly` and only when a card was named: the no-endpoint failure is
+            # pinned by two tests to leave no database behind, and a writer would create
+            # an empty library merely to answer a question about a name. `run_discuss`
+            # keeps the same check for callers that supply their own client, so the two
+            # orders cannot disagree.
+            if args.card:
+                try:
+                    with closing(Store(db_path, readonly=True)) as probe:
+                        probe.show(args.card)
+                except (DojoError, OSError) as exc:
+                    print(f"无法开始讨论：这张卡读不出来（{exc}）；未发送网络请求。", file=sys.stderr)
                     return 2
             try:
                 config = LiveConfig.from_environment()
@@ -779,16 +805,10 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     print(f"无法启动讨论：模型端点配置无效（{exc}），未发送网络请求。", file=sys.stderr)
                 return 2
-            _secure_default_paths(db_path, export_dir)
-            store = Store(db_path)
-            try:
-                db_path.chmod(0o600)
-            except OSError:
-                pass
             return run_discuss(
                 store, config=config, no_trace=args.no_trace, no_profile=args.no_profile,
                 resume=Path(args.resume).expanduser() if args.resume else None,
-                verbose=args.verbose,
+                verbose=args.verbose, card=args.card,
             )
         if args.command == "compare":
             run_compare(full=args.full, output=sys.stdout)
