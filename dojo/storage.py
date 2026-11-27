@@ -837,6 +837,10 @@ class Store:
         provenance = self.source_basis(state["id"], state)
         if provenance:
             payload["source_basis"] = provenance
+        # #1929: the same gap on the surface a person opens directly. Beside `candidate`
+        # for the same reason the two above are: `candidate` is the stored state, and a
+        # test compares it byte for byte.
+        payload.update(self.revision_basis(state["id"], state))
         return payload
 
     def _active(self, state: dict[str, Any]) -> None:
@@ -1520,6 +1524,59 @@ class Store:
             payload["undetermined_source_ids"] = sorted(set(undetermined))
         return payload
 
+    def revision_basis(self, candidate_id: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Why this card's current wording exists, when he said why he changed his mind.
+
+        `time_basis` dates the sentence and `source_basis` dates the evidence; neither
+        says *why* the sentence is this one. #1929 measured the gap on a card walked
+        through accept -> challenge -> revise -> accept: the ledger held
+        `{"from_statement": ..., "reason": ..., "to_statement": ...}` and none of
+        `retrieve`, `broadcast` or `export` carried the reason, so a later reader was
+        handed a narrowed claim with a counterexample beside it and no way to tell that
+        the narrowing had happened or what prompted it. `show --history` had the row,
+        and nobody reading an export opens it.
+
+        Read, never inferred. Only a `revise` row counts -- `revise.repeat` is the same
+        request arriving again and states no new reason -- and only one whose
+        `to_statement` is the wording this card holds *now*: a card revised twice carries
+        the reason for the current sentence, not the history of every sentence. The
+        earlier reason is still in the ledger and `show --history` still prints it; this
+        key answers the narrower question a reader of a card is actually asking.
+
+        Absent when the card has no such row, so a card that was never revised keeps
+        exactly the bytes it had -- the same rule `time_basis` and `source_basis` follow.
+        """
+        state = state if state is not None else self._get(_id(candidate_id))
+        wanted = wording_digest(state)
+        #
+        # Match on the sentence only, through the same normalization duplicates use.
+        # `wording_digest` would also fold in `kind` and the four content fields, and a
+        # revision that keeps the wording while widening `scope` is the same sentence
+        # with the same reason for being there -- the wrong key for this question.
+        current = normalize_wording(state.get("statement", ""))
+        matching = [
+            event for event in self._acquisition_events(_id(candidate_id))
+            if event["event"] == "revise"
+            and isinstance((event.get("details") or {}).get("to_statement"), str)
+            and isinstance((event.get("details") or {}).get("reason"), str)
+            and normalize_wording(event["details"]["to_statement"]) == current
+        ]
+        if not matching:
+            return {}
+        latest = matching[-1]
+        details = latest["details"]
+        basis: dict[str, Any] = {
+            "reason": details["reason"],
+            "revised_at": latest["created_at"],
+        }
+        # The wording it replaced, when the ledger has it. Named `left_wording` rather
+        # than `from_statement`, because the export prints it as prose and a reader
+        # should not have to know the event's field names to read the line.
+        left = details.get("from_statement")
+        if isinstance(left, str) and left.strip():
+            basis["left_wording"] = left
+        return {"revision_basis": basis}
+
     def _source_entry(self, candidate_id: str, source_id: str, depth: int) -> tuple[str, str, str] | None:
         """(entered_at, event kind, card it entered on) for one source id, or None.
 
@@ -1795,6 +1852,10 @@ class Store:
                 "relations": self._present_state(state).get("relations", []),
                 "aliases": state.get("aliases", []),
             }
+            # #1929: a card he revised carried the reason it changed only in the ledger,
+            # so this row described the sentence and hid how it got that way. Added by
+            # value, only when a revision of *this* wording exists.
+            row.update(self.revision_basis(state["id"], state))
             # r111c: `status` is `discussable` for a conclusion the user accepted and
             # equally for a card a facilitator merely unblocked, so this screen could
             # hand back an unaccepted draft as settled. Judged by the value, and only
@@ -1877,6 +1938,8 @@ class Store:
             provenance = self.source_basis(state["id"], state)
             if provenance:
                 results[-1]["source_basis"] = provenance
+            # #1929: same gap on this exit. Added by the same rule.
+            results[-1].update(self.revision_basis(state["id"], state))
             # #1774: a reader of this row saw `independence_groups=2 | independent=true`
             # and read "two people". #1763 measured that the ledger cannot support that
             # reading: an echo and an independent second arrival write identical
@@ -2028,6 +2091,23 @@ class Store:
                             "sources_undated: " + ", ".join(basis["undetermined_source_ids"])
                             + " | 这个库的账本里没有这些来源的入库记录；不是省略，是它真的说不出。"
                         )
+                # #1929: a participant was handed a narrowed claim with a counterexample
+                # beside it and nothing saying the narrowing had happened or why. The
+                # ledger held `from_statement` and `reason`; this file printed neither.
+                # Appended after the block, in prose, so every byte above keeps its place
+                # and a reader who never opens `show --history` still finds out. Omitted
+                # for a card he never revised, so those exports keep their exact bytes.
+                revision = self.revision_basis(state["id"], state).get("revision_basis")
+                if revision:
+                    if revision.get("left_wording"):
+                        lines.append(
+                            "revision_left_wording: " + revision["left_wording"]
+                            + " | 这句是他后来改掉的，不是现在的说法。"
+                        )
+                    lines.append(
+                        "revision_reason: " + revision["reason"]
+                        + " | 他改主意的理由，原话；不是对现在这句的赞同，也不证明它成立。"
+                    )
                 if state.get("relations"):
                     lines.append("relations: " + " | ".join(
                         f"{item['type']}:{item['target']} ({item['note']})" for item in state["relations"]
