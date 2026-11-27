@@ -62,21 +62,34 @@ def read_lines(lines):
     return read_line
 
 
-def session_output():
+def session_output(answers=("", "", "", "")):
+    """Run the real entry. `answers` is what he types at the four parts."""
     temp = tempfile.TemporaryDirectory()
     root = Path(temp.name)
     store = Store(root / "dojo.sqlite3")
     out = io.StringIO()
-    code = run_discuss(
-        store,
-        client=FakeClient([result("你描述的是：检查该谁做。", CONCLUSION),
-                           result("那我们把它写成这一条。", CONCLUSION, user_stance="accept")]),
-        read_line=read_lines(["讲一条做法", "对", "那天我手上是三件没做完的事", "", "", "", "", ""]),
-        output=out,
-    )
-    store.close()
-    temp.cleanup()
-    return code, out.getvalue()
+    try:
+        code = run_discuss(
+            store,
+            client=FakeClient([result("你描述的是：检查该谁做。", CONCLUSION),
+                               result("那我们把它写成这一条。", CONCLUSION, user_stance="accept")]),
+            read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
+            output=out,
+        )
+        recorded = None
+        sessions = sorted((root / "sessions").glob("*.jsonl")) if (root / "sessions").is_dir() else []
+        for path in sessions:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get("event") == "session_end" and row.get("elicitation"):
+                    recorded = row["elicitation"]
+    finally:
+        store.close()
+        temp.cleanup()
+    return code, out.getvalue(), recorded
 
 
 def shape_block(text):
@@ -96,8 +109,15 @@ def shape_block(text):
     return head[start + len("主持人> "):end].strip() if end >= 0 and start >= 0 else None
 
 
+ALL_FOUR = ("上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
+            "第一次觉得亏是没人再复核", "有一次我照着做反而漏了")
+
+
 def main() -> int:
-    code, text = session_output()
+    code, text, recorded_silent = session_output()
+    # The same entry when he answers all four: the block claims his words stay in the
+    # session but the card still credits the system. Both halves have to be true.
+    code_answered, text_answered, recorded_answered = session_output(ALL_FOUR)
     if code != 0:
         print("FAIL  入口没有正常结束（rc=%d）" % code, file=sys.stderr)
         return 1
@@ -110,13 +130,27 @@ def main() -> int:
     checks = {
         "说清楚有几件": "四件事" in block,
         "说清楚什么时候停": "两轮" in block,
-        "说清楚答不上来会怎样": "系统补" in block,
+        "说清楚答不上来会怎样": "跳过" in block,
+        "说清楚怎么结束": "结束输入" in block,
+        # The supervisor's receipt: the block used to say the entry would read 合写,
+        # but every card field is recorded 系统补 even when all four are answered.
+        "不承诺一个记不出来的归属": "合写" not in block,
+        "说了卡片到底算谁的": "仍全算我写的" in block,
         # It must be the block *before* the questions, not the session opening: the
         # opening was already there before this slice and says nothing about parts.
         "在第一个问题之前": QUESTIONS["情境"]["ask"] not in block,
     }
+    # The decisive one for the receipt: the sentence and the record must agree.
+    answered_line = (recorded_answered or {}).get("line") or ""
+    checks.update({
+        "答完四件后卡片仍记系统所写": answered_line.startswith("系统的"),
+        "答完四件后原文仍留在轨迹里": bool((recorded_answered or {}).get("collected")),
+        "全不答也不会卡住": code_answered == 0 and code == 0,
+    })
     print(json.dumps({"exit_code": code, "shape_block": block,
-                      "chars": len(block), "checks": checks},
+                      "chars": len(block), "checks": checks,
+                      "recorded_silent": (recorded_silent or {}).get("line"),
+                      "recorded_answered": answered_line},
                      ensure_ascii=False, indent=1))
 
     for what, ok in checks.items():
@@ -127,6 +161,8 @@ def main() -> int:
     print("\nOK    一个人遇到四句问法之前，先看到的是形状：几件、什么时候停、答不上来会怎样。",
           file=sys.stderr)
     print("      这一段在第一个问题之前；改前那版代码上它是主持人上一句结束语，11 个字。",
+          file=sys.stderr)
+    print("      入口里关于归属的那一句，与答完四件后真正记下的那一行一致（%s）。" % answered_line,
           file=sys.stderr)
     print("      它证明入口说了这句话，不证明有人因此留下来——那一格仍是空的。",
           file=sys.stderr)

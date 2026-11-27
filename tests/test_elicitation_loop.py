@@ -150,8 +150,39 @@ class ElicitationLoopTests(unittest.TestCase):
         block = head[start + len("主持人> "):end]
         self.assertIn("四件事", block, "the shape does not say how many parts there are")
         self.assertIn("两轮", block, "the shape does not say when the asking stops")
-        self.assertIn("系统补", block,
+        self.assertIn("跳过", block,
                       "the shape does not say what happens to a part he cannot answer")
+        self.assertIn("结束输入", block, "the shape does not say how to stop")
+        # The block must not promise a label the entry cannot produce. Every part is
+        # recorded `系统补` even when he answers all four (see
+        # test_a_written_rule_is_followed_by_the_four_questions_in_order), so an
+        # earlier draft of this block saying the entry would read 合写 told the reader
+        # something the product never does.
+        self.assertNotIn("合写", block,
+                         "the shape promises 合写, which this entry never records")
+
+    def test_the_shape_promises_exactly_the_authorship_the_entry_records(self):
+        """The block's sentence about authorship has to be true at the end of a session."""
+        answers = ["上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
+                   "第一次觉得亏是没人再复核", "有一次我照着做反而漏了"]
+        code, output = self.run_session(["讲一条做法", "对", *answers])
+        self.assertEqual(0, code)
+        end = self.elicitation_end()
+        self.assertEqual("系统的", end["authorship"])
+        first_q = output.find(QUESTIONS["情境"]["ask"])
+        head = output[:first_q]
+        marker = head.rfind("主持人> ")
+        block = head[head.rfind("主持人> ", 0, marker) + len("主持人> "):marker]
+        # The block must match the record in plain words: answers stay in the session,
+        # every card field is still written by the system.
+        self.assertIn("仍全算我写的", block,
+                      "the block does not say who the card credits")
+        # The block's other half: "你答的原话会留在本场记录里". Every one of his
+        # answers has to be in the trace word for word, or that sentence is false too.
+        events = self.elicitation_events()
+        self.assertEqual(answers, [row["answer"] for row in events])
+        self.assertNotIn("合写", block,
+                         "the block promises 合写, which this entry never records")
 
     def test_an_early_end_leaves_exactly_the_parts_it_should(self):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
