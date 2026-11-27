@@ -126,6 +126,26 @@ python3 -m dojo revise c-one --statement '所有视口显示状态' --reason '�
 
 现在的读数（`scenario_d`）：三条都是 `revise`，`the_second_target_is_recorded` 为 `所有视口显示状态`，`repeat_of_names_the_row_with_the_same_target` 为 `true`，`repeat_of_does_not_name_the_other_target` 为 `true`。
 
+### 决定 C 的第三次：值也是请求的一部分
+
+复核人又用一个正常走的路径量出第三处：同一句话、同一个理由，只是**范围**不同。
+
+```sh
+python3 -m dojo revise c-one --statement '卡片显示状态' --reason '无障碍需求' --scope '窄屏'   # 第一次
+python3 -m dojo revise c-one --statement '卡片显示状态' --reason '无障碍需求' --scope '所有视口' # 后来改宽
+python3 -m dojo revise c-one --statement '卡片显示状态' --reason '无障碍需求' --scope '所有视口' # 再确认一次
+```
+
+第三条指回第一条（窄屏）。因为那一版 `revise` 的 details 里记的是 `changed_fields: ["statement","scope"]` —— **哪些字段动了，而不是动成了什么**。
+
+前两次修法的形状是同一个错：**比的东西比请求少**，而且每次都是「再补一个字段」。这次不再补：`_write` 多一个参数 `request`，每个写入点把自己收到的**全部输入**原样放进去，存进 `details["request"]`；`_same_request` 直接比这两个对象，不再维护「哪些键要减掉」的清单（那份清单本身就是 bug，两轮改了两次）。
+
+为了让这条规则不靠记性，加了一条源码门（`EveryWriterStatesItsWholeRequest`）：解析 `dojo/storage.py`，任何 `_write` 调用点没给 `request` 就红；`_REQUEST_BOOKKEEPING` 若回来也红。写这条门时它当场抓到 `link` 这个漏掉的写入点 —— 这正是它要防的东西。
+
+**旧记录的确定性。** 这次之前写的行没有 `request`，无法参与比较。新行照常用自己的名字写（没有匹配就是没有匹配），但会在 details 里带 `earlier_rows_without_a_recorded_request: N`：**「没找到同请求」和「没有可比的行」是两件事**，只有前者是答案。不做成猜测，也不把旧行默认当成不同请求。
+
+现在的读数（`scenario_e`）：两条都是 `revise`，`scopes_recorded_in_the_asks` 为 `[["窄屏"],["所有视口"]]`，`repeat_of_does_not_name_the_other_scope` 为 `true`。
+
 ### 三个决定为什么算同一个经验
 
 因为要判的是同一件事，只是换了一层：**重复请求的效果是否与单次相同，以及事后能不能分辨**。A 在网络上（要不要重发），B 在存储里（重发到了会怎样），C 在账本里（两次不同的请求会不会被当成一次）。A 的修法依据是「有证据才重试」，B 的修法依据是「日志可以多写，但版本不能假装变了」，C 的修法依据是「允许每次都记，就必须让每次都能分清」。
@@ -149,7 +169,7 @@ python3 -m dojo revise c-one --statement '所有视口显示状态' --reason '�
 | `dojo/live.py` | 新增 `incomplete_response` 种类；比对 Content-Length，分块截断也用这一类；不保留半截正文 |
 | `dojo/discuss.py` | 这一类**不自动重试**；只为「读不完整」如实说明，不再说成格式错误；这一轮记 `response_incomplete`，会话继续 |
 | `dojo/storage.py` | `_write` 在效果未变时不起新版本；`_same_request` 只在请求本身重复时才写 `<event>.repeat`，否则用自己的名字写一条、版本留在原处；`revise` 记 `to_statement`；`history()` 吐 `sequence` |
-| `tests/test_repeat_safety.py` | 15 项门：A、B 各一半，C 五项（两个理由两行、同一理由仍算重放、第二个理由不重开管线、一个理由两个目标不是重放、重放指向同一目标的原文） |
+| `tests/test_repeat_safety.py` | 20 项门：A、B 各一半，C 八项（两个理由两行、同一理由仍算重放、第二个理由不重开管线、一个理由两个目标不是重放、重放指向同一目标的原文、可选输入的值属于请求、每个可选输入都进 `request`、旧行不被说成新请求），加 3 项源码门（`_write` 必须收 `request`、调用点不得漏传、减法清单不许回来） |
 | `tests/test_http_interruption.py` | 两条断言从 `connect` 改为 `incomplete_response`（**这是改了已发布的断言**，理由见下） |
 
 `tests/test_http_interruption.py` 原来把「body 被截断」钉成 `connect`。那条断言本身没错（它要保证的是不重试、不泄漏半截正文，这两点都保住了），但它把「连接失败」与「响应读不完整」压成了同一类，而这正是 A 的根因。改的是名字，不是它守的事实；两条断言的原意在新名下仍然被测。
@@ -184,7 +204,8 @@ python3 -m dojo revise c-one --statement '所有视口显示状态' --reason '�
 - 只测了 Content-Length 与 chunked 两种框架。其它框架下「读不完整」可能表现成别的异常；`incomplete_response` 的判据是「声明的字节没到齐」，新框架要单独确认。
 - 没有真实模型端点参与。`_Cut` 是本地 stub，它证明的是**本仓**在收到截断响应时的行为，不是某个厂商服务的行为。
 - `_same_request` 的判据是「事件名 + 请求细节（除去 `version`/`from_statement`/`effect`/`repeat_of`）完全相同」。对 `revise` 来说，细节包含 `to_statement` 和理由，所以「理由相同、目标不同」不再是重放。它**不**比较调用方身份，所以两个不同的人碰巧提出逐字相同的请求会被算作重放。目前 CLI 没有调用方身份可比较，这是已知边界。
-- 这个判据依赖「写请求的人把请求本身记进 details」。`revise` 现在记全了；其它写路径只记了各自的请求细节（`challenge` 的 `text`、`confirm` 的 `basis` 等）。若将来新增一个「细节记不全」的写路径，它会退回 C 第一版的错误——不是 `_same_request` 会察觉的，而是没有任何门。这是判据的结构性弱点，只能靠「新写路径必须记全请求」这条纪律，目前没有自动检查。
+- 这个判据现在要求每个写入点把 `request` 传全（源码门会抓漏传的调用点），但它抓不出**传了却传少**：门只数参数，不核对「这个函数收到的每个输入是否都在 request 里」。那一层仍是纪律。若将来某个写入点收了新参数却忘了放进 `request`，行为会退回本节的错误，而门不会红。这是这条判据剩下的结构性弱点，写在这里而不是假装已经关掉。
+- 旧行（`request` 之前写的）无法比较。它们被计数并写进新行的 `earlier_rows_without_a_recorded_request`，而不是被当作「不同请求」或「同一请求」。也就是说：对旧库，一次真正发生在旧行上的重放**不会**被认出来，只会被记成一条新行并注明有可比不了的历史。这是选择，不是遗漏——把旧行猜成任一边都会把不确定性说成结论。
 - 版本仍然只看状态：若将来有操作**故意**要求「内容相同也算新版本」，现有判据会把它吞掉；目前没有这种操作（`abstain` 本来就不起版本）。
 - `confirm` 带会话：同一会话重复确认，实测版本不动（`confirmed_sessions` 去重后状态未变），**按重放处理**；换一个会话再来确认，版本 2 → 3，**按真实动作处理**。这一条我最初是推错的 —— 以为 `confirmed_sessions` 会追加、因而每次都会起新版本；实测否掉了。写在这里，是因为它正是本节的判据（除 `version` 外状态是否相等）在会话字段上的表现。
 
@@ -197,6 +218,8 @@ python3 -B -m unittest tests.test_repeat_safety
 ```
 
 `probe.py` 的三个场景都自带临时库；`_Cut` 只监听 127.0.0.1，不对外发包。
+
+`scenario_e` 的读数：`rows_for_one_reason_two_scopes` 为 `["revise", "revise"]`、`scopes_recorded_in_the_asks` 为 `[["窄屏"], ["所有视口"]]`、`the_actual_replay_is_marked` 为 `revise.repeat`、`repeat_of_does_not_name_the_other_scope` 为 `true`。
 
 `scenario_d` 的读数：`rows_for_one_reason_two_targets` 为 `["revise", "revise", "revise"]`、`the_second_target_is_not_a_replay` 为 `true`、`the_actual_replay_is_marked` 为 `revise.repeat`、`repeat_of_does_not_name_the_other_target` 为 `true`。
 

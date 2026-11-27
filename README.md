@@ -130,10 +130,17 @@ attempt did not take effect. Two decisions in this repository were wrong under i
   Deciding it by the *reason* alone was half a rule: taking a card to narrow screens for
   accessibility, then to every viewport for another reason, then to every viewport citing
   accessibility again, repeats a reason but not a request — and the pointer named the
-  narrow-screen revise, which asked for a different sentence. A `revise` row now records
-  both the wording it left and the wording it asked for, and every event in
+  narrow-screen revise, which asked for a different sentence. Deciding it by the *names*
+  of the fields that moved was the other half: same wording, same reason, one request
+  scoped to narrow screens and the next to every viewport recorded the identical
+  `["statement", "scope"]`, so the wider one was filed as a replay of the narrower.
+  A repeat is now judged by the whole ask as one object — `request`, holding every input
+  the caller supplied, `scope` and premises included — stored on the row rather than
+  reconstructed from a list of keys to ignore (that list was wrong twice). Every event in
   `show --history` carries the `sequence` number `repeat_of` speaks in, so you can walk
-  from a replay to the row that actually asked for the same thing.
+  from a replay to the row that asked for the same thing, and a row written before asks
+  were stored is counted in `earlier_rows_without_a_recorded_request` instead of being
+  quietly read as a different request.
 
 The block below shows the second one on a real library: two reasons, two rows; the same
 reason again, one row and one `.repeat` that names a row asking for the same wording.
@@ -152,7 +159,8 @@ The two reasons are separate `revise` rows and neither names the other. The repe
 `revise.repeat` naming the row it repeats, and `version` stays at 2 throughout, so no
 finished pipeline pass turns back into pending work. Each row carries `to_statement` — the
 wording it asked for — beside `from_statement`, which is why the replay cannot name a row
-that asked for a different sentence. Before/after readings for both
+that asked for a different sentence, and `details.request` holds the whole ask so a
+changed `scope` counts as a different request even when the wording and the reason match. Before/after readings for both
 decisions, and the arms that fail on the old trees, are in
 [`docs/evidence/2026-11-27-repeat-safety/`](docs/evidence/2026-11-27-repeat-safety/).
 

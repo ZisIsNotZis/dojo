@@ -7,6 +7,7 @@ client retries only because the connection died before the response was read.
 Both halves are tested here against the real entry points: the discussion loop over
 a real socket at one end, and the store's version ledger at the other.
 """
+import ast
 import http.client
 import io
 import json
@@ -260,6 +261,78 @@ class ARepeatIsNotASecondAction(unittest.TestCase):
         # third stays at 3.
         self.assertEqual(3, self.store.show("c-one")["candidate"]["version"])
 
+    def test_optional_inputs_are_part_of_the_request(self):
+        """`scope` is an input, so a different scope is a different request.
+
+        Same wording, same reason, two scopes: "narrow screens only" for
+        accessibility, then "all viewports" for accessibility. The second asks for
+        something the first never did. Recording only the *names* of the fields that
+        moved ("statement, scope") made the two look identical, so the second was
+        filed as a replay of the first -- and re-asking for "all viewports" then
+        pointed back at the narrow-screen row.
+        """
+        self.store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["窄屏"])
+        self.store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["所有视口"])
+        self.store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["所有视口"])
+        events = self.store.history("c-one")["events"]
+        revisals = [e for e in events if e["event"].startswith("revise")]
+        self.assertEqual(["revise", "revise", "revise.repeat"],
+                         [e["event"] for e in revisals])
+        # The replay names the all-viewports row, not the narrow-screens one.
+        named = [e for e in events
+                 if e.get("sequence") == revisals[-1]["details"]["repeat_of"]]
+        self.assertEqual(1, len(named))
+        self.assertEqual(["所有视口"], named[0]["details"]["request"]["scope"])
+
+    def test_every_optional_input_reaches_the_recorded_request(self):
+        """Not just `scope`: any input the caller can supply is part of the ask."""
+        self.store.revise(
+            "c-one", "同一句话", "同一个理由",
+            kind="application", scope=["窄屏"], premises=["前提甲"],
+            alternatives=["替代甲"], contradictions=["矛盾甲"], unknowns=["未知甲"],
+        )
+        recorded = self.store.history("c-one")["events"][-1]["details"]["request"]
+        for key in ("kind", "premises", "scope", "alternatives",
+                    "contradictions", "unknowns"):
+            self.assertIn(key, recorded, 'the ask dropped the value of %s' % key)
+        self.assertEqual(["窄屏"], recorded["scope"])
+        self.assertEqual(["前提甲"], recorded["premises"])
+        # A second call with one of those values changed is a new request.
+        self.store.revise(
+            "c-one", "同一句话", "同一个理由",
+            kind="application", scope=["所有视口"], premises=["前提甲"],
+            alternatives=["替代甲"], contradictions=["矛盾甲"], unknowns=["未知甲"],
+        )
+        self.assertEqual("revise", self.store.history("c-one")["events"][-1]["event"])
+
+    def test_a_row_without_a_recorded_ask_is_not_silently_called_a_new_request(self):
+        """Old rows have no `request`; "no earlier match" is not "nothing to compare".
+
+        Rows written before the ask was stored cannot be compared at all. Writing the
+        new row under its own name is right, but saying nothing would present the
+        absence of evidence as a verdict, so the row counts what it could not check.
+        """
+        self.store.revise("c-one", "同一句话", "同一个理由")
+        # Make the row look like one written before `request` existed.
+        row = self.store.connection.execute(
+            "SELECT seq,details_json FROM events WHERE event='revise' ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        details = json.loads(row["details_json"])
+        details.pop("request", None)
+        self.store.connection.execute(
+            "UPDATE events SET details_json=? WHERE seq=?", (json.dumps(details), row["seq"]))
+        self.store.connection.commit()
+
+        self.store.revise("c-one", "同一句话", "同一个理由")
+        last = self.store.history("c-one")["events"][-1]
+        self.assertEqual("revise", last["event"], 'an uncomparable row must not be a match')
+        self.assertEqual(1, last["details"]["earlier_rows_without_a_recorded_request"])
+        # A comparable replay still resolves normally and carries no such note.
+        self.store.revise("c-one", "同一句话", "同一个理由")
+        last = self.store.history("c-one")["events"][-1]
+        self.assertEqual("revise.repeat", last["event"])
+        self.assertNotIn("earlier_rows_without_a_recorded_request", last["details"])
+
     def test_a_replay_names_a_row_that_asked_for_the_same_thing(self):
         """`repeat_of` must be followable to a row with the same ask, not just a seq.
 
@@ -297,6 +370,69 @@ class ARepeatIsNotASecondAction(unittest.TestCase):
         mark = self.store.connection.execute(
             "SELECT version FROM pipeline_marks WHERE candidate_id='c-one'").fetchone()[0]
         self.assertEqual(version, mark)
+
+
+class EveryWriterStatesItsWholeRequest(unittest.TestCase):
+    """The rule cannot be "remember to record the new field too".
+
+    Both defects in this slice were the same shape: a writer recorded part of what
+    the caller asked for, and the comparison believed the part was the whole. Each
+    fix added one more field, which is how a rule rots. The contract is enforced
+    instead: `_write` takes the ask as its own argument, and every call site must
+    pass one. A writer added later that forgets fails here rather than silently
+    making "no earlier match" mean "not the same request".
+
+    This is a source check, not a behaviour check. It is here because the failure it
+    prevents is an omission -- and an omission cannot be caught by exercising the
+    writers that exist.
+    """
+
+    def setUp(self):
+        import dojo.storage as storage
+        self.path = Path(storage.__file__)
+        self.tree = ast.parse(self.path.read_text(encoding='utf-8'))
+
+    def _write_calls(self):
+        for node in ast.walk(self.tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "_write":
+                yield node
+
+    def test_write_has_a_dedicated_request_parameter(self):
+        methods = {n.name: n for n in ast.walk(self.tree)
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        self.assertIn("_write", methods)
+        params = [a.arg for a in methods["_write"].args.args]
+        self.assertIn("request", params,
+                      '_write no longer takes the ask as its own argument')
+        # ... and it is stored, not merely compared, or a later row cannot answer
+        # "was this a replay of that?".
+        body = ast.get_source_segment(self.path.read_text(encoding='utf-8'),
+                                      methods["_write"])
+        self.assertIn('"request": request', body,
+                      '_write stopped recording the ask it compares')
+
+    def test_no_call_site_omits_its_request(self):
+        misses = []
+        for call in self._write_calls():
+            has_kw = any(k.arg == "request" for k in call.keywords)
+            # state, event, details, request
+            has_pos = len([a for a in call.args if not isinstance(a, ast.Starred)]) >= 4 or any(
+                isinstance(a, ast.Starred) for a in call.args)
+            if not (has_kw or has_pos):
+                misses.append(call.lineno)
+        self.assertEqual([], misses,
+                         '_write call sites pass no request (lines %s); a writer that '
+                         'records part of the ask is how both defects in this slice '
+                         'happened' % misses)
+
+    def test_the_bookkeeping_subtraction_is_still_gone(self):
+        """The set of keys to subtract was the bug, so it must not come back."""
+        source = self.path.read_text(encoding='utf-8')
+        self.assertNotIn("_REQUEST_BOOKKEEPING", source,
+                         'the "ignore these keys" set is back; it was wrong twice')
 
 
 if __name__ == "__main__":

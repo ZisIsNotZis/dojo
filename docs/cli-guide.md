@@ -132,7 +132,7 @@ python3 -m dojo abstain --id life-01 \
 
 `challenge` 追加反例/疑点并使候选不可检索；`revise` 产生新版本并恢复为 draft。abstain 仅追加事件，不改候选版本，也不对真假投票。
 
-**重复的请求不动版本，但一定留痕。** 同一条 `confirm` / `challenge` / `revise` 再发一遍，`version` 停在原处（所以管线「已处理到版本 N」不会失效），账本多一行 `<event>.repeat` 指回原来那条。但「重放」看的是**请求**，不是结果：把卡片改成它已经是的那句话、只为补一个新理由，措辞没变、版本也不变，却会记成一条普通的 `revise`，两个理由各占一行。请求是「理由 + 要去的措辞」两件；同一个理由改去另一句话也同样不是重放。每条 `revise` 行都记着 `to_statement`，`show --history` 里每条事件都带 `sequence`，所以 `repeat_of` 指到的那一行可以当场查出来，并且它要的必然是同一句话。用 `dojo events --id <卡>` 看这四行的区别，或跑 `docs/evidence/2026-11-27-repeat-safety/probe.py` 看前后读数。
+**重复的请求不动版本，但一定留痕。** 同一条 `confirm` / `challenge` / `revise` 再发一遍，`version` 停在原处（所以管线「已处理到版本 N」不会失效），账本多一行 `<event>.repeat` 指回原来那条。但「重放」看的是**请求**，不是结果：把卡片改成它已经是的那句话、只为补一个新理由，措辞没变、版本也不变，却会记成一条普通的 `revise`，两个理由各占一行。请求是「理由 + 要去的措辞 + 你给的每个可选输入（范围、前提……）」；同一个理由改去另一句话、或同一个理由换了范围，也同样不是重放。每条 `revise` 行都记着 `to_statement`，`show --history` 里每条事件都带 `sequence`，所以 `repeat_of` 指到的那一行可以当场查出来，并且它要的必然是同一句话。用 `dojo events --id <卡>` 看这四行的区别，或跑 `docs/evidence/2026-11-27-repeat-safety/probe.py` 看前后读数。
 
 ## 14–15 分钟：记录一个困惑点并收尾
 

@@ -134,6 +134,25 @@ class TheDocsNumbersAreTheProbesNumbers(unittest.TestCase):
         self.assertTrue(d['repeat_of_does_not_name_the_other_target'])
 
 
+    def test_optional_input_values_are_part_of_the_request(self):
+        """Decision C, third half: the ask is the values, not the field names.
+
+        `changed_fields` said *which* fields moved; it never said what they were
+        moved to. Two asks trading a statement and a reason while one says "narrow
+        screens" and the other "all viewports" produced the same names, so the
+        second was filed as the first's replay and the pointer named a row asking
+        for a different scope.
+        """
+        e = self.reading['scenario_e']
+        self.assertEqual(['revise', 'revise'], e['rows_for_one_reason_two_scopes'])
+        self.assertTrue(e['the_second_scope_is_not_a_replay'])
+        self.assertEqual([['\u7a84\u5c4f'], ['\u6240\u6709\u89c6\u53e3']],
+                         e['scopes_recorded_in_the_asks'])
+        self.assertEqual('revise.repeat', e['the_actual_replay_is_marked'])
+        self.assertTrue(e['repeat_of_names_the_row_with_the_same_scope'])
+        self.assertTrue(e['repeat_of_does_not_name_the_other_scope'])
+
+
 class TheFrontPagesPointAtTheEvidence(unittest.TestCase):
     """A reader who starts at the front page must be able to find this slice.
 

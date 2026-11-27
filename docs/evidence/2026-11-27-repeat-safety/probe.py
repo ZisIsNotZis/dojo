@@ -22,7 +22,12 @@ targets. Taking a card to "narrow screens" citing accessibility and later to "al
 viewports" citing the same thing repeats a reason, not a request. It must be its
 own row, and a genuine replay must point at a row that asked for the same target.
 
-All four print one JSON object. Nothing here writes outside a temp directory.
+Scenario E is the same shape one level down: the wording and the reason are
+identical and the *scope* differs. Recording which fields moved is not recording
+what was asked for, so E checks that the value is in the row and that the replay
+names the row carrying the same value.
+
+All five print one JSON object. Nothing here writes outside a temp directory.
 """
 import io
 import json
@@ -204,10 +209,37 @@ def scenario_d():
     }
 
 
+def scenario_e():
+    """Same wording and reason, different scope: the value is the request."""
+    store = Store(str(Path(tempfile.mkdtemp(prefix="probe-e-")) / "lib.sqlite3"))
+    store.add("卡片显示状态", "abstract_idea", candidate_id="c-one", scope=["所有"])
+    store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["窄屏"])
+    store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["所有视口"])
+    store.revise("c-one", "卡片显示状态", "无障碍需求", scope=["所有视口"])   # the replay
+    events = store.history("c-one")["events"]
+    revisals = [e for e in events if e["event"].startswith("revise")]
+    repeat = revisals[-1]
+    named = [e for e in events if e.get("sequence") == repeat["details"].get("repeat_of")]
+
+    return {
+        "rows_for_one_reason_two_scopes": [e["event"] for e in revisals[:2]],
+        "the_second_scope_is_not_a_replay": "repeat_of" not in revisals[1]["details"],
+        "scopes_recorded_in_the_asks": [
+            (e["details"].get("request") or {}).get("scope") for e in revisals[:2]],
+        "the_actual_replay_is_marked": repeat["event"],
+        "repeat_of_names_the_row_with_the_same_scope": bool(named) and (
+            (named[0]["details"].get("request") or {}).get("scope")
+            == (repeat["details"].get("request") or {}).get("scope")),
+        "repeat_of_does_not_name_the_other_scope": bool(named) and (
+            (named[0]["details"].get("request") or {}).get("scope") != ["窄屏"]),
+    }
+
+
 if __name__ == "__main__":
     print(json.dumps({
         "scenario_a": scenario_a(),
         "scenario_b": scenario_b(),
         "scenario_c": scenario_c(),
         "scenario_d": scenario_d(),
+        "scenario_e": scenario_e(),
     }, ensure_ascii=False, indent=2))

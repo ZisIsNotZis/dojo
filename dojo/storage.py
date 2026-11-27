@@ -393,7 +393,10 @@ class Store:
             raise DojoError(f"candidate not found: {candidate_id}")
         return json.loads(row["state_json"])
 
-    def _write(self, state: dict[str, Any], event: str, details: dict[str, Any]) -> dict[str, Any]:
+    def _write(
+        self, state: dict[str, Any], event: str, details: dict[str, Any],
+        request: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Persist a new version unless this request would change nothing.
 
         Two questions that look like one, kept apart here because merging them lost
@@ -409,8 +412,18 @@ class Store:
         reason is the case that made this necessary: the wording is already there,
         so nothing moves, but the reason is a fact the reader needs. Recording it as
         `<event>.repeat` of the first one would file a new argument under an old
-        one. A repeat is the same request (same event, same asked-for details)
-        arriving twice, not merely the same resulting state.
+        one. A repeat is the same request (same event, same ask) arriving twice, not
+        merely the same resulting state.
+
+        The ask is passed in whole as `request` and stored under that one key, so the
+        comparison cannot fall behind the writer: this used to subtract a hand-written
+        list of "bookkeeping" keys from whatever `details` happened to contain, and
+        that list was wrong twice -- once when `revise` recorded the wording it left
+        but not the one it asked for, once when it recorded which fields it changed
+        but not the values it asked for. Each time the fix was to add one more key to
+        the subtraction or one more field to `details`; the subtraction itself was the
+        bug. Two requests are the same when their recorded asks are equal, and an ask
+        is equal only if it names every input the caller supplied.
 
         Either way the version stays put and the ledger keeps a row: RFC 9110
         section 9.2.2 permits logging each request, and refuses to leave a replay
@@ -419,10 +432,15 @@ class Store:
         candidate_id = state["id"]
         current = self._get(candidate_id)
         state = dict(state)
+        if request is not None:
+            # Stored with the row, not only compared here: a later reader asking "was
+            # this a replay of that?" needs the ask that was actually made, and a row
+            # without one cannot answer.
+            details = {**details, "request": request}
         unchanged = {key: value for key, value in state.items() if key != "version"} == {
             key: value for key, value in current.items() if key != "version"}
         if unchanged:
-            repeat_of = self._same_request(candidate_id, event, details)
+            repeat_of, uncompared = self._same_request(candidate_id, event, request)
             if repeat_of is not None:
                 self._event(candidate_id, event + REPEAT_EVENT_SUFFIX, {
                     **details, "version": current["version"],
@@ -432,9 +450,14 @@ class Store:
                 return current
             # A different request with the same effect: the card does not move, but
             # this is not a replay, so it is written under its own name with the
-            # version it left in place.
+            # version it left in place. When an earlier row of this event cannot be
+            # compared (it predates `request`), the row says so rather than implying
+            # the question was settled: "no earlier match" and "no earlier row to
+            # compare with" are different facts, and only the first one is an answer.
+            note = {} if not uncompared else {
+                "earlier_rows_without_a_recorded_request": uncompared}
             self._event(candidate_id, event, {
-                **details, "version": current["version"], "effect": "unchanged",
+                **details, "version": current["version"], "effect": "unchanged", **note,
             })
             return current
         state["version"] = current["version"] + 1
@@ -451,38 +474,37 @@ class Store:
         self._event(candidate_id, event, {**details, "version": state["version"]})
         return state
 
-    def _same_request(self, candidate_id: str, event: str, details: dict[str, Any]) -> int | None:
-        """The seq of an earlier row that recorded this same request, or None.
+    def _same_request(
+        self, candidate_id: str, event: str, request: dict[str, Any] | None,
+    ) -> tuple[int | None, int]:
+        """(the seq of an earlier row recording this same ask, count of rows that
+        cannot be asked).
 
-        Compared on what the caller *asked for*, not on the state it produced: the
-        reason a `revise` was sent and the basis a `confirm` was given. Bookkeeping
-        that every write adds is skipped, because it differs between two runs of the
-        same request and says nothing about intent: `version` (where the card was),
-        `from_statement` (the wording being left), `effect` and `repeat_of`.
+        Compared on the ask itself -- every input the caller supplied, stored whole
+        under `request` -- and not on the state it produced, which two different asks
+        can share. Nothing is subtracted here, because the ledger no longer has to
+        guess which of a writer's fields were intent: the writer says.
 
-        What a request asked *for* is part of its identity, so each writer records it:
-        `revise` keeps `to_statement` next to the reason. It once kept only
-        `from_statement` -- where the card was coming from -- and that made two
-        requests with one reason and two different targets look identical, so the
-        second was filed as a replay of the first. Where a request asks for nothing
-        the ledger can name, the row is not a candidate for a replay at all.
+        Rows written before asks were stored have no `request`. They are counted, not
+        skipped silently: their existence means "no match" is not the same answer as
+        "nothing comparable", and a caller that cannot tell the two would be free to
+        present a guess as a verdict. See the caller for what it does with the count.
         """
-        if not details:
-            return None
-        wanted = {key: value for key, value in details.items()
-                  if key not in _REQUEST_BOOKKEEPING}
-        if not wanted:
-            return None
+        if not request:
+            return None, 0
         rows = self.connection.execute(
             "SELECT seq,details_json FROM events WHERE candidate_id=? AND event=? ORDER BY seq DESC",
             (candidate_id, event),
         ).fetchall()
+        uncompared = 0
         for row in rows:
             earlier = json.loads(row["details_json"])
-            if {key: value for key, value in earlier.items()
-                    if key not in _REQUEST_BOOKKEEPING} == wanted:
-                return int(row["seq"])
-        return None
+            if "request" not in earlier:
+                uncompared += 1
+                continue
+            if earlier["request"] == request:
+                return int(row["seq"]), uncompared
+        return None, uncompared
     def _source(self, source: dict[str, Any]) -> dict[str, str]:
         if not isinstance(source, dict):
             raise DojoError("each source must be a JSON object")
@@ -605,7 +627,8 @@ class Store:
             state["sources"] = list(state.get("sources", [])) + [source_value]
             if session:
                 state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
-            state = self._write(state, "attach_source", {"source": source_value["id"], "session": session})
+            state = self._write(state, "attach_source", {"source": source_value["id"], "session": session},
+                                {"source": source_value, "session": session})
         return state
 
     def accept_draft(
@@ -651,7 +674,10 @@ class Store:
             agreed = _agreed_at(agreed_at)
             if agreed is not None:
                 details[AGREED_AT_FIELD] = agreed
-            state = self._write(state, "draft_accepted", details)
+            state = self._write(state, "draft_accepted", details, {
+                "session": session, "statement": state["statement"],
+                "agreed_at": details.get(AGREED_AT_FIELD),
+            })
         return state
 
     def record_pipeline_pass(
@@ -828,7 +854,9 @@ class Store:
                 state["confirmed_sessions"] = _strings(
                     state.get("confirmed_sessions", []) + [session], "confirmed session"
                 )
-            state = self._write(state, "confirm_discussable", {"basis": basis, "session": session, "not_truth_claim": True})
+            state = self._write(state, "confirm_discussable",
+                                {"basis": basis, "session": session, "not_truth_claim": True},
+                                {"basis": basis, "session": session})
         return state
 
     def revoke(self, candidate_id: str, reason: str, session: str | None = None) -> dict[str, Any]:
@@ -844,7 +872,8 @@ class Store:
                 state["confirmed_sessions"] = _strings(
                     state.get("confirmed_sessions", []) + [session], "confirmed session"
                 )
-            state = self._write(state, "revoke_confirmation", {"reason": reason, "session": session})
+            state = self._write(state, "revoke_confirmation", {"reason": reason, "session": session},
+                                {"reason": reason, "session": session})
         return state
 
     def challenge(self, candidate_id: str, text: str, source: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -860,7 +889,7 @@ class Store:
             state["status"] = "challenged"
             if state.get("confirmation", {}).get("active"):
                 state["confirmation"] = self._confirmation_off(state, "candidate challenged")
-            state = self._write(state, "challenge", {"text": text})
+            state = self._write(state, "challenge", {"text": text}, {"text": text})
         return state
 
     def revise(
@@ -905,16 +934,27 @@ class Store:
             # may arrive here from anywhere), the wording being asked for is the ask
             # itself. Recording only the departure made a second target for one reason
             # indistinguishable from a replay.
+            changed_fields = [field for field, values in revised_fields.items() if values is not None]
             details = {"from_statement": old_statement, "to_statement": statement,
                        "reason": reason}
-            changed_fields = [field for field, values in revised_fields.items() if values is not None]
             if kind is not None or changed_fields or session is not None:
                 details["changed_fields"] = ["statement", *changed_fields]
                 if kind is not None:
                     details["changed_fields"].append("kind")
                 if session is not None:
                     details["session"] = session
-            state = self._write(state, "revise", details)
+            # The whole ask, field by field: the sentence, the reason, and every
+            # optional input the caller actually supplied -- `scope` included. Keeping
+            # only `changed_fields` (the *names* of what moved) lost the values, so a
+            # request for "all viewports" matched an earlier one for "narrow screens"
+            # that shared a statement and a reason.
+            request = {
+                "statement": statement, "reason": reason,
+                "kind": kind, "premises": premises, "scope": scope,
+                "alternatives": alternatives, "contradictions": contradictions,
+                "unknowns": unknowns, "session": session,
+            }
+            state = self._write(state, "revise", details, request)
         return state
 
     def alias(self, candidate_id: str, wording: str, reason: str) -> dict[str, Any]:
@@ -925,7 +965,8 @@ class Store:
             if wording == state["statement"] or wording in state["aliases"]:
                 raise DojoError("alias is already present or identical to the statement")
             state["aliases"].append(wording)
-            state = self._write(state, "alias", {"wording": wording, "reason": reason})
+            state = self._write(state, "alias", {"wording": wording, "reason": reason},
+                                {"wording": wording, "reason": reason})
         return state
 
     def link(self, candidate_id: str, relation: str, target_id: str, reason: str) -> dict[str, Any]:
@@ -944,7 +985,9 @@ class Store:
             if link in source.get("relations", []):
                 raise DojoError("identical relation already exists")
             source["relations"].append(link)
-            source = self._write(source, "link", link)
+            source = self._write(source, "link", link,
+                                 {"relation": link["type"], "target": link["target"],
+                                  "note": reason})
         return source
 
     def split(self, candidate_id: str, children: list[dict[str, Any]], reason: str) -> list[dict[str, Any]]:
@@ -999,7 +1042,8 @@ class Store:
             parent["status"] = "superseded"
             parent["confirmation"] = self._confirmation_off(parent, "split into child candidates")
             parent["split_children"] = [child["id"] for child in child_values]
-            self._write(parent, "split", {"children": [child["id"] for child in child_values], "reason": reason})
+            self._write(parent, "split", {"children": [child["id"] for child in child_values], "reason": reason},
+                        {"children": [child["id"] for child in child_values], "reason": reason})
         return child_values
 
     def _source_union(self, first: list[dict[str, Any]], second: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1135,12 +1179,14 @@ class Store:
                 self._event(source["id"], MERGE_REFUSED_EVENT, {**refusal, "reason": reason})
             else:
                 merged.pop(MERGED_CHANGED_FIELDS, None)
-                target = self._write(merged, "merge_received", {"source": source["id"], "reason": reason})
+                target = self._write(merged, "merge_received", {"source": source["id"], "reason": reason},
+                                     {"source": source["id"], "reason": reason})
                 source = dict(source)
                 source["status"] = "superseded"
                 source["redirect_to"] = target["id"]
                 source["confirmation"] = self._confirmation_off(source, "merged into " + target["id"])
-                source = self._write(source, "merge_redirect", {"target": target["id"], "reason": reason})
+                source = self._write(source, "merge_redirect", {"target": target["id"], "reason": reason},
+                                     {"target": target["id"], "reason": reason})
                 event_id = self._event(source["id"], "merge", {
                     "source": source["id"], "target": target["id"], "reason": reason,
                     "before_source": before_source, "before_target": before_target,
@@ -1171,8 +1217,12 @@ class Store:
                 raise DojoError("cannot unmerge after either candidate has changed; review and restore manually")
             source_restored = dict(details["before_source"])
             target_restored = dict(details["before_target"])
-            source_restored = self._write(source_restored, "unmerge", {"target": target_now["id"], "reason": reason})
-            target_restored = self._write(target_restored, "unmerge", {"source": source_now["id"], "reason": reason})
+            source_restored = self._write(
+                source_restored, "unmerge", {"target": target_now["id"], "reason": reason},
+                {"target": target_now["id"], "reason": reason})
+            target_restored = self._write(
+                target_restored, "unmerge", {"source": source_now["id"], "reason": reason},
+                {"source": source_now["id"], "reason": reason})
         return {"source": source_restored, "target": target_restored}
 
     def abstain(self, reason: str, candidate_id: str | None = None, next_question: str | None = None) -> dict[str, Any]:
@@ -1193,7 +1243,7 @@ class Store:
             self._active(state)
             state["status"] = "withdrawn"
             state["confirmation"] = self._confirmation_off(state, reason)
-            state = self._write(state, "withdraw", {"reason": reason})
+            state = self._write(state, "withdraw", {"reason": reason}, {"reason": reason})
         return state
 
     def has_acceptance(self, candidate_id: str, state: dict[str, Any] | None = None) -> bool:
@@ -2065,10 +2115,11 @@ ACCEPTANCE_EVENT = "wording_accepted"
 # reason *and* `to_statement`. Comparing only the reason filed a request for a second
 # target under the first one that shared its reason. See `_same_request`.
 REPEAT_EVENT_SUFFIX = ".repeat"
-# Details that every write adds and that differ between two runs of the *same* request,
-# so they cannot be part of "is this the same request": where the card's version was,
-# which wording it left, and the repeat bookkeeping itself.
-_REQUEST_BOOKKEEPING = frozenset({"version", "from_statement", "effect", "repeat_of"})
+# There is deliberately no "which keys to ignore" set here any more. It existed for
+# one round and was wrong twice: each fix meant adding one more key, because the
+# subtraction itself was the bug. Writers now store their whole ask under `request`
+# and `_same_request` compares those objects; bookkeeping stays in the sibling keys
+# where it cannot be mistaken for intent.
 # version -- refusing to do something must not look like doing it -- but it does leave a
 # row, so `dojo events --id` can show that the rule fired and on which two cards, instead
 # of the command failing with only a message nobody kept.

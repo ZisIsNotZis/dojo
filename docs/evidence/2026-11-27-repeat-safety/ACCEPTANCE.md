@@ -25,6 +25,9 @@
 | 17 | 一个理由、两个目标不是重放 | `probe.py` | `rows_for_one_reason_two_targets: [revise, revise, revise]`，`the_second_target_is_not_a_replay: true` |
 | 18 | 重放指向的那一行要的是同一句话 | 同上 | `repeat_of_names_the_row_with_the_same_target: true`，`repeat_of_does_not_name_the_other_target: true` |
 | 19 | 读者能顺着 `repeat_of` 找到行 | `dojo show --history` / `store.history()` | 每条事件带 `sequence`，与 `repeat_of` 同一套编号 |
+| 19b | 可选输入的值属于请求 | `probe.py` | `scopes_recorded_in_the_asks: [["窄屏"], ["所有视口"]]`，`repeat_of_does_not_name_the_other_scope: true` |
+| 19c | 写入点不得漏传请求 | `python3 -m unittest tests.test_repeat_safety.EveryWriterStatesItsWholeRequest` | **3 OK**（源码门） |
+| 19d | 旧行不被说成新请求 | `python3 -m unittest tests.test_repeat_safety` | `test_a_row_without_a_recorded_ask_is_not_silently_called_a_new_request` 通过 |
 | 20 | 全套 | `python3 -m unittest discover -s tests` | 见下 |
 
 ## 红臂
