@@ -153,7 +153,7 @@ scripts/
   demo.sh、storage-smoke.sh
 tests/           unittest 测试集，只用标准库
 docs/            分层事实库，索引见 docs/README.md
-docs/dao/        K1 数据：person-dojo、demo-strangers、probe-demo、vocabulary.json
+docs/dao/        K1 数据：repeat-safety、person-dojo、demo-strangers、probe-demo、vocabulary.json
 inbox/、mail/    作为历史保留的工作笔记
 idea.md          最初的原稿，保持原样
 ```
@@ -173,7 +173,7 @@ idea.md          最初的原稿，保持原样
 - [`docs/product.md`](docs/product.md) —— 产品方向、质量维度、非目标；「这是什么」的唯一入口。
 - [`docs/design.md`](docs/design.md) —— 不变量、模块、管线、防风暴与防污染规则。
 - [`docs/plan.md`](docs/plan.md) —— 里程碑、验收行、预算、交付契约；`## 当前推进状态` 写明现在卡在哪。
-- [`docs/dao/README.md`](docs/dao/README.md) —— K1 库：每个文件是哪一种、谁写、现在哪里还弱。
+- [`docs/dao/README.md`](docs/dao/README.md) —— K1 库：每个文件是哪一种、谁写、现在哪里还弱。[`docs/dao/repeat-safety/LOOP.md`](docs/dao/repeat-safety/LOOP.md) 是唯一走完全程的一条链：一段有出处的真实叙述、从它拔出来的判断、以及这条判断改过的两处决定（被截断的响应曾经重发，一个用户回合 3 个请求变 1 个；`attach-source` 曾把第二个来源静默丢掉）。
 - [`docs/cli-guide.md`](docs/cli-guide.md) —— 15 分钟存储操作序列；[`docs/demo-guide.md`](docs/demo-guide.md) —— 逐个参数讲 Demo。
 - [`docs/evidence/`](docs/evidence/) —— 绑在具体 commit 上的归档证据，不是当前事实。
 

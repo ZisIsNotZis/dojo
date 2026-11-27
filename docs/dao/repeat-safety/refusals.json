@@ -1,0 +1,19 @@
+{
+  "layer": "extraction",
+  "what": "写不成道的材料。",
+  "items": [
+    {
+      "id": "rf-r01",
+      "source": {
+        "path": "docs/evidence/m2.1-person-profile/person.md",
+        "ref": "第 6 行",
+        "commit": "1af799f"
+      },
+      "missing": [
+        "动作"
+      ],
+      "why": "「用户不喜欢连续被追问」是一条偏好，没有对应的做法；它指向一条道，但撑不起动作那一件。",
+      "material": "人物档案第 6 行的一句偏好：他不要被连续追问。"
+    }
+  ]
+}

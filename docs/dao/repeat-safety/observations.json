@@ -1,0 +1,58 @@
+{
+  "layer": "checks",
+  "what": "这条判断在三处实际决定上被用过：两处改了行为（其中一处我先改错，被已发布的测试纠正回来），一处确认了边界。三处都带可重跑的读数。",
+  "observations": [
+    {
+      "id": "ob-2026-11-27-cut-body",
+      "dao": "repeat-d-001",
+      "kind": "controlled",
+      "at": "2026-11-27T05:29:47Z",
+      "at_basis": "本切片的实测时间；读数由 docs/evidence/2026-11-27-repeat-safety/probe.py 现场重算，不是抄的。案例是 2026-10-23 的日粒度记录，所以这一格晚于案例。",
+      "person": "p-dojo",
+      "episode": "ep-2026-10-23-detach",
+      "elicited": false,
+      "applied_in": "决定 A：dojo/live.py 把「正文比 Content-Length 短」当成模型格式错误，dojo/discuss.py 因此自动重试两次。按这条判断去问「我有证据说第一次没生效吗」，答案是没有——响应读不完整既不是「语义幂等」，也不是「可判定未生效」。于是不重试，并把种类从 not_json 改成 incomplete_response。",
+      "prediction": "重放按请求判、不按结果判；没有证据说明第一次没生效就不重发。所以一个被截断的响应应当只发一次请求，用户被告知传输断了，而不是被告知模型格式错。",
+      "result": "一个用户回合发给服务端的请求数：改前 3，改后 1；客户端给这种失败的种类是 incomplete_response；用户被告知模型格式不合法 = False；用户被告知请求没有重发 = True；候选写入 0 条。",
+      "could_have_gone_otherwise": "如果把「连接在读到响应前就断了」当成可以重试的情形（那正是 RFC 点名的「猜」），这一格同样会显示「过了」，过的是自欺：重发让模型把同一件事再算一遍，花的钱和产生的内容都是第二次的。判断的作用是它先问「有没有证据」，不问「大概没事」。",
+      "matched": true,
+      "strength_note": "这是一次有意的对照（本地 stub，只动一个变量），比自验强；但它证明的是本仓这条路在收到截断响应时的行为，不是某个厂商服务的行为。",
+      "confound": "改前改后同时动了诊断文案与重试策略；请求数 3→1 归给重试策略，文案的改动单独可见于 told_the_user_the_model_format_was_invalid 这一项。"
+    },
+    {
+      "id": "ob-2026-11-27-attach-session",
+      "dao": "repeat-d-001",
+      "kind": "controlled",
+      "at": "2026-11-27T05:52:00Z",
+      "at_basis": "本切片的实测时间；改前读数在 09eca15 的 dojo/storage.py 上跑出，改后读数由 check_landing.py 重算。",
+      "person": "p-dojo",
+      "episode": "ep-2026-10-23-detach",
+      "elicited": false,
+      "applied_in": "第二个决定：dojo/storage.py 的 attach_source 把「这个会话是否已经贡献过」当判据。用这条判断去问：这里该按会话判，还是按来源判？",
+      "prediction": "会话相同不是重放的理由：一个带着新 independence_group 的来源必须被收录。而同一 group 的第二个来源，按仓库自己的 independence() 只是同一条 provenance，应当仍是静默 no-op。",
+      "result": "改前（09eca15）：同一个会话下换一个来源，rc 0、无事件、卡上来源仍是 1 个，第二个来源丢了。改后：事件 ['add', 'attach_source']，卡上来源 ['src-group-a', 'src-group-b']；同一个来源再来一次，状态不变 = True、事件也不加 = True；同一 group 的第二个来源仍算一条 provenance = True。",
+      "could_have_gone_otherwise": "我第一版把判据换成「来源对象是否相同」，并把同一个来源再来一次改成写 attach_source.repeat。两条已发布的测试当场红了：它们钉的是「attach 同一份 provenance 两次是静默 no-op，状态与事件都不变」。那条契约是对的——重放不写账是这张库一直的约定——所以改法退回，只保留真正的缺陷修复。这件事本身是这条判断的边界：判「是不是重放」可以更细，但细到改变已发布的对外行为就不是我能单方面决定的。",
+      "matched": true,
+      "strength_note": "这是这条判断在本切片里唯一一处先改错、又被已发布测试纠正回来的地方。改前读数取自未改动的 09eca15，不是回忆；纠正的证据是 tests/test_storage.py 里那两条测试，不是我的判断。",
+      "confound": "判据同时从「会话」换成「仓库自己的 independence()」，所以这一格证明的是「按来源所在的 group 判」比「按会话判」对，不证明任何按请求判重的做法都对。"
+    },
+    {
+      "id": "ob-2026-11-27-distill-source",
+      "dao": "repeat-d-001",
+      "kind": "controlled",
+      "at": "2026-11-27T05:54:00Z",
+      "at_basis": "本切片的实测时间；读数由 check_landing.py 现场重算。",
+      "person": "p-dojo",
+      "episode": "ep-2026-10-23-detach",
+      "elicited": false,
+      "applied_in": "第三个决定：dojo/pipeline.py 的 pass_locate 用 content_key 判「重复」，而 content_key 故意不比较 sources。用这条判断去问：这里该按请求判，还是按效果判？",
+      "prediction": "这张卡没有「状态」可比——同一句话配第二个来源，是来源变多了，不是有人又做了一遍。按判断的失效条件，这里应当按效果判，content_key 排除 sources 是对的。",
+      "result": "同一句话、两个不同来源：仍是 1 张卡，判定 {'first': 'new'}。这正是失效条件要求的结果：来源变多了，不是有人又做了一遍。",
+      "could_have_gone_otherwise": "如果照「按请求判重」一律套上去，第二个来源会被当成一张新卡，独立性计数就会把同一条主张数成两条，那才是错的。",
+      "matched": true,
+      "strength_note": "这一格是「判断说出它不该用在哪」。它比多一个正例弱：只说明边界是真的，不说明判据在边界之内都对。",
+      "confound": "无：这一格问的是既有行为是否符合判断给的边界，不是改了什么。"
+    }
+  ],
+  "needed": []
+}

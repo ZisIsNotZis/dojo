@@ -16,6 +16,19 @@ OLD_BYTES = (
 )
 
 
+
+def quote_ref(quote: str) -> str:
+    """The line of this file the quoted words are written on.
+
+    Read from the file rather than typed: a fixture that cites itself by hand drifts
+    the moment someone reflows the constants.
+    """
+    here = Path(__file__).read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(here, 1):
+        if quote in line:
+            return f"第 {number} 行"
+    raise SystemExit(f"the quoted words are not in this file: {quote[:40]}")
+
 def put(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8", newline="\n")
 
@@ -54,7 +67,12 @@ def build(root):
             "window": {"first_session": DATE, "last_person_input": DATE},
             "episodes": [{"id": ep, "at": DATE, "at_basis": "虚构夹具指定日期",
                           "attribution": "synthetic", "attribution_note": "新写台词；非真人，非模型回放",
-                          "quote": quote, "source": {"path": f"fixtures/{library}/episodes.json", "ref": f"{ep} / quote"},
+                          "quote": quote,
+                          # The words are written in this generator, not in the file it
+                          # emits: citing the emitted library made the record its own
+                          # source. A reader can open this file at the named line.
+                          "source": {"path": "fixtures/seed_dao.py",
+                                     "ref": quote_ref(quote)},
                           "observed_action": "虚构台词给出的动作：" + move_action,
                           "conditions": {"挂位": "敞开"}, "reading": "事件层只承载这句虚构台词。"}],
         })

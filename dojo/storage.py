@@ -617,11 +617,30 @@ class Store:
         with self.transaction():
             state = self._get(_id(candidate_id))
             source_value = self._source(source)
-            if session and session in state.get("sessions", []):
-                # This session already contributed its word; re-running is a no-op
-                # rather than a second version of the same provenance.
-                return state
-            if any(item == source_value for item in state.get("sources", [])):
+            # What makes a second source worth recording is a new *independence
+            # group*, not a new session. Independence is counted per group
+            # (`independent_groups`), so a source whose group the card already has
+            # adds no provenance and this is a genuine no-op -- including the case a
+            # published test pins, two sources under one session sharing one group.
+            #
+            # The gate used to ask about the session instead, which dropped a source
+            # carrying a fresh group whenever the session had spoken before: on the
+            # CLI, `attach-source` with a second group under the same session gave
+            # rc 0, wrote no event and kept no source. The case `attach-source`
+            # exists for was the one case it silently discarded.
+            events_before = [
+                event for event in self.history(candidate_id)["events"]
+                if event.get("event") in ("add", "attach_source")
+            ]
+            before = independence(state)
+            added = dict(state)
+            added["sources"] = list(state.get("sources", [])) + [source_value]
+            after = _independence_with_extra_acquisition(added, source_value, session, events_before)
+            if after["provenance_groups"] == before["provenance_groups"]:
+                # This source adds no provenance the card did not already have: a
+                # named group the card already carries, or (for a group-less source)
+                # a session whose material is already logged. A genuine no-op, and
+                # the shape a published test pins.
                 return state
             self._source_ids_available([source_value])
             state["sources"] = list(state.get("sources", [])) + [source_value]
@@ -2300,6 +2319,21 @@ def wording_digest(state: dict[str, Any]) -> str:
         content_key(state.get("statement", ""), state.get("kind", ""), state).encode("utf-8")
     ).hexdigest()
 
+
+def _independence_with_extra_acquisition(
+    state: dict[str, Any], source: dict[str, Any], session: str | None,
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """`independence`, with the pending `attach_source` counted as one more acquisition.
+
+    `independence` attributes a group-less source to the session that acquired it by
+    reading the `attach_source` events. The event for this source is not written yet,
+    so it is appended here rather than inserted into the database first: the caller
+    asks whether writing it would change the provenance set, and only then writes.
+    """
+    pending = {"event": "attach_source",
+               "details": {"source": source.get("id"), "session": session}}
+    return independence(state, [*events, pending])
 
 def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """What a card's provenance supports, computed from its sources and sessions.

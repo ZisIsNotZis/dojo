@@ -1,0 +1,32 @@
+{
+  "layer": "checks",
+  "what": "现有记录对每一件「系统补」的回答。",
+  "checks": [
+    {
+      "id": "rc-r001",
+      "dao": "repeat-d-001",
+      "part": "tension",
+      "status": "确认",
+      "against": {
+        "path": "docs/proposal-knowledge-network.md",
+        "ref": "第 111 行",
+        "commit": "1af799f",
+        "quote": "he's not responsible for challenging, your underlying network is"
+      },
+      "says": "他那句话自己给了张力的一头：检查归网络（系统），不归他。另一头「重放不能把已完成的工作变回待办」是我从仓库的 pipeline_marks 读出来的，不是他说的。"
+    },
+    {
+      "id": "rc-r001p",
+      "dao": "repeat-d-001",
+      "part": "price",
+      "status": "未表态",
+      "against": {
+        "path": "docs/proposal-knowledge-network.md",
+        "ref": "第 111 行",
+        "commit": "1af799f",
+        "quote": "He CAN challenge later, e.g. 'did you do simulation?'"
+      },
+      "says": "他给的是「他可以随时来问」这个权利，没说过系统接走检查要付什么。代价这一栏是我补的，记录没有开口。"
+    }
+  ]
+}

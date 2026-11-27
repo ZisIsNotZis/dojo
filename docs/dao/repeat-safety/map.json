@@ -1,0 +1,21 @@
+{
+  "layer": "extraction",
+  "what": "这一库内部的连接。",
+  "connections": [
+    {
+      "id": "c-r01",
+      "kind": "same-judgement-three-decisions",
+      "between": [
+        "ob-2026-11-27-cut-body",
+        "ob-2026-11-27-attach-session"
+      ],
+      "says": "同一条判断在三处被用到：截断响应那里它改了重试（3→1）；attach-source 那里它改了判据（按会话 → 按来源所在的 independence_group），而且我的第一版改法被两条已发布测试挡了回来；distill 那里它确认了不该改。",
+      "why_it_may_be_new": "第二处最有力：改之前的代码正是「拿一个相邻的东西当判据」，而写这条判断的人自己也先写错过一版，错法还是同一种——把判重换成了另一把尺子。",
+      "status": "待确认（三处都是同一只手量的，不是独立复核）"
+    }
+  ],
+  "boundaries": [],
+  "contradictions": [],
+  "candidates": [],
+  "red_flags": []
+}

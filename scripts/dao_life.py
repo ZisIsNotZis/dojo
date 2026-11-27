@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import tempfile
 import re
 import sys
@@ -38,6 +39,10 @@ from dojo.elicit import (  # noqa: E402  —— 四句问法与「谁写的」�
 )
 
 BENCH = "scripts/dao_life.py"
+# `source.path` is written from the repository root ("idea.md", "mail/…"), not from
+# the library directory, and this file is the repository's own script — so it is
+# the anchor both the quote lookup and the commit check resolve against.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCH_VERSION = 2
 COST_UNITS = ("时间", "关系", "机会", "能力")
 CLICHES = (
@@ -594,14 +599,18 @@ def run_bench(
     data: dict[str, Any],
     at: str | None,
     vocabulary: dict[str, Any] | None = None,
+    base: Path | None = None,
 ) -> dict[str, Any]:
     episodes = {episode["id"]: episode for episode in data["episodes"]["episodes"]}
     window = data["episodes"]["window"]
     observations = data["observations"]["observations"]
     vocabulary = vocabulary or {"tensions": [], "moves": []}
     receipts: dict[str, dict[str, Any]] = {}
+    # One reading for the whole library: a quote costs the same to verify once.
+    sources = check_sources(data, base=base)
     for dao in data["daos"]["daos"]:
         receipts[dao["id"]] = {
+            "sources": sources,
             "structure": check_structure(dao, episodes, window, vocabulary, at),
             "falsifiable": check_falsifiable(dao, episodes, at),
             "field": check_field(dao, episodes, observations, at),
@@ -915,10 +924,11 @@ def render(
             "反例不是降级，是改适用域。不是他说的不能晋，引文不在事件里的不能晋。"
         )
         add("")
+        recorded = sum(rs.values())
         add(
             f"现在晋升 **{len(promotions)} 条**：他还没就任何一条取舍说过话。"
-            f"现有记录对 26 件「系统补」的回答是：确认 {rs['确认']}、部分 {rs['部分']}、收窄 {rs['收窄']}、"
-            f"推翻 {rs['推翻']}、未表态 {rs['未表态']}。"
+            f"现有记录对 {recorded} 件「系统补」的回答是：确认 {rs['确认']}、部分 {rs['部分']}、"
+            f"收窄 {rs['收窄']}、推翻 {rs['推翻']}、未表态 {rs['未表态']}。"
         )
         add("")
         add("**确认不等于晋升**：确认只说明他写过那两头，不说明他把「两者不能同时拿满」这句话说出来过。取舍要他亲口说，才算他的。")
@@ -1528,6 +1538,149 @@ def within_library_relations(data: dict[str, Any]) -> list[dict[str, Any]]:
     return relations
 
 
+
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool = True) -> dict[str, Any]:
+    """Does every cited quote actually sit where the record says it does?
+
+    Until this gate existed, `source` was decorative: `path`, `ref` and `commit`
+    were printed beside a quote and never read. Measured on this tree before the
+    gate: all 20 episodes named a commit that does not resolve here (the history
+    was rebuilt, so `41d925a` and friends are gone), and one quote
+    (`ep-2026-10-18-pref`) did not appear at its cited path at all -- it had joined
+    two separate bullets into one sentence. A reader could not have found it.
+
+    Two questions, kept apart because they fail differently:
+
+      quote   the whitespace-squashed quote must occur in the file at
+              `source.path`, and a line number written in `source.ref` must fall
+              inside the span the quote occupies. Squashing first is deliberate:
+              the fact at stake is the words, and this repo wraps prose. A cited
+              number that lands outside the quote is a stale map and fails like a
+              missing quote, because the reader who follows it lands on the wrong
+              paragraph.
+      commit  the named commit must resolve here. When it does not, that is
+              recorded as `unresolved` and printed, never folded into a pass: a
+              citation whose revision cannot be checked is an unchecked citation.
+              A non-git directory gets the same word for the same reason, since
+              frozen extracts (where CI and re-checks run) have no `.git`.
+
+    `synthetic` episodes obey the quote rule too -- "we wrote it" does not make a
+    mis-citation harmless, the file still has to say what the record claims -- but
+    not the commit rule: that corpus is authored here, not received.
+    """
+    rows: list[dict[str, Any]] = []
+    failures: list[str] = []
+    root = Path(base) if base is not None else REPO_ROOT
+
+    def resolves(commit: str) -> bool:
+        if not git or not commit:
+            return False
+        try:
+            done = subprocess.run(
+                ["git", "cat-file", "-e", commit + "^{commit}"],
+                cwd=str(root), capture_output=True, timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return done.returncode == 0
+
+    for episode in data["episodes"]["episodes"]:
+        source = episode.get("source") or {}
+        path = source.get("path") or ""
+        ref = source.get("ref") or ""
+        quote = episode.get("quote") or ""
+        row: dict[str, Any] = {"id": episode.get("id"), "path": path,
+                               "commit": source.get("commit"), "quote": "",
+                               "lines": None, "commit_state": ""}
+        rows.append(row)
+        if not path or not ref:
+            row["quote"] = "unrecorded"
+            failures.append(f"{row['id']} 没有写清出处（path/ref）：引语无处可查")
+            continue
+        try:
+            text = (root / path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            row["quote"] = "unreadable"
+            failures.append(f"{row['id']} 的出处 {path} 读不出来：引语无法核对")
+            continue
+        wanted = _squash(quote)
+        lines = text.splitlines()
+        span = None
+        for start in range(len(lines)):
+            window = ""
+            for end in range(start, min(start + 15, len(lines))):
+                window += _squash(lines[end])
+                if wanted and wanted in window:
+                    # The tightest span, not the first one that happens to contain
+                    # it: a wide window would let a ref pointing at a neighbouring
+                    # paragraph pass, and the reader who follows that number would
+                    # land in the wrong place. Measured: `ep-2026-10-23-detach`
+                    # cited line 104 while the sentence begins on 111, and only the
+                    # tight span shows that.
+                    if span is None or (end - start) < (span[1] - span[0]):
+                        span = (start + 1, end + 1)
+                    break
+        row["lines"] = list(span) if span else None
+        if not wanted:
+            row["quote"] = "empty"
+            failures.append(f"{row['id']} 没有引语：出处无从核对")
+        elif span is None:
+            row["quote"] = "absent"
+            failures.append(f"{row['id']} 的引语在 {path} 里找不到：出处与引语不符")
+        else:
+            cited = [int(m.group(1)) for m in re.finditer(r"第\s*(\d+)", ref)]
+            if cited and not any(span[0] <= number <= span[1] for number in cited):
+                row["quote"] = "stale-ref"
+                failures.append(
+                    f"{row['id']} 的 ref 指第 {cited} 行，引语却在 {path} 第 {span[0]}–{span[1]} 行：行号是旧地图"
+                )
+            else:
+                row["quote"] = "found"
+        commit = source.get("commit") or ""
+        if episode.get("attribution") == "synthetic":
+            row["commit_state"] = "not-required"
+        elif not commit:
+            row["commit_state"] = "unrecorded"
+            failures.append(f"{row['id']} 没写 commit：这份出处无法固定在某个版本上")
+        elif resolves(commit):
+            row["commit_state"] = "resolved"
+        else:
+            row["commit_state"] = "unresolved"
+    unresolved = [r["id"] for r in rows if r["commit_state"] == "unresolved"]
+    # Three words, because two would lie. `pass` means every quote landed where it
+    # says and every commit resolved. `unchecked` means the quotes landed but the
+    # revisions could not be looked up -- which is the state of this whole tree,
+    # since the history was rewritten and the cited commits went with it. Calling
+    # that `pass` would let a reader believe the versions were verified.
+    if failures:
+        verdict = "fail"
+    elif unresolved:
+        verdict = "unchecked"
+    else:
+        verdict = "pass"
+    return {
+        "kind": "sources",
+        "ran": {"by": f"{BENCH}/sources-v{BENCH_VERSION}", "git": bool(git)},
+        "verdict": verdict,
+        "rows": rows,
+        "failures": failures,
+        "unresolved_commits": unresolved,
+        "line": (
+            f"出处核对 {len(rows)} 条：引语 {sum(1 for r in rows if r['quote'] == 'found')} 条逐字落在它写的行内；"
+            f"commit 在本仓可解析 {sum(1 for r in rows if r['commit_state'] == 'resolved')} 条，"
+            f"不可解析 {len(unresolved)} 条"
+            + (
+                "（这些只核到引语，没核到版本；本仓历史被重建过，它们指向的版本已不在库里）。"
+                if unresolved
+                else "。"
+            )
+        ),
+    }
+
 def check_library(data: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
     """What a single entry cannot see: duplicates, self-contradictions, and what was refused."""
     failures: list[str] = []
@@ -1711,6 +1864,13 @@ def report_library(root: Path, data: dict[str, Any], receipts: dict[str, Any]) -
         failures += missing_provenance_keys(dao)
     library_failures, summary = check_library(data)
     failures += library_failures
+    # `source` used to be printed and never read. The reading is printed here so a
+    # reader of `--check` sees what was verified and what could not be, and its
+    # failures join the library verdict: a record whose quote does not sit where it
+    # says it does is not a record a later reader can follow.
+    sources = next(iter(receipts.values()))["sources"]
+    print("  " + sources["line"])
+    failures += sources["failures"]
     counts = summary["refusal_counts"]
     print(
         "  入道 {entered} 条；拒收 {refused} 条（"

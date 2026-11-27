@@ -186,7 +186,7 @@ scripts/
   demo.sh, storage-smoke.sh
 tests/           unittest suite, standard library only
 docs/            the layered fact base; index in docs/README.md
-docs/dao/        K1 data: person-dojo, demo-strangers, probe-demo, vocabulary.json
+docs/dao/        K1 data: repeat-safety, person-dojo, demo-strangers, probe-demo, vocabulary.json
 inbox/, mail/    working notes kept as history
 idea.md          the original draft, preserved unchanged
 ```
@@ -206,7 +206,7 @@ State and privacy, stated plainly:
 - [`docs/product.md`](docs/product.md) — product direction, quality dimensions, non-goals; the single entry point for what this is meant to be.
 - [`docs/design.md`](docs/design.md) — invariants, modules, pipeline, anti-storm and anti-pollution rules.
 - [`docs/plan.md`](docs/plan.md) — milestones, acceptance lines, budget, delivery contract; `## 当前推进状态` says where work is stuck right now.
-- [`docs/dao/README.md`](docs/dao/README.md) — the K1 library: what each file is, who writes it, and what is still weak.
+- [`docs/dao/README.md`](docs/dao/README.md) — the K1 library: what each file is, who writes it, and what is still weak. [`docs/dao/repeat-safety/LOOP.md`](docs/dao/repeat-safety/LOOP.md) is the one chain that runs end to end: a sourced account, the judgement drawn from it, and the two decisions that judgement changed — a cut response that was re-sent (3 requests per turn → 1) and an `attach-source` that silently dropped a second source.
 - [`docs/cli-guide.md`](docs/cli-guide.md) — a 15-minute store walkthrough; [`docs/demo-guide.md`](docs/demo-guide.md) — the demo, flag by flag.
 - [`docs/evidence/`](docs/evidence/) — archived evidence bound to commits, not current fact.
 

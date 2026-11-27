@@ -1,0 +1,35 @@
+{
+  "layer": "events",
+  "owner": "dojo 的 manager",
+  "what": "一个人的具体经历：原话优先，出处写成路径与行号，由出处核对逐条核过——引语必须逐字出现在它写的那一行内，写下的提交必须在本仓解析得出。",
+  "person": {
+    "id": "p-dojo",
+    "label": "本仓的使用者（person）"
+  },
+  "window": {
+    "first_session": "2026-10-23",
+    "last_person_input": "2026-10-23",
+    "rule": "第一场之后不再联系 person。出现 2026-10-23 之后的 person 输入，说明那是第二场；本包不拿它补，也不把它算进这张图。"
+  },
+  "episodes": [
+    {
+      "id": "ep-2026-10-23-detach",
+      "at": "2026-10-23",
+      "at_basis": "引语所在那一节的标题写着「2026-10-23 的修正」；该文件由提交 1af799f 带入本仓，原先记的提交日期在重建后的历史里已不可读。",
+      "attribution": "person",
+      "attribution_note": "原话，一字未改，带引号出现在提案文档里；转述与推断在 reading 里分开写。",
+      "quote": "it's not user confirm, user is already detached, he's not responsible for challenging, your underlying network is. He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that.",
+      "source": {
+        "path": "docs/proposal-knowledge-network.md",
+        "ref": "第 111 行",
+        "commit": "1af799f"
+      },
+      "observed_action": "同一天他把这句话落成提案的修正：检验那一层写成「网络自己写预测、自己跑、自己核」，并写明他不再负责提醒。他没有接走检查，而是把它写进系统的职责里。",
+      "conditions": {
+        "has_state": "有状态可比",
+        "judge": "另一个独立方"
+      },
+      "reading": "原话是他的；「所以重放也该由系统自己判、不回头问人」这一步是推断。他被记录到的动作是：把检查退回给网络，自己只留一句「你跑过模拟吗」。"
+    }
+  ]
+}

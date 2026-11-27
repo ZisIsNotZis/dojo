@@ -22,7 +22,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§1 愿景（第 13 行）；全文 15 节，从「一句话定义」写到「开放问题」",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他把整件事的完整形状先写出来（定义、原则、边界、数据模型、路线图、开放问题），写完才谈实现；这份草案此后没有改成实现规格。",
       "conditions": {
@@ -36,12 +37,13 @@
       "id": "ep-2026-10-18-pref",
       "at": "2026-10-18",
       "attribution": "unverified",
-      "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。",
-      "quote": "用户喜欢先看到完整方案，再讨论细节。用户不喜欢连续被追问。",
+      "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。原来这一条把第 5、6 两行拼成了一句，源文件里它们是两条分开的要点——出处核对把这件事抓了出来，所以此处只引第 5 行这一句，第 6 行单独成 ep-2026-10-18-pref-b。",
+      "quote": "用户喜欢先看到完整方案，再讨论细节。",
       "source": {
         "path": "docs/evidence/m2.1-person-profile/person.md",
-        "ref": "第 5–6 行",
-        "commit": "628e9ff"
+        "ref": "第 5 行",
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他把「先看完整方案、不要连续追问」写进人物档案，要求以后每场都照它办。",
       "conditions": {
@@ -52,6 +54,46 @@
       "reading": "推断：两条写的是偏好，不是一件发生过的事；它不参与独立性计算。"
     },
     {
+      "id": "ep-2026-10-18-pref-b",
+      "at": "2026-10-18",
+      "attribution": "unverified",
+      "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。原来这一条把第 5、6 两行拼成了一句，源文件里它们是两条分开的要点——出处核对把这件事抓了出来，所以此处只引第 5 行这一句，第 6 行单独成 ep-2026-10-18-pref-b。",
+      "quote": "用户不喜欢连续被追问。",
+      "source": {
+        "path": "docs/evidence/m2.1-person-profile/person.md",
+        "ref": "第 6 行",
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
+      },
+      "observed_action": "他写下的第二条是「不要连续追问」；这是一条偏好，不是一次已观察到的做法。",
+      "conditions": {
+        "shape_possible": "能",
+        "asked_consecutively": "否",
+        "who_asks": "对方在问"
+      },
+      "reading": "推断：这条只说「别怎么做」，没有对应的动作记录；它和上一条一起指向「一轮只问一件」，但能当案例的只有上一条。"
+    },
+    {
+      "id": "ep-2026-10-18-pref-b",
+      "at": "2026-10-18",
+      "attribution": "unverified",
+      "attribution_note": "人物档案里留着这两条，写它的那一场是证据脚本（docs/evidence/m2.1-person-profile/provenance.md），不是他亲手输入；署名未核，只能当旁证。原来这一条把第 5、6 两行拼成了一句，源文件里它们是两条分开的要点——出处核对把这件事抓了出来，所以此处只引第 5 行这一句，第 6 行单独成 ep-2026-10-18-pref-b。",
+      "quote": "用户不喜欢连续被追问。",
+      "source": {
+        "path": "docs/evidence/m2.1-person-profile/person.md",
+        "ref": "第 6 行",
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
+      },
+      "observed_action": "他写下的第二条是「不要连续追问」；这是一条偏好，不是一次已观察到的做法。",
+      "conditions": {
+        "shape_possible": "能",
+        "asked_consecutively": "否",
+        "who_asks": "对方在问"
+      },
+      "reading": "推断：这条只说「别怎么做」，没有对应的动作记录；它和上一条一起指向「一轮只问一件」，但能当案例的只有上一条。"
+    },
+    {
       "id": "ep-2026-10-23-gate-wait",
       "at": "2026-10-23",
       "attribution": "relayed",
@@ -60,7 +102,8 @@
       "source": {
         "path": "mail/2026-10-23-answer-unconfirmed-and-model.md",
         "ref": "第 9 行",
-        "commit": "8ed7cb5"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他没有为那扇门做任何维护动作，门就那样开着；后来是他自己跑了一局才把门关上（同一天的另一条记录）。",
       "conditions": {
@@ -78,8 +121,9 @@
       "quote": "it's not user confirm, user is already detached, he's not responsible for challenging, your underlying network is. He CAN challenge later, e.g. 'did you do simulation?', but not responsible for reminding that.",
       "source": {
         "path": "docs/proposal-knowledge-network.md",
-        "ref": "第 104 行；§10 第 2 条（第 272 行）",
-        "commit": "4897660"
+        "ref": "第 111 行；§10 第 2 条（第 272 行）",
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他把检验退回给网络：「你的底层网络负责」；他自己只留一个权利——随时问一句「你跑过模拟吗」。",
       "conditions": {
@@ -98,7 +142,8 @@
       "source": {
         "path": "mail/2026-10-23-answer-unconfirmed-and-model.md",
         "ref": "第 19 行",
-        "commit": "8ed7cb5"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他先问额度和要不要换模型，拿到一次真调用换来的读数之后，才让那一局跑。",
       "conditions": {
@@ -116,7 +161,8 @@
       "source": {
         "path": "docs/evidence/m1.5-checkpoint/person-2026-10-23.md",
         "ref": "第 9 行",
-        "commit": "d850cca"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他跑完一局，判断体验满意，并且说比上一次好得多。",
       "conditions": {
@@ -135,7 +181,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 1 道无名（第 29–30 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：对外不展示作者，内部只用匿名号做统计、防滥用与权重。",
       "conditions": {
@@ -153,7 +200,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 2 不保证正确，只保证可论（第 33–35 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：平台不裁判真理，只要自洽、说得通、不重复就能存在；但法律红线是底线。",
       "conditions": {
@@ -171,7 +219,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 3 对话即入口，无信息流（第 38–39 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：没有帖子流、排名、粉丝、点赞；入口是对话。",
       "conditions": {
@@ -188,7 +237,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 4 纯道层，不存具体案例（第 42–43 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：只存剥离约束的方法论；案例用于提炼，之后不长期保留。",
       "conditions": {
@@ -205,7 +255,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 6 个人对话自付算力，公共维护靠捐赠（第 50–51 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：私人对话花自己的额度，公共维护靠捐赠的额度或算力。",
       "conditions": {
@@ -223,7 +274,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 7 事件驱动维护（第 54 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：后台不全量实时维护，只在事件上做深度处理。",
       "conditions": {
@@ -240,7 +292,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§2 核心原则 8 多视图，非排名（第 57–58 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：不设公开榜；检索时可以给默认阅读顺序，但那只是呈现方式。",
       "conditions": {
@@ -257,7 +310,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§11.1 第一步（第 227–229 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：先选一个垂直领域、拉 10～30 个正在做事的人、用最简陋的工具跑闭环。",
       "conditions": {
@@ -275,7 +329,8 @@
       "source": {
         "path": "docs/philosophy.md",
         "ref": "经验证据 一行（第 11 行）",
-        "commit": "a4d438c"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "记录下来的优先事项：核对时要区分独立来源与重复传播，不拿重复次数、引用或声称替代核验。",
       "conditions": {
@@ -292,7 +347,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§8 身份、贡献与权重（第 192 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：对外的名字拿掉，内部的号只用来防滥用、限流与统计。",
       "conditions": {
@@ -310,7 +366,8 @@
       "source": {
         "path": "idea.md",
         "ref": "§8 身份、贡献与权重（第 193 行）",
-        "commit": "41d925a"
+        "commit": "1af799f",
+        "citation_note": "commit 指 1af799f：本仓历史被重建过，原先写的版本号（如 41d925a、8ed7cb5、4897660）在本仓解析不出来，出处核对因此判它「未核」。这里改成本仓现存最早包含这段引语的提交，引语与行号都对着文件本身核过；原先的版本号不再保留在 commit 字段里，因为它指向一个这里已无法读到的对象。"
       },
       "observed_action": "他写下：权重来自被合并次数、被引用数、跨域采纳与实践反馈。",
       "conditions": {
