@@ -95,9 +95,119 @@ SKIP_PATTERNS = (
 )
 SKIP_HEDGES = ("我还没想好", "还没想好", "没想好", "想不起来", "不确定", "以后再说", "先这样", "回头再说", "暂时不")
 
+# A request about *the questions still to come* is not an answer to the one on screen,
+# and it is not the single-question skip either. Two rules keep it honest, both learned by
+# putting real sentences through the entry point:
+#
+# 1. The thing being laid down has to be **the asking**, not a topic. "剩下的流程我都不讲给
+#    新人听" is a sentence about a rule -- the rest of a process, told to newcomers -- and it
+#    was classified as a stop request, so his material was thrown away and the session
+#    ended early. So instead of looking for "skipping" words anywhere, the prefix in front
+#    of the verb is read token by token; if anything but scope words and particles is left
+#    over (流程, 新人听), it is material.
+# 2. How many questions it covers is **parsed, not assumed**. "接下来两题先跳过" covers two,
+#    so exactly two are dropped; the old version dropped all of them, which is a bigger
+#    decision than he made. When the count cannot be read, the whole rest is *asked* -- an
+#    unclear request must not end the session on his behalf.
+SKIP_PREFIX_TOKENS = (
+    # sentence particles and pronouns
+    "好", "那", "那么", "我", "我们", "咱", "咱们", "你", "也", "还是", "而且", "并且",
+    # aspect words that carry no count
+    "先", "就", "都", "全", "一起", "想", "要", "打算", "继续", "接着", "先不",
+    # the remainder itself
+    "接下来", "下面", "后面", "之后", "剩下", "剩的", "其余的", "其他", "其它的", "别的",
+    "全部", "所有的", "这些", "那些", "这几", "那几", "这", "那", "其", "余", "的", "些",
+    # question-shaped measure words -- the only nouns allowed here
+    "个", "件", "题", "问", "问题", "几", "多", "两", "这", "那",
+)
+SKIP_SCOPE_TOKENS = (
+    "接下来", "下面", "后面", "之后", "剩下", "剩的", "其余", "其他", "别的", "全部",
+    "所有", "这几", "那几", "几", "多", "都", "全",
+)
+# "however many are left" -- every part after this one. A parsed count is always smaller
+# and is used when it is readable.
+SKIP_REST_ALL = 99
+# Counts above what can be left are read as "all of them": the instruction is still clear,
+# it just covers more than the asking has.
+SKIP_PREFIX_DIGITS = {"一": 1, "二": 2, "两": 2, "俩": 2, "三": 3, "四": 4,
+                      "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+SKIP_REST_VERBS = (
+    "跳过", "略过", "不答了", "不答", "不说了", "不说", "不讲了", "不讲", "不聊了", "不聊",
+    "不回答", "不想答", "不想说", "不想讲", "不想聊", "不想问", "不想停", "免了",
+)
+SKIP_VERB_TAIL = ("了", "吧", "啦", "一下", "先")
+# 「我跳过的这几题」「跳过的那几件」是在描述已经发生的事，不是对还没问的几件下的决定。
+SKIP_REST_MATERIAL_PATTERN = re.compile(
+    r"(?:跳过|略过|不答|没说|不讲|不回答|不说)的(?:这|那|剩|其余|其他|别的)"
+)
+SKIP_REST_STORY = (
+    "的时候", "那次", "有一次", "因为", "所以", "结果", "上次", "上周", "昨天",
+    "那天", "当时", "如果", "要是", "以免", "就会", "总会", "经常", "每次",
+)
+SKIP_REST_MAX_CHARS = 32
+
 
 def _normalize_skip(text: str) -> str:
     return "".join(ch for ch in (text or "") if not ch.isspace()).strip("。！？…，,、~～!?.；;")
+
+
+def _strip_skip_verb(core: str) -> tuple[str, str] | None:
+    """Split a request into (prefix, verb). The verb has to end the sentence."""
+    for tail in SKIP_VERB_TAIL:
+        if core.endswith(tail) and len(core) > len(tail):
+            core = core[: -len(tail)]
+    for verb in sorted(SKIP_REST_VERBS, key=len, reverse=True):
+        if core.endswith(verb):
+            return core[: -len(verb)], verb
+    return None
+
+
+def _consume_tokens(prefix: str) -> str:
+    """Remove only scope words and particles, longest first. Whatever is left is content."""
+    for token in sorted(set(SKIP_PREFIX_TOKENS) | set(SKIP_PREFIX_DIGITS), key=len, reverse=True):
+        prefix = prefix.replace(token, "")
+    return prefix
+
+
+def skip_scope(text: str) -> int | None:
+    """How many of the questions still to come he asked to lay down, if he asked at all.
+
+    ``None`` means "not a whole-sentence request about the remaining questions": either it
+    is an answer, or it is about one question only (that is ``is_skip_request``), or the
+    count cannot be read. ``SKIP_REST_ALL`` means "the rest, however many that is".
+    """
+    core = _normalize_skip(text)
+    if not core or len(core) > SKIP_REST_MAX_CHARS:
+        return None
+    if SKIP_REST_MATERIAL_PATTERN.search(core):
+        return None
+    if any(marker in core for marker in SKIP_REST_STORY):
+        return None
+    # A trailing hedge ("这几题先跳过，我还没想好") is allowed and nothing else is.
+    for separator in ("，", ",", "；", ";"):
+        if core.count(separator) == 1:
+            first, rest = core.split(separator)
+            if rest in SKIP_HEDGES or rest.rstrip("了啦吧") in SKIP_HEDGES:
+                core = first
+                break
+    else:
+        if any(separator in core for separator in ("，", ",", "；", ";")):
+            return None
+    split = _strip_skip_verb(core)
+    if split is None:
+        return None
+    prefix, _verb = split
+    if not any(token in prefix for token in SKIP_SCOPE_TOKENS) and not any(
+        digit in prefix for digit in SKIP_PREFIX_DIGITS
+    ):
+        return None
+    # Content left over means he is talking about something, not asking to stop.
+    if _consume_tokens(prefix):
+        return None
+    for digit, count in SKIP_PREFIX_DIGITS.items():
+        if digit in prefix:
+            return count
+    return SKIP_REST_ALL
 
 
 def is_skip_request(text: str) -> bool:
@@ -105,6 +215,8 @@ def is_skip_request(text: str) -> bool:
 
     Whole-sentence only: a clause that merely mentions skipping ("我跳过这一步的时候就会
     出错") is material, not a request. A trailing hedge ("先跳过这一题，我还没想好") is allowed.
+    A request that covers more than one question is ``skip_scope``'s business, not this
+    one's -- but a request for exactly one is still a single-question skip.
     """
     core = _normalize_skip(text)
     if not core:
@@ -117,7 +229,7 @@ def is_skip_request(text: str) -> bool:
             if any(re.fullmatch(pattern, first) for pattern in SKIP_PATTERNS):
                 if rest in SKIP_HEDGES or rest.rstrip("了啦吧") in SKIP_HEDGES:
                     return True
-    return False
+    return skip_scope(text) == 1
 
 
 def classify_answer(text: str) -> str:
@@ -125,13 +237,16 @@ def classify_answer(text: str) -> str:
 
     It does not judge whether the answer *fills* the part (that is `to_fill`, judged by a reader);
     it only separates a real attempt from an empty one, a declared non-answer, a request to
-    skip this one, or a form-like reply.
+    skip this one, a request to skip the next few, or a form-like reply.
     """
     value = (text or "").strip()
     if not value:
         return "none"
     if value.lower() in STRUCTURED:
         return "structured"
+    scope = skip_scope(value)
+    if scope is not None and scope != 1:
+        return "skip_rest"
     if is_skip_request(value):
         return "skip"
     if value.strip("。！？…，, ") in NON_ANSWERS:

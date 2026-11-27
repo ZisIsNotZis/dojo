@@ -118,6 +118,11 @@ class ClosingLineTests(unittest.TestCase):
         self.snapshots.append(store_snapshot(self.root))
         return code, output.getvalue()
 
+    def trace(self):
+        sessions = sorted((self.root / "sessions").glob("*.jsonl"))
+        self.assertTrue(sessions, "本场应当留下轨迹")
+        return [json.loads(line) for line in sessions[-1].read_text(encoding="utf-8").splitlines()]
+
     def recorded(self):
         sessions = sorted((self.root / "sessions").glob("*.jsonl"))
         self.assertTrue(sessions, "本场应当留下轨迹")
@@ -225,7 +230,13 @@ class ClosingLineTests(unittest.TestCase):
     # ---- the person who leaves early ---------------------------------------------
 
     def test_stopping_early_still_gets_a_receipt_without_false_completion(self):
-        """The entry block invites "想停随时结束输入"; that person used to get nothing."""
+        """The entry block invites "想停随时结束输入"; that person used to get nothing.
+
+        #3363: the receipt then said "没答出来 张力" -- "you failed to answer tension" --
+        about a part whose question was still on screen when the input ended. He did not
+        fail at it; he declined to go on. Those are different facts and the receipt must
+        not turn the second into the first.
+        """
         code, text = self.run_session(("上次是把一套检查交给别人的时候",))
         self.assertEqual(0, code)
         end = self.recorded()
@@ -233,11 +244,12 @@ class ClosingLineTests(unittest.TestCase):
         line = self.closing_line(text)
         self.assertIsNotNone(line, "提前结束的人没有拿到回执")
         self.assertIn("你答了 情境", line)
-        self.assertIn("没答出来 张力", line)
-        self.assertIn("代价、失效 没问到", line)
+        self.assertIn("问到 张力 时你结束了输入", line)
+        self.assertNotIn("没答出来 张力", line,
+                         "他把输入结束在张力那一问上，没说答不出来")
+        self.assertIn("没问到 代价、失效", line)
         # Four questions were not all put to him, so the completion claim is false here.
         self.assertNotIn("四件问完了", line)
-
     # ---- skip recognition --------------------------------------------------------
 
     def test_a_skip_request_is_asked_once_and_not_again(self):
@@ -292,6 +304,150 @@ class ClosingLineTests(unittest.TestCase):
         line = closing_text(["情境"], [], ["张力"], unfinished=["代价", "失效"])
         self.assertNotIn("四件问完了", line)
         self.assertIn("没问到", line)
+
+    # ---- #3363: the two outcomes the receipt could not name ----------------------
+
+    def test_stopping_at_a_question_has_its_own_word_again(self):
+        """He answered the first, then ended the input at the second.
+
+        The old line said "没答出来 张力". Every part has exactly one word, and the one
+        for "the input ended while this question was on screen" is not the one for "it
+        was asked twice and nothing came back".
+        """
+        code, text = self.run_session(("上次是把一套检查交给别人的时候",))
+        self.assertEqual(0, code)
+        line = self.closing_line(text)
+        self.assertIn("问到 张力 时你结束了输入", line)
+        self.assertNotIn("没答出来", line)
+        end = self.recorded()
+        self.assertEqual(["情境"], end["collected"])
+        self.assertEqual([], end["supplied"], "结束输入不是“问了两轮没答出来”")
+
+    def test_asking_to_drop_the_rest_is_not_an_answer_and_not_a_failure(self):
+        """"这几题我想先跳过" said at the second question (#3363).
+
+        Before this the sentence was recorded as his answer to 张力 -- the receipt said
+        "你答了 情境、张力" -- and the questions after it were then asked anyway. Both are
+        wrong: it is a request about the questions still to come, so they are not asked,
+        and the receipt says so instead of counting them as parts he could not answer.
+        """
+        code, text = self.run_session(
+            ("上次是把一套检查交给别人的时候", "这几题我想先跳过"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["情境"], end["collected"])
+        self.assertEqual(["张力"], end["skipped"])
+        self.assertEqual(["代价", "失效"], end["declined"])
+        self.assertEqual([], end["supplied"])
+        line = self.closing_line(text)
+        self.assertIn("你答了 情境", line)
+        self.assertIn("你说跳过 张力", line)
+        self.assertIn("你说剩下的先不答 代价、失效", line)
+        self.assertNotIn("没答出来", line)
+        self.assertNotIn("你答了 情境、张力", line)
+        # The last two questions were never put to him, so they are not on screen.
+        shown = self.host_lines(text)
+        self.assertNotIn(QUESTIONS["代价"]["ask"], shown)
+        self.assertNotIn(QUESTIONS["失效"]["ask"], shown)
+        # Nor is his request kept anywhere as material about the rule.
+        self.assertNotIn("这几题我想先跳过", json.dumps(
+            end["part_sources"], ensure_ascii=False))
+        self.assertEqual("系统的", end["authorship"])
+
+    def test_dropping_the_rest_at_the_first_question_asks_nothing_more(self):
+        code, text = self.run_session(("这几题我想先跳过",))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual([], end["collected"])
+        self.assertEqual(["情境"], end["skipped"])
+        self.assertEqual(["张力", "代价", "失效"], end["declined"])
+        shown = self.host_lines(text)
+        self.assertEqual([QUESTIONS["情境"]["ask"]],
+                         [line for line in shown
+                          if line in [QUESTIONS[p]["ask"] for p in PART_ORDER]])
+        line = self.closing_line(text)
+        self.assertIn("你说剩下的先不答 张力、代价、失效", line)
+        self.assertNotIn("四件问完了", line)
+
+    def test_a_sentence_about_a_skipped_step_is_still_material(self):
+        """The whole-set boundary must not swallow a real answer about a skipped step."""
+        answers = ("上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
+                   "第一次觉得亏是没人再复核",
+                   "有一次这几步都跳过了，结果漏了复核")
+        code, _ = self.run_session(answers)
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertEqual([], end["declined"])
+
+    def test_material_that_mentions_the_remainder_of_a_process_is_an_answer(self):
+        """"剩下的流程我都不讲给新人听" is a sentence about a rule (#3363).
+
+        It was read as a request to stop asking: his material was thrown away and the
+        session ended early. The word "剩下" only scopes the asking when what is left
+        over after removing scope words and particles is empty. 流程 / 新人听 are content.
+        """
+        answer = "上次是把一套检查交给别人的时候：剩下的流程我都不讲给新人听"
+        # These carry no time/narration word and no possessive, so the only thing standing
+        # between them and "he asked to stop" is that 流程 / 细节 / 讲清楚 are content.
+        for plain in ("剩下的流程我都不讲", "剩下的细节留给别人",
+                      "接下来两题我想先讲清楚"):
+            self.assertEqual("answer", classify_answer(plain), plain)
+        answers = (answer, "检查的活搬走了，我自己判断少了",
+                   "第一次觉得亏是没人再复核", "有一次我照着做反而漏了")
+        code, text = self.run_session(answers)
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertEqual([], end["declined"])
+        self.assertEqual([], end["skipped"])
+        events = [row for row in self.trace() if row.get("event") == "elicitation"]
+        self.assertEqual(answer, events[0]["answer"])
+        self.assertEqual("answer", events[0]["reading"])
+        self.assertIn("四件你都答了", self.closing_line(text))
+
+    def test_a_named_count_drops_exactly_that_many_and_the_rest_is_still_asked(self):
+        """"接下来两题先跳过" covers two questions, not the whole remainder (#3363)."""
+        code, text = self.run_session(
+            ("上次是把一套检查交给别人的时候", "接下来两题先跳过"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["情境"], end["collected"])
+        self.assertEqual(["张力"], end["skipped"])
+        self.assertEqual(["代价", "失效"], end["declined"])
+        line = self.closing_line(text)
+        self.assertIn("你说接下来 2 题先不答 代价、失效", line)
+        self.assertNotIn("剩下的先不答", line)
+
+    def test_a_named_count_at_the_first_question_still_leaves_the_last_one_asked(self):
+        # Said at the first question it covers 张力 and 代价 only: 失效 is still asked.
+        code, text = self.run_session(("接下来两题先跳过", "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["失效"], end["collected"])
+        self.assertEqual(["情境"], end["skipped"])
+        self.assertEqual(["张力", "代价"], end["declined"])
+        shown = self.host_lines(text)
+        self.assertIn(QUESTIONS["失效"]["ask"], shown)
+        self.assertNotIn(QUESTIONS["代价"]["ask"], shown)
+
+    def test_the_whole_set_forms_read_as_one_outcome(self):
+        for phrase in ("这几题我想先跳过", "这几题先跳过吧", "剩下几件先跳过",
+                       "其余的我不想答了", "这几题我不想说", "这几题我都不想答",
+                       "这几题先跳过，我还没想好"):
+            self.assertEqual("skip_rest", classify_answer(phrase), phrase)
+        # One question at a time stays a single-question skip: nobody can tell how many
+        # he meant, so the part ends but the rest is still asked.
+        for phrase in ("跳过", "先跳过这一题", "这题先跳过", "下一题"):
+            self.assertEqual("skip", classify_answer(phrase), phrase)
+        # These are material about the rule, not requests about the asking.
+        for phrase in ("我跳过这一步的时候就会出错",
+                       "我跳过的这几题里有一次漏了复核",
+                       "有一次这几步都跳过了，结果漏了",
+                       "这几题我想先跳过，因为上周出过事",
+                       "跳过复核就会出问题",
+                       "这几题都答完了"):
+            self.assertEqual("answer", classify_answer(phrase), phrase)
 
 
 if __name__ == "__main__":
