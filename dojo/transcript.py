@@ -29,9 +29,9 @@ from .elicit import PART_KEYS, PART_ORDER, classify_answer
 from .tracefile import split_lines
 
 
-def reclassify(said: str) -> str:
+def reclassify(said: str, part: str | None = None) -> str:
     """What today's rule makes of the same words. Named so a caller can tell why."""
-    return classify_answer(said)
+    return classify_answer(said, part=part)
 
 
 class TranscriptError(ValueError):
@@ -44,6 +44,7 @@ class TranscriptError(ValueError):
 PART_READINGS = {
     "answer": "收作原话",
     "none": "不是回答，没有收下",
+    "no_instance": "没有碰到过这样的例子（原话收下了，这一件没有材料）",
     "skip": "跳过",
     "skip_rest": "跳过，并说剩下的先不问",
     "stop": "说到这儿为止",
@@ -119,25 +120,54 @@ def load(path: Path) -> dict[str, Any]:
         events = by_part.get(part)
         if not events:
             continue
-        last = events[-1]
-        said = next((row["answer"] for row in reversed(events)
-                     if isinstance(row.get("answer"), str)), None)
-        reading = last.get("reading") if isinstance(last.get("reading"), str) else None
+        # 「改回上一题」 is an instruction, not something he said about the part, so the
+        # words shown are the last *answer* row -- never the undo row that follows it. The
+        # review measured the opposite pairing on an undo followed by end-of-input: words
+        # from one row, verdict from another, and a rule-change note that was false.
+        answered = [row for row in events
+                    if isinstance(row.get("answer"), str) and row.get("reading") != "undo"]
+        source = answered[-1] if answered else events[-1]
+        said = source.get("answer") if isinstance(source.get("answer"), str) else None
+        reading = source.get("reading") if isinstance(source.get("reading"), str) else None
+        # If the part was taken back after those words, the verdict lives on the later
+        # row; say so instead of pairing the words with a verdict about another moment.
+        taken_back = any(row.get("reading") == "undo" for row in events)
+        if taken_back:
+            later = next((row for row in reversed(events)
+                          if row.get("reading") not in {None, "undo"}), None)
+            reading = (later.get("reading") if later is not None
+                       and isinstance(later.get("reading"), str) else "undo")
         # The row records what the session decided at the time. `--resume` and the live
         # receipt instead replay the answers through `classify_answer` as it is *now*, and a
         # later slice changed that rule. The review measured the split: on a trace written
         # before the change, this view said 收作原话 for four parts while `--resume` replayed
         # the same file into "nothing was collected". Neither is wrong about its own input,
         # so the screen says both.
-        now = reclassify(said) if said else None
+        #
+        # Only when the row really stores a reading the replay can be compared with. A row
+        # with no reading (the end-of-input row) was never a verdict, so nothing disagrees;
+        # and `none` is what the session stores for a form-like reply whose classifier
+        # answer was `structured`, which is not a rule change either. The review measured
+        # both as false alarms on traces written by this very code.
+        now = None
+        if said and reading in {"answer", "skip", "skip_rest", "stop", "no_instance"}:
+            candidate = reclassify(said, part)
+            if candidate == "structured":
+                candidate = "none"
+            if candidate != reading:
+                now = candidate
         parts.append({
             "part": part,
-            "question": last.get("question") if isinstance(last.get("question"), str) else None,
+            "question": (source.get("question")
+                         if isinstance(source.get("question"), str) else None),
             "said": said,
             "reading": reading,
-            "reclassified": now if (now is not None and now != reading) else None,
-            "uncertain": bool(last.get("uncertain")),
+            "reclassified": now,
+            # Any row for the part, because the mark is set on the row whose words were
+            # kept -- not necessarily the last row (an undo after it has none).
+            "uncertain": any(bool(row.get("uncertain")) for row in events),
             "rewritten": len(events) > 1,
+            "taken_back": taken_back,
         })
 
     # Whether `--resume` would accept this file. Asking the same validator keeps this
@@ -229,7 +259,8 @@ def render(view: dict[str, Any]) -> str:
                 lines.append("    你说：" + part["said"])
             reading = part["reading"]
             label = PART_READINGS.get(reading, f"记录里的读数是 {reading!r}")
-            if part["rewritten"]:
+            if part["taken_back"]:
+                lines.append("    你后来退回了这一题（改回上一题）。")
                 lines.append("    记录最后记的是：" + label + "（这一件问过不止一轮，上面是最后留下的那句）")
             else:
                 lines.append("    记录里记的是：" + label)
@@ -250,9 +281,37 @@ def render(view: dict[str, Any]) -> str:
     if view["saved"]:
         lines.append("这一场写下的卡片：" + "、".join(view["saved"]))
         lines.append("这几张卡是写下的那几句；四件回答没有改写它们，回看也不说它们已被认可。")
+        lines.append("    逐张看：python3 -m dojo show " + shlex.quote(view["saved"][0]))
     elif view["draft"]:
-        lines.append("这一场没有写下被认可的卡片；结束时留了一张未认可的草稿：" + view["draft"] + "。")
-        lines.append("草稿是系统按你的话整理的那一版，没有人认可过它——它恰恰是最该你自己看一眼的那张。")
+        # The ending row's `draft` can name a card this session merely kept on the table:
+        # `_draft_conclusion` hits `DuplicateContent` when the wording is the one that was
+        # already there, attaches a model-generated source and returns *that* card's id.
+        # The review measured it with `--card c8` and one line of input: the draft id was
+        # c8, c8 carries a confirmation in the library, and a sentence saying 「没有人认可
+        # 过它」 was therefore false about it. The handout line above is the one fact this
+        # store-free view has about that card, so the wording follows it.
+        handed_id = (view["handed"].get("candidate")
+                     if isinstance(view["handed"], dict) else None)
+        if handed_id is not None and handed_id == view["draft"]:
+            lines.append(
+                "这一场结束时桌上仍是 " + view["draft"]
+                + " 那句话；本场没有新写的卡片，也没有新改过它。"
+            )
+            # What the handout row actually records about the card it was given. The view
+            # has no store, so it says only what that row holds -- a status, not a guess
+            # about who agreed to what and when.
+            status = view["handed"].get("status")
+            lines.append(
+                "    这张卡是开场交给本场的那一张（记录里的状态：" + str(status or "未记")
+                + "）；本场只是又把它说了一遍。"
+            )
+        else:
+            lines.append("这一场没有写下被认可的卡片；结束时留了一张未认可的草稿："
+                         + view["draft"] + "。")
+            lines.append("草稿是系统按你的话整理的那一版，没有人认可过它——它恰恰是最该你自己看一眼的那张。")
+        # A bare id is not something a first-time reader can act on; this view exists
+        # because that gap had already shipped once.
+        lines.append("    看它：python3 -m dojo show " + shlex.quote(view["draft"]))
     elif view["complete"]:
         lines.append("这一场没有写下卡片。")
     else:

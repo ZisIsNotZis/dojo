@@ -107,6 +107,31 @@ p-T1 少了「方向」这一格」，而那句就在文件里）。
 把分类器换回旧规则，单元测试 18 红而证据脚本照样「全部成立」。现在臂 N 只改 `elicit.py`，
 臂 O/P 分别改草稿行与跨版本提示，16 条臂全部两层红。
 
+## 第三轮反馈（监督者走的两个真实入口）
+
+**(a) 「没有。」与「没遇到过。」意思相同，回执相反。** 「没有。」被当成没回答，改口问下一个问题；
+「没遇到过。」被当成说清了失效。两句话都不算填上了失效——没见过反例不是「这条永远不失效」。
+现在它有自己的读数 `no_instance`：原话逐字留着、不算材料、不算没答出来、不再追问，回执
+单独一句「你在 失效 上说没有碰到过这样的例子（原话收下了；这一件没有材料，也不等于这条
+做法不会失效）」。单独的「没有」只在问的是「有没有一次…」的那一件（失效）上读成没例子，
+别处仍当片段（证据 I1–I6）。
+
+**(b) 从讨论退出来时，屏幕给不出「本场留下了什么」。** 现在退出那一刻就点名草稿并给出
+`python3 -m dojo show <id>`，同时给出 `python3 -m dojo transcript <轨迹>`；回看里也带着这两条
+命令而不是一个裸 ID（证据 J1/J2）。
+
+**(c) 「没有人认可过它」在重复一张以前认可过的卡时是假的。** 开场带 c8、只说一句、退出：
+`_draft_conclusion` 撞 `DuplicateContent`，把来源挂到 c8 上并返回 `draft: c8`，而 c8 带着一次
+确认。现在退出屏用库里的 confirmation 判断，回看用 handout 行判断，两处都说「桌上仍是 c8
+那句话；本场没有写成新卡片」而不是「没人认可过」（证据 J3/J4）。
+
+**(d) 左边剥前缀会把别人的话读成他的。** 复核量到 `都说不清楚`/`都忘了`（所有人）被剥成
+「我没什么可说」。`都` 现在不在前缀表里；主语读不清的句子一律留作材料（证据 H2b）。
+
+**(e) 跨版本提示的两种误报。** `undo` + 结束输入时，原话与读数来自不同的行，屏幕印出
+「你说：改回上一题」；表格式回答（`是`/`y`）存成 `none` 被当成规则变了。现在两者都只从
+同一行取，且只在行里真有读数且重算不一致时才提示。
+
 ## 没做（别当成已解决）
 
 - 不判「答没答到点上」。本片与上一片一样，只把材料与结论分开说。
@@ -126,13 +151,14 @@ p-T1 少了「方向」这一格」，而那句就在文件里）。
 ## 怎么重跑
 
 ```
-python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 40 项
-python3 -B -m unittest tests.test_transcript_view                # 16 项
+python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 51 项
+python3 -B -m unittest tests.test_transcript_view                # 20 项
+python3 -B -m unittest tests.test_no_instance                    # 20 项
 python3 -B -m unittest tests.test_one_card_version               # 4 项
 python3 -B -m unittest tests.test_non_answer_words               # 7 项
 python3 -B -m unittest tests.test_trace_line_breaks             # 7 项
 python3 -B -m unittest discover -s tests                         # 全量
-python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 16 条臂，两层见证都红
+python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 18 条臂，两层见证都红
 ```
 
 本片的真入口探针（回执 → 照抄命令 → 截断 → `--no-trace` 全打印）在仓库外的

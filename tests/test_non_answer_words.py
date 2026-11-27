@@ -43,6 +43,17 @@ class SoftEndingsAreStillNonAnswers(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertEqual("answer", classify_answer(phrase), phrase)
 
+    def test_a_prefix_that_changes_who_is_speaking_is_not_peeled(self):
+        """「都说不清楚」 is about everybody, not about him.
+
+        The review measured this: peeling 都 turned a statement about other people into
+        「我没什么可说」. An unreadable subject now stays material, which is the safe
+        direction -- material is kept, and a wrong "nothing to say" is not recoverable.
+        """
+        for phrase in ("都说不清楚", "都忘了", "大家都忘了", "他们都不知道", "没人知道"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual("answer", classify_answer(phrase), phrase)
+
     def test_the_ordinary_ways_of_saying_i_dont_know(self):
         """The review measured eleven of these at the entry point; all came back answers.
 
@@ -54,7 +65,8 @@ class SoftEndingsAreStillNonAnswers(unittest.TestCase):
         for phrase in ("我不知道", "我也不清楚", "我不太清楚", "我忘了", "我记不清了",
                        "我也说不好", "不太清楚", "说不清楚", "记不清了", "没印象",
                        "说不上来", "我不确定", "我拿不准", "我真的不知道", "我有点不清楚",
-                       "我一点都不清楚", "我一点也不确定", "我没有", "我没什么", "都行"):
+                       "我一点都不清楚", "我一点也不确定", "我没有", "我没什么", "都行",
+                       "我不记得", "我想不出"):
             with self.subTest(phrase=phrase):
                 self.assertEqual("none", classify_answer(phrase), phrase)
 

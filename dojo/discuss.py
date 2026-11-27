@@ -282,7 +282,7 @@ def closing_text(
     stopped_at: str | None = None, declined: list[str] | None = None,
     uncertain: list[str] | None = None,
     declined_stated: int | None = None, spoken_stop: bool = False,
-    where: str | None = None,
+    where: str | None = None, no_instance: list[str] | None = None,
 ) -> str:
     """What the person is owed after the four questions: what each one became, and
     what the answers are actually used for.
@@ -326,6 +326,7 @@ def closing_text(
         return [part for part in PART_ORDER if part in names]
 
     said = ordered(collected)
+    none_seen = ordered(no_instance or [])
     left = ordered(skipped)
     missed = ordered(supplied)
     never = ordered(unfinished or [])
@@ -345,6 +346,14 @@ def closing_text(
         pieces = []
         if said:
             pieces.append("你在 " + "、".join(said) + " 上说了原话")
+        if none_seen:
+            # "没遇到过" is a fact he stated, and a different one from both "he answered"
+            # and "nothing came back". Said without deduction: the receipt may not turn
+            # "I have not seen it fail" into "this rule never fails".
+            pieces.append(
+                "你在 " + "、".join(none_seen)
+                + " 上说没有碰到过这样的例子（原话收下了；这一件没有材料，也不等于这条做法不会失效）"
+            )
         if unsure:
             pieces.append("你提到跳过的那句我按原话收在 " + "、".join(unsure) + " 里")
         if left:
@@ -1064,13 +1073,14 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
     supplied: list[str] = []
     declined: list[str] = []
     uncertain: list[str] = []
+    no_instance: list[str] = []
     # The number he *named* ("接下来五题"), kept as spoken. How many questions that actually
     # covered is `len(declined)` and can be smaller: he may ask for five while two remain.
     # Storing only the spoken number made a field named "count" say 5 about two parts.
     declined_stated: int | None = None
 
     def drop(part: str) -> None:
-        for bucket in (collected, skipped, supplied, declined, uncertain):
+        for bucket in (collected, skipped, supplied, declined, uncertain, no_instance):
             if part in bucket:
                 bucket.remove(part)
 
@@ -1093,11 +1103,18 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
             if reading is not None:
                 declined.remove(part)
         if reading == "answer" and isinstance(row.get("answer"), str):
-            if classify_answer(row["answer"]) == "answer":
+            if classify_answer(row["answer"], part=part) == "answer":
                 drop(part)
                 collected.append(part)
                 if row.get("answer") and row.get("uncertain"):
                     uncertain.append(part)
+        elif reading == "no_instance":
+            # "没遇到过": he answered, and the answer says there is no example. Kept
+            # apart from the three buckets it could be mistaken for -- it is not material
+            # for the part (nothing was filled), not a skip (he did not ask to move on),
+            # and not 没答出来 (he was not unable to answer).
+            drop(part)
+            no_instance.append(part)
         elif reading in {"skip", "skip_rest"}:
             drop(part)
             skipped.append(part)
@@ -1118,7 +1135,8 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
     for row in events:
         part = row.get("part")
         if (row.get("turn") == 2 and isinstance(part, str) and part in PART_KEYS
-                and part not in collected and part not in skipped):
+                and part not in collected and part not in skipped
+                and part not in no_instance):
             if part not in supplied:
                 supplied.append(part)
     for part in declined:
@@ -1126,7 +1144,7 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
             supplied.remove(part)
     return {
         "collected": collected, "skipped": skipped, "supplied": supplied,
-        "declined": declined, "uncertain": uncertain,
+        "declined": declined, "uncertain": uncertain, "no_instance": no_instance,
         "declined_count": len(declined), "declined_stated": declined_stated,
     }
 
@@ -1405,6 +1423,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         "elicitation_declined_count": state["declined_count"],
         "elicitation_declined_stated": state["declined_stated"],
         "elicitation_uncertain": state["uncertain"],
+        "elicitation_no_instance": state["no_instance"],
         "elicitation_supplied": elicitation_supplied,
         "elicitation_turns": elicitation_turns,
         "elicitation_entry": elicitation_entry,
@@ -1729,6 +1748,9 @@ def run_discuss(
         "declined_count": (resume_state or {}).get("elicitation_declined_count"),
         "declined_stated": (resume_state or {}).get("elicitation_declined_stated"),
         "uncertain": list((resume_state or {}).get("elicitation_uncertain", [])),
+        # Parts he answered by saying there is no such example. Not material and not a
+        # failure: his words are on the row, the receipt says which fact it is.
+        "no_instance": list((resume_state or {}).get("elicitation_no_instance", [])),
         "events": [],
     }
 
@@ -1754,6 +1776,7 @@ def run_discuss(
             "declined_stated": elicitation["declined_stated"],
             # Parts kept as his words although the sentence mentioned skipping.
             "uncertain": list(elicitation["uncertain"]),
+            "no_instance": list(elicitation["no_instance"]),
             "unanchored": list(part_sources),
             "supplied": list(elicitation["supplied"]),
             "part_sources": part_sources,
@@ -1800,6 +1823,7 @@ def run_discuss(
                     stopped_at=stopped_at, declined=state["declined"] or None,
                     declined_stated=state["declined_stated"],
                     uncertain=state["uncertain"],
+                    no_instance=state["no_instance"],
                     spoken_stop=spoken_stop,
                     # Named only when there is something to read: with `--no-trace`
                     # nothing was written, and a trace whose very first write failed has
@@ -1904,7 +1928,7 @@ def run_discuss(
                     record(part_name, turn, question, None, "too_large", input_chars=len(raw))
                     last_collected = part_name
                 else:
-                    reading = classify_answer(raw)
+                    reading = classify_answer(raw, part=part_name)
                     if reading == "structured":
                         print("用一句话说就行；这里不填表。", file=output)
                         reading = "none"
@@ -1924,6 +1948,23 @@ def run_discuss(
                                     event["uncertain"] = True
                                     break
                             print("这句我按你的原话收下了。想重来就说「改回上一题」。", file=output)
+                        last_collected = part_name
+                        break
+                    if reading == "no_instance":
+                        # "没遇到过" / "没有过": he answered by saying there is no such
+                        # example. His words are kept -- they are a fact about what he has
+                        # seen -- but the part is not filled, and the receipt says so in
+                        # its own clause instead of counting it as material or as a
+                        # failure. Then the part ends: re-asking the same question would
+                        # be asking him to produce the example he just said he has not
+                        # got. The follow-up question ("换成另一个人来用") is what made the
+                        # supervisor's two identical sentences get opposite receipts.
+                        elicitation["no_instance"].append(part_name)
+                        print(
+                            "这句我按原话收下了：你没有这样的经历。它不算说到这一件上，"
+                            "这一件就到这里。",
+                            file=output,
+                        )
                         last_collected = part_name
                         break
                     if reading == "stop":
@@ -2020,10 +2061,62 @@ def run_discuss(
                     continue
                 if reading["readable"]:
                     print(provenance_sentence(reading), file=output)
+        if draft_id is not None:
+            # Leaving the session is when the person decides what to do next, and this is
+            # the one thing this session produced that nobody has looked at. The
+            # supervisor walked it: the draft was in the library, the view called it the
+            # thing to read, and the screen they actually saw on the way out offered only
+            # a JSONL path and, later, a bare card id -- two commands to guess at.
+            #
+            # The wording depends on which card this is. `_draft_conclusion` returns the
+            # *existing* card's id when the ending wording is one that is already there,
+            # attaching a model-generated source to it -- so a sentence saying 「没有人
+            # 认可过」 would be false about a card that carries a confirmation. The store
+            # is open here, so this is asked rather than guessed.
+            confirmed = False
+            try:
+                card_state = store.show(draft_id)["candidate"]
+            except (DojoError, OSError):
+                card_state = None
+            if isinstance(card_state, dict):
+                confirmed = bool((card_state.get("confirmation") or {}).get("active"))
+            if confirmed:
+                # The store is open, so this sentence can name the fact rather than
+                # gesture at it -- but only the fact it asked about. Whether this card is
+                # also discussable is a different question, and a session that just
+                # repeated a wording has no standing to answer it.
+                # Measured, not assumed: the ending row's draft id names the card that
+                # was already on the table, and what this session changed on it is a
+                # version with one more source -- not the wording, not the status,
+                # not the confirmation. Saying so keeps the reader from believing a
+                # repeated sentence produced a new conclusion.
+                print(
+                    "这一场结束时桌上仍是 " + draft_id + " 那句话；本场没有写成新卡片。"
+                    "这张卡以前就被认可过（库里有它的确认记录）；本场又把它说了一遍，"
+                    "在库里给它添了一条本场来源。看它：python3 -m dojo show "
+                    + shlex.quote(draft_id),
+                    file=output,
+                )
+            else:
+                print(
+                    "这一场没有写下被认可的卡片；结束时留了一张未认可的草稿："
+                    + draft_id
+                    + "（系统整理的那一版，没有人认可过）。先看它：python3 -m dojo show "
+                    + shlex.quote(draft_id),
+                    file=output,
+                )
         if trace_path is None:
             print("本场会话轨迹：已关闭（--no-trace）。", file=output)
         else:
             print(f"本场会话轨迹：{trace_path}", file=output)
+            # And the way back into it, on the same screen. The receipt for the four
+            # questions already names this command; a session that ends earlier has the
+            # same words on the same record.
+            print(
+                "回看这一场说了什么：python3 -m dojo transcript "
+                + shlex.quote(str(trace_path)),
+                file=output,
+            )
         return code
 
     while True:

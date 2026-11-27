@@ -86,6 +86,7 @@ NON_ANSWERS = (
     # different verb. They are the same fact -- he has nothing for this part -- and adding
     # them changes no rule, only the vocabulary the rule already means to cover.
     "记不清", "记不起来", "没印象", "说不上来", "不确定", "拿不准", "说不清楚",
+    "不记得", "记不得", "想不出",
 )
 # A degree softener that leaves the same declaration behind, so it maps to the shorter
 # form instead of vanishing: 不太清楚 is 不清楚, 不很确定 is 不确定.
@@ -99,9 +100,13 @@ NON_ANSWER_SOFTENERS = {
 # add no material (也 / 都 / 真的 / 确实). Stripped one at a time, and what is left still
 # has to be *exactly* a listed non-answer, so a clause of his own is never reached:
 # 「我不太清楚别人会怎么做，但上次是我自己盯的」 stays an answer.
+# Only prefixes that cannot change *who* the sentence is about. `都` is deliberately
+# not here: 「都说不清楚」 and 「都忘了」 mean everybody, not him, so peeling it turned a
+# statement about other people into a statement about himself (the review measured that).
+# An unreadable subject stays material -- the safe direction, because material is kept and
+# a wrong "he has nothing" is not recoverable from the receipt.
 NON_ANSWER_PREFIXES = (
-    "我本人", "我自己", "我们", "我", "也", "都", "真的", "确实", "其实", "应该",
-    "没有",
+    "我本人", "我自己", "我们", "我", "也", "真的", "确实", "其实", "应该", "没有",
 )
 # A non-answer with a soft ending is still a non-answer. The review measured four
 # expressions reaching the entry point as `answer` -- 不知道啊 / 说不好吧 / 忘了诶, and the
@@ -405,7 +410,34 @@ def is_stop_statement(text: str) -> bool:
     return any(re.fullmatch(pattern, core) for pattern in STOP_PATTERNS)
 
 
-def classify_answer(text: str) -> str:
+# "I have no such example" -- a fact he stated, and a different one from "I have nothing to
+# say". The supervisor measured the split with the real CLI: asked 「有没有一次你这么做，
+# 结果反而不对？」 he typed 「没有。」, the program called it a non-answer and asked a
+# different question, and then 「没遇到过。」 -- the same meaning -- was collected as if it
+# had filled 失效. Two sentences, one meaning, opposite receipts.
+#
+# Neither sentence fills 失效: not having seen a counterexample is not a statement about
+# when the rule stops working, and the receipt must not read it as "this never fails".
+# So it is its own reading: his words are kept, the part is not marked answered, and the
+# receipt says which of the two happened.
+# A bare 「没有」 is only that claim when the question asked for an instance -- 失效's
+# 「有没有一次…」. Everywhere else it is as likely to mean 「没有人」 or to be a fragment,
+# and calling it "no example" would be a guess about which question he was answering.
+# Stems are written in their folded form (see `_is_no_instance`): 没有 collapses to 没
+# before the comparison, so one list covers both registers.
+NO_INSTANCE = (
+    "没遇到", "没碰", "没见过", "没遇上", "没出现", "没发生", "没试", "没过",
+    "没这样的例子", "没例子", "不存在这样的例子",
+)
+NO_INSTANCE_BARE = ("没有", "无")
+# What may follow a stem and still leave it the same claim: the aspect particle, or the
+# object he names. Bounded on purpose -- 「没见过这种情况」 is the claim, 「没见过他」 is a
+# sentence about a person.
+NO_INSTANCE_TAILS = ("", "过", "这样的例子", "例子", "这种情况", "这样的事", "到过", "着过")
+NO_INSTANCE_PARTICLES = "过啊呀吧呢了哦嘛啦哈诶欸耶哇"
+
+
+def classify_answer(text: str, *, part: str | None = None) -> str:
     """A crude, declared reading: does this answer count as an answer at all?
 
     It does not judge whether the answer *fills* the part (that is `to_fill`, judged by a reader);
@@ -425,9 +457,56 @@ def classify_answer(text: str) -> str:
         return "skip"
     if is_stop_statement(value):
         return "stop"
+    if _is_no_instance(value, part=part):
+        return "no_instance"
     if _is_declared_non_answer(value):
         return "none"
     return "answer"
+
+
+def _is_no_instance(value: str, *, part: str | None = None) -> bool:
+    """Whether the whole reply says "there is no such example".
+
+    Whole-sentence only, with the subject and the particles allowed around it --
+    「我也没有遇到过」。 A clause of his own keeps it an answer: 「没有通知就没人知道」 is
+    material about why the rule broke, not a claim that it never broke.
+    """
+    core = value.strip("。！？…，,、~～!?.；; ")
+    if core in NON_ANSWER_FILLERS:
+        return False
+    def matches(text: str) -> bool:
+        # 「没有遇到过」 and 「没遇到过」 are the same claim in two registers; folding the
+        # 有 away before comparing keeps one list instead of two spellings of each stem.
+        if text in NO_INSTANCE_BARE:
+            # A bare 没有 / 无 is read as "no example" only where the question asked for
+            # one (失效's 「有没有一次…」). Everywhere else it is as likely to be a
+            # fragment of 「没有人」, and guessing which is not the classifier's job.
+            return part == "失效"
+        folded = text.replace("没有", "没")
+        return any(folded.startswith(stem) and folded[len(stem):] in NO_INSTANCE_TAILS
+                   for stem in NO_INSTANCE)
+
+    if matches(core):
+        return True
+    candidate = core
+    for _ in range(6):
+        for softener, replacement in NON_ANSWER_SOFTENERS.items():
+            if candidate.startswith(softener) and len(candidate) > len(softener):
+                candidate = replacement + candidate[len(softener):]
+                break
+        else:
+            for prefix in NON_ANSWER_PREFIXES:
+                if candidate.startswith(prefix) and len(candidate) > len(prefix):
+                    candidate = candidate[len(prefix):]
+                    break
+            else:
+                if candidate and candidate[-1] in NO_INSTANCE_PARTICLES:
+                    candidate = candidate[:-1]
+                else:
+                    break
+        if matches(candidate):
+            return True
+    return False
 
 
 def _is_declared_non_answer(value: str) -> bool:

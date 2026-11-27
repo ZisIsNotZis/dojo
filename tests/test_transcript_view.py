@@ -361,6 +361,66 @@ class TranscriptTests(unittest.TestCase):
         self.assertIn("按现在的规则重算", shown)
         self.assertIn("续跑会按后者算", shown)
 
+    def test_an_undo_followed_by_end_of_input_shows_words_and_verdict_from_one_row(self):
+        """The words and the verdict must describe the same moment.
+
+        The review measured the pair coming from different rows: `said` was the last row
+        that had words (「改回上一题」, which the undo row carries) and `reading` was the
+        last row (the end-of-input row, which has no words). The screen then said 你说：
+        改回上一题 beside 问到这儿时输入结束了, and the rule-change note claimed resume
+        would read it as an answer. Resume reads collected=[] on that file.
+        """
+        self.run_session()
+        trace = self.trace()
+        rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        head = [row for row in rows if row.get("event") != "elicitation"]
+        answered = {"event": "elicitation", "part": "情境", "field": "situation",
+                    "turn": 1, "question": "问的是情境", "answer": "一句真话",
+                    "promoted": False, "collected": True, "reading": "answer",
+                    "at": "2026-11-28T00:00:00+00:00"}
+        undo = dict(answered, answer="改回上一题", reading="undo", collected=False,
+                    at="2026-11-28T00:00:01+00:00")
+        end_input = dict(answered, turn=2, answer=None, reading="eof", collected=False,
+                         at="2026-11-28T00:00:02+00:00")
+        crafted = self.root / "undo"
+        crafted.mkdir()
+        path = crafted / trace.name
+        path.write_text("\n".join(json.dumps(row, ensure_ascii=False)
+                                    for row in [*head, answered, undo, end_input]) + "\n",
+                        encoding="utf-8")
+        shown = transcript_module.render(transcript_module.load(path))
+        self.assertNotIn("你说：改回上一题", shown,
+                         "the undo instruction is not something he said about the part")
+        self.assertIn("你后来退回了这一题", shown)
+        # The words shown are the ones he actually gave, and the verdict beside them comes
+        # from the row that ended the part.
+        self.assertIn("你说：一句真话", shown)
+        self.assertIn("问到这儿时输入结束了", shown)
+        self.assertNotIn("续跑会按后者算", shown,
+                         "nothing here disagrees with the replay: it is not a rule change")
+
+    def test_a_form_like_reply_is_not_flagged_as_a_rule_change(self):
+        """`structured` is stored as `none` by design, so the recomputation agreeing on
+        `none` is the normal case -- the review measured this as a false alarm."""
+        self.run_session()
+        trace = self.trace()
+        rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        for row in rows:
+            if row.get("event") == "elicitation" and row.get("part") == "情境":
+                row["answer"] = "是"
+                row["reading"] = "none"
+                row["collected"] = False
+                break
+        crafted = self.root / "form"
+        crafted.mkdir()
+        path = crafted / trace.name
+        path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+                        encoding="utf-8")
+        part = next(item for item in transcript_module.load(path)["parts"]
+                    if item["part"] == "情境")
+        self.assertEqual("none", part["reading"])
+        self.assertIsNone(part["reclassified"])
+
     def test_json_output_carries_the_same_facts(self):
         self.run_session()
         done = self.run_cli("transcript", str(self.trace()), "--json")

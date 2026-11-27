@@ -65,8 +65,8 @@ ARMS: list[tuple[str, str, str, str]] = [
         # the whole reason to write it down.
         "F 只取每件的第一行（撤回后看不见最后那句）",
         "dojo/transcript.py",
-        "        last = events[-1]\n        said = next((row[\"answer\"] for row in reversed(events)",
-        "        last = events[0]\n        said = next((row[\"answer\"] for row in events",
+        '        source = answered[-1] if answered else events[-1]',
+        '        source = answered[0] if answered else events[-1]',
     ),
     (
         "G 回看时偷偷开一个库",
@@ -126,6 +126,21 @@ ARMS: list[tuple[str, str, str, str]] = [
         '    elif False:',
     ),
     (
+        # The review's newest finding, and the lesson it named: a new sentence can be
+        # false where an old one was not. This arm makes the reused-card case claim
+        # nobody ever accepted a card that carries a confirmation.
+        "Q 重复一张以前认可过的卡，却说「没有人认可过它」",
+        "dojo/transcript.py",
+        '        if handed_id is not None and handed_id == view["draft"]:',
+        '        if False:',
+    ),
+    (
+        "R 左边又剥「都」（把别人的话读成他的）",
+        "dojo/elicit.py",
+        '    "我本人", "我自己", "我们", "我", "也", "真的", "确实", "其实", "应该", "没有",',
+        '    "我本人", "我自己", "我们", "我", "也", "都", "真的", "确实", "其实", "应该", "没有",',
+    ),
+    (
         "P 旧轨迹的读数与今天的规则不一致时不吭声",
         "dojo/transcript.py",
         '            if part["reclassified"]:',
@@ -175,7 +190,8 @@ def main() -> int:
             units = subprocess.run(
                 [sys.executable, "-B", "-m", "unittest",
                  "tests.test_transcript_view", "tests.test_one_card_version",
-                 "tests.test_non_answer_words", "tests.test_trace_line_breaks"],
+                 "tests.test_non_answer_words", "tests.test_trace_line_breaks",
+                 "tests.test_no_instance"],
                 cwd=str(work), text=True, capture_output=True, env=clean_env(), timeout=900)
             if done.returncode == 0 and units.returncode == 0:
                 print("GREEN  %s —— 没有人在看这个" % name)

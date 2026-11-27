@@ -368,6 +368,12 @@ def main() -> int:
     check("H2 带他自己从句的句子仍是回答",
           classify_answer("我不太清楚别人会怎么做，但上次是我自己盯的") == "answer"
           and classify_answer("我忘了通知，所以那天没人知道系统跑完了") == "answer")
+    # The review's warning about left-peeling, measured: 都说不清楚 is about everybody.
+    # A prefix that can change *who* the sentence is about is not peeled.
+    check("H2b 剥前缀不会把别人的话读成他的",
+          all(classify_answer(phrase) == "answer"
+              for phrase in ("都说不清楚", "都忘了", "大家都忘了", "他们都不知道")),
+          {p: classify_answer(p) for p in ("都说不清楚", "都忘了", "大家都忘了")})
 
     no_answer, no_answer_trace, _r = run_in_process(
         ["讲一条做法", "对，就这么定", "我不知道", "我忘了", "我不太清楚", "我记不清了"])
@@ -448,6 +454,129 @@ def main() -> int:
     check("--json 带上「能不能续跑」「记完没有」",
           "resumable" in payload and "complete" in payload and "draft" in payload,
           json.dumps(sorted(payload), ensure_ascii=False))
+
+    print("\nI. 「没遇到过」 is not 「我不知道」 and does not fill the part\n")
+
+    # The supervisor's report at 8524586: asked 「有没有一次你这么做，结果反而不对？」 he
+    # typed 「没有。」, the program called it a non-answer and asked a different question;
+    # then 「没遇到过。」 -- the same meaning -- was collected as if it had filled 失效.
+    from dojo.elicit import classify_answer as read_answer
+
+    check("I1 同一意思的三种说法得到同一个读数",
+          all(read_answer(phrase, part="失效") == "no_instance"
+              for phrase in ("没有", "没遇到过", "没有过")),
+          {p: read_answer(p, part="失效") for p in ("没有", "没遇到过", "没有过")})
+    check("I2 它与「我不知道」分开：一个是没例子，一个是没答案",
+          read_answer("我不知道", part="失效") == "none"
+          and read_answer("没遇到过", part="失效") == "no_instance")
+    check("I3 带他自己从句的「没有…」仍是材料",
+          read_answer("没有通知就没人知道", part="失效") == "answer"
+          and read_answer("我没有别的意思", part="失效") == "answer")
+
+    seen_none, seen_trace, _r = run_in_process(
+        ["讲一条做法", "对，就这么定", "那天我把检查交出去了", "我少了判断的机会",
+         "没人再复核", "没有。"])
+    seen_line = receipt_of(seen_none)
+    check("I4 四件里有一件是「没有」时，回执不把它算进「说了原话」",
+          "没有碰到过这样的例子" in seen_line
+          and "这一件没有材料" in seen_line
+          and "失效" in seen_line.split("没有碰到过这样的例子", 1)[0].rsplit("；", 1)[-1],
+          seen_line)
+    check("I5 回执不说这条做法不会失效",
+          "不等于这条做法不会失效" in seen_line, seen_line)
+    seen_shown = cli("transcript", str(seen_trace))
+    check("I6 回看也把它记成「没有碰到过这样的例子」而不是「收作原话」",
+          seen_shown.returncode == 0
+          and "没有碰到过这样的例子" in seen_shown.stdout
+          and "收作原话" not in seen_shown.stdout.split("失效", 1)[-1],
+          seen_shown.stdout[-600:])
+
+    print("\nJ. the end of a session, on screen\n")
+
+    # Two more reports from the supervisor: leaving a session offered a JSONL path and a
+    # bare card id; and with `--card` and one line of input the ending row's `draft` was
+    # the card that was handed over, which carries a confirmation -- so a sentence saying
+    # 「没有人认可过它」 was false about it.
+    early_root = Path(tempfile.mkdtemp(prefix="early."))
+    early_store = Store(early_root / "dojo.sqlite3")
+
+    class EarlyClient:
+        def __init__(self):
+            self.responses = [{"answer": "那我们把这句当成现在这一版。",
+                               "candidate": {
+                                   "statement": "值班时把异常交给人判断。",
+                                   "kind": "abstract_idea", "scope": ["x"],
+                                   "premises": ["p"], "alternatives": ["a"],
+                                   "contradictions": ["c"], "unknowns": ["u"]},
+                               "user_stance": "neutral"}]
+
+        def complete(self, _messages):
+            return self.responses.pop(0)
+
+    lines = iter(["聊一下值班"])
+
+    def early_reader(_prompt):
+        try:
+            return next(lines)
+        except StopIteration:
+            raise EOFError
+
+    early_out = io.StringIO()
+    run_discuss(early_store, client=EarlyClient(), read_line=early_reader,
+                output=early_out, environ={})
+    screen = early_out.getvalue()
+    check("J1 退出时点名草稿，并给出看它的命令",
+          any("草稿" in line and "python3 -m dojo show" in line
+              for line in screen.splitlines()), screen[-500:])
+    check("J2 退出时给出回看这一场的命令",
+          "python3 -m dojo transcript" in screen, screen[-500:])
+
+    # A different wording from the draft above, so the library's duplicate check does not
+    # hand back that fresh draft; the point is a card that carries a confirmation.
+    fields = {"statement": "值班时把异常交给值班的人判断。", "kind": "abstract_idea",
+              "scope": ["x"], "premises": ["p"], "alternatives": ["a"],
+              "contradictions": ["c"], "unknowns": ["u"]}
+    reused = early_store.add(statement=fields["statement"], kind="abstract_idea",
+                             scope=fields["scope"], premises=fields["premises"],
+                             alternatives=fields["alternatives"],
+                             contradictions=fields["contradictions"],
+                             unknowns=fields["unknowns"], session="sess-A")
+    early_store.record_acceptance(reused["id"], "sess-A", path="discuss_conclusion")
+    early_store.confirm(reused["id"], "值得讨论", session="sess-A")
+
+    class RepeatClient:
+        def __init__(self):
+            self.responses = [{"answer": "那我们把这句当成现在这一版。",
+                               "candidate": fields, "user_stance": "neutral"}]
+
+        def complete(self, _messages):
+            return self.responses.pop(0)
+
+    one_line = iter(["我想接着说"])
+
+    def repeat_reader(_prompt):
+        try:
+            return next(one_line)
+        except StopIteration:
+            raise EOFError
+
+    repeat_out = io.StringIO()
+    run_discuss(early_store, client=RepeatClient(), card=reused["id"],
+                read_line=repeat_reader, output=repeat_out, environ={})
+    repeat_screen = repeat_out.getvalue()
+    ending = [line for line in repeat_screen.splitlines()
+              if "桌上仍是" in line or "未认可的草稿" in line]
+    check("J3 重复一张以前认可过的卡时，不说「没有人认可过它」",
+          bool(ending) and "桌上仍是" in ending[0]
+          and "没有人认可过" not in ending[0], ending[0] if ending else repeat_screen[-400:])
+
+    repeated_trace = sorted((early_root / "sessions").glob("*.jsonl"))[-1]
+    repeated_shown = cli("transcript", str(repeated_trace))
+    check("J4 回看这样说时也不说「没有人认可过」",
+          repeated_shown.returncode == 0 and "没有人认可过" not in repeated_shown.stdout
+          and "桌上仍是" in repeated_shown.stdout,
+          repeated_shown.stdout[-600:])
+    early_store.close()
 
     print()
     if FAILURES:
