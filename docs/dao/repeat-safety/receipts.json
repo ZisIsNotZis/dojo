@@ -91,9 +91,10 @@
           "checked_at_commit": 1,
           "failures": [],
           "kind": "sources",
-          "line": "出处核对 1 条：引语 1 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 1 条，按所指版本核对 1 条，不可解析 0 条。",
+          "line": "出处核对 1 条：引语 1 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 1 条，按所指版本核对 1 条，不可解析 0 条，commit 是会动的名字 0 条，引语没能在这个版本上核对 0 条。",
+          "moving_names": [],
           "ran": {
-            "by": "scripts/dao_life.py/sources-v2",
+            "by": "scripts/dao_life.py/sources-v4(bench-v2)",
             "git": true
           },
           "rows": [
@@ -106,10 +107,22 @@
                 111,
                 111
               ],
+              "occurrence_note": "这句话在 docs/proposal-knowledge-network.md 里出现 2 次（第 111–111、307–307 行），按 ref 取第 111–111 行",
+              "occurrences": [
+                [
+                  111,
+                  111
+                ],
+                [
+                  307,
+                  307
+                ]
+              ],
               "path": "docs/proposal-knowledge-network.md",
               "quote": "found"
             }
           ],
+          "unchecked_at_revision": [],
           "unresolved_commits": [],
           "verdict": "pass"
         },

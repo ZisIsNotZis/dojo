@@ -44,6 +44,10 @@ BENCH = "scripts/dao_life.py"
 # the anchor both the quote lookup and the commit check resolve against.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCH_VERSION = 2
+# The citation reading changed shape (revision-only checking, multiple occurrences), so
+# it carries its own version: the other three readings did not change, and bumping the
+# shared number would re-version receipts that are still accurate.
+SOURCES_VERSION = 4
 COST_UNITS = ("时间", "关系", "机会", "能力")
 CLICHES = (
     "因人而异",
@@ -1543,19 +1547,108 @@ def _squash(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
 
-def _blob_at(root: Path, commit: str, path: str) -> str | None:
-    """The file's text at `commit`, or None when git cannot give it."""
+def _pinned_name(commit: str) -> bool:
+    """Is this a name that always means the same revision?
+
+    Hex object ids do. Everything else -- `HEAD`, `main`, `v1.2`, `HEAD~3`, a remote
+    branch -- is a name git resolves *now*, and the record does not say that. A
+    citation is a promise to a reader years later; `HEAD` cannot keep it.
+
+    Full 40-character hex and abbreviated hex (at least 4, git's own floor) are both
+    accepted. Anything carrying `^`, `~`, `@{` or a path is a traversal, not a pin.
+    """
+    return bool(re.fullmatch(r"[0-9a-fA-F]{4,40}", commit.strip()))
+
+
+def _names_the_object(root: Path, commit: str) -> bool:
+    """Is `commit` an object id, and does it reach the object it spells?
+
+    Two questions, because a hexadecimal spelling is not enough on its own:
+
+      * is the string also a ref? `git tag 1af799f` creates a label that can later be
+        moved with `-f`; nothing about the record would change;
+      * does the id resolve to an object whose own id starts with it? That is a
+        tautology for a genuine object id and the definition of an abbreviation, and
+        it fails for anything git reaches by some other rule.
+    """
+    name = commit.strip()
+    # First: is this string a ref at all? `git tag 1af799f` and `git branch 1af799f`
+    # both make a *label* with a hexadecimal spelling. A label can be moved with
+    # `-f`, so even when it points at the right object today it is not a promise.
+    for namespace in ("refs/tags/", "refs/heads/", "refs/remotes/"):
+        try:
+            exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", namespace + name],
+                                    cwd=str(root), capture_output=True, timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if exists.returncode == 0:
+            return False
+    # Second: the object the name reaches must be the one the name denotes. This is
+    # what catches a name that resolves through some other rule, and it is a
+    # tautology for a genuine object id.
+    try:
+        done = subprocess.run(["git", "rev-parse", "--verify", name + "^{commit}"],
+                              cwd=str(root), capture_output=True, timeout=120, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if done.returncode != 0:
+        return False
+    return done.stdout.strip().lower().startswith(name.lower())
+
+
+def _cited_ranges(ref: str) -> list[tuple[int, int]]:
+    r"""The line ranges a `ref` actually points at, as intervals.
+
+    Only the `第 N 行` and `第 N–M 行` forms count. The old scrape took every
+    `第 (\d+)` in the string, so a section number could stand in for a wrong line:
+    measured, `第 29 行，见第 2 节` passed because 3 held nothing and 2 did not
+    matter -- and the shipped `person-dojo/ep-2026-10-23-detach` really does carry
+    three numbers (`第 111 行；§10 第 2 条（第 272 行）`). It resolved correctly by
+    luck, not by construction.
+
+    A range stays a range. Expanding `第 1–5000 行` into five thousand integers buys
+    nothing: the only question is whether the quote sits inside it, and that is one
+    comparison. A wide range is a coarse record, not a stronger check, and making the
+    gate allocate work in proportion to a plausible typo is the wrong shape.
+    """
+    ranges: list[tuple[int, int]] = []
+    for match in re.finditer(r"第\s*(\d+)\s*(?:[–\-—~]\s*(\d+)\s*)?行", ref):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else start
+        ranges.append((min(start, end), max(start, end)))
+    return ranges
+
+
+def _cited_lines(ref: str) -> list[int]:
+    """The numbers a ref names, for a message a reader has to read.
+
+    Not used for matching: `_cited_ranges` decides that. This exists so an error can
+    say `第 29 行` rather than quoting the whole ref.
+    """
+    return sorted({number for start, end in _cited_ranges(ref) for number in (start, end)})
+
+
+def _revision_text(root: Path, commit: str, path: str) -> tuple[str | None, str]:
+    """The file's text at `commit`, and when that cannot be had, why not.
+
+    `None` used to be one value for three different facts -- git failed, the path
+    is absent, the bytes are not UTF-8 -- and the caller treated all three as
+    "read the working tree instead". That made a Latin-1 byte in an old revision
+    the cheapest way to buy a `pass`: the sentence was then looked up in today's
+    file, which is a different question from the one the citation asks. The reason
+    is returned so the row can say which of the three happened.
+    """
     try:
         done = subprocess.run(["git", "show", commit + ":" + path],
                               cwd=str(root), capture_output=True, timeout=120)
     except (OSError, subprocess.SubprocessError):
-        return None
+        return None, "取不到（git 调用失败）"
     if done.returncode != 0:
-        return None
+        return None, "取不到（git show 失败）"
     try:
-        return done.stdout.decode("utf-8")
+        return done.stdout.decode("utf-8"), ""
     except UnicodeDecodeError:
-        return None
+        return None, "不是 UTF-8 文本：这个修订上的字节无法按文本核对"
 
 
 def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool = True) -> dict[str, Any]:
@@ -1591,6 +1684,26 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
     failures: list[str] = []
     root = Path(base) if base is not None else REPO_ROOT
 
+    def has_history() -> bool:
+        """Is there a repository here at all?
+
+        The distinction the fallback turns on. No repository (a frozen extract, or
+        `git=False`) means the working tree is the only text that exists -- that
+        reading is honest as long as the verdict says `unchecked`. A repository that
+        simply lacks the cited revision is a different situation: today's file is
+        not that revision's file, so substituting it answers a question nobody asked.
+        """
+        if not git:
+            return False
+        try:
+            done = subprocess.run(["git", "rev-parse", "--git-dir"],
+                                  cwd=str(root), capture_output=True, timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return done.returncode == 0
+
+    history = has_history()
+
     def resolves(commit: str, path: str = "") -> str:
         """`resolved`, `missing-path`, or `unresolved`.
 
@@ -1604,6 +1717,15 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
         """
         if not git or not commit:
             return "unresolved"
+        # A citation promises a *revision*, so the name must be one that cannot move.
+        # `HEAD`, a branch and a lightweight tag all resolve today and can point
+        # somewhere else tomorrow; a re-check found that a record citing `HEAD` kept
+        # passing after the branch was reset, and flipped from `fail` to `pass` when
+        # the sentence appeared in a newer commit. Nothing in the shipped libraries
+        # does this (all twenty cite hex object names), so this is a guard against a
+        # record going stale without anyone editing it.
+        if not _pinned_name(commit):
+            return "moving-name"
         try:
             there = subprocess.run(
                 ["git", "cat-file", "-e", commit + "^{commit}"],
@@ -1617,7 +1739,16 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
             )
         except (OSError, subprocess.SubprocessError):
             return "unresolved"
-        return "resolved" if holding.returncode == 0 else "missing-path"
+        if holding.returncode != 0:
+            return "missing-path"
+        # Looking like a hash is not being one. A tag may be *named* `1af799f`, and
+        # git prefers the name over the object spec: measured, `git tag 1af799f` made
+        # that string resolve to a different commit entirely, so a record could point
+        # at one revision while its text read another. The resolved object has to be
+        # the one the name denotes, or the name is a label someone can re-point.
+        if not _names_the_object(root, commit):
+            return "moving-name"
+        return "resolved"
 
     for episode in data["episodes"]["episodes"]:
         source = episode.get("source") or {}
@@ -1633,65 +1764,16 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
             failures.append(f"{row['id']} 没有写清出处（path/ref）：引语无处可查")
             continue
         commit = source.get("commit") or ""
-        # The quote is checked against the file *at the cited revision*, when there is
-        # one to ask. A working-tree lookup answers a different question: two commits
-        # can share a path while the sentence arrives in the second one, and a reader
-        # who follows the citation to the first would not find it.
-        text = None
-        if git and commit and episode.get("attribution") != "synthetic":
-            blob = _blob_at(root, commit, path)
-            row["checked_at"] = "commit" if blob is not None else "working-tree"
-            text = blob if blob is not None else None
-        else:
-            row["checked_at"] = "working-tree"
-        if text is None:
-            try:
-                text = (root / path).read_text(encoding="utf-8")
-                if row["checked_at"] == "commit":
-                    # The commit resolved but the file or its bytes were not readable
-                    # there; the working tree cannot stand in for that revision.
-                    row["checked_at"] = "working-tree"
-            except (OSError, UnicodeDecodeError):
-                row["quote"] = "unreadable"
-                failures.append(f"{row['id']} 的出处 {path} 读不出来：引语无法核对")
-                continue
-        wanted = _squash(quote)
-        lines = text.splitlines()
-        span = None
-        for start in range(len(lines)):
-            window = ""
-            for end in range(start, min(start + 15, len(lines))):
-                window += _squash(lines[end])
-                if wanted and wanted in window:
-                    # The tightest span, not the first one that happens to contain
-                    # it: a wide window would let a ref pointing at a neighbouring
-                    # paragraph pass, and the reader who follows that number would
-                    # land in the wrong place. Measured: `ep-2026-10-23-detach`
-                    # cited line 104 while the sentence begins on 111, and only the
-                    # tight span shows that.
-                    if span is None or (end - start) < (span[1] - span[0]):
-                        span = (start + 1, end + 1)
-                    break
-        row["lines"] = list(span) if span else None
-        if not wanted:
-            row["quote"] = "empty"
-            failures.append(f"{row['id']} 没有引语：出处无从核对")
-        elif span is None:
-            row["quote"] = "absent"
-            failures.append(f"{row['id']} 的引语在 {path} 里找不到：出处与引语不符")
-        else:
-            cited = [int(m.group(1)) for m in re.finditer(r"第\s*(\d+)", ref)]
-            if cited and not any(span[0] <= number <= span[1] for number in cited):
-                row["quote"] = "stale-ref"
-                failures.append(
-                    f"{row['id']} 的 ref 指第 {cited} 行，引语却在 {path} 第 {span[0]}–{span[1]} 行：行号是旧地图"
-                )
-            else:
-                row["quote"] = "found"
+        # Whether the cited revision can answer at all, asked once and reused: the
+        # quote check needs it to choose its source, and the commit check needs it
+        # for the row. A synthetic episode owes no revision here.
         if episode.get("attribution") == "synthetic":
             row["commit_state"] = "not-required"
         elif not commit:
             row["commit_state"] = "unrecorded"
+            # Said here rather than after the quote branch: a record with no commit
+            # is unverifiable whether or not its quote happens to land, and an early
+            # exit from the quote branch must not be able to swallow this.
             failures.append(f"{row['id']} 没写 commit：这份出处无法固定在某个版本上")
         else:
             row["commit_state"] = resolves(commit, path)
@@ -1699,34 +1781,186 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
                 failures.append(
                     f"{row['id']} 的提交 {commit} 里没有 {path}：引语不可能在这个修订上核对"
                 )
+            elif row["commit_state"] == "moving-name":
+                failures.append(
+                    f"{row['id']} 的 commit 写的是 {commit!r}：那是个会动的名字，今天的解析结果不能代表记录的版本；请写对象哈希"
+                )
+        # The quote is checked against the file *at the cited revision*, when there is
+        # one to ask. A working-tree lookup answers a different question: two commits
+        # can share a path while the sentence arrives in the second one, and a reader
+        # who follows the citation to the first would not find it.
+        #
+        # Two re-checks by hand, both reproduced here, found the fallback lying:
+        #   * the cited revision lacks the path, so `git show` answered nothing and
+        #     the file was read from the working tree -- where the sentence happens
+        #     to be. The quote's reading said `found` while its own row said
+        #     `missing-path`: the verdict was `fail`, but the reader could not tell
+        #     that `found` did not come from the cited revision;
+        #   * the cited blob is not UTF-8 (any Latin-1 word is enough). `git show`
+        #     succeeded and the bytes went unreadable, which fell into the same
+        #     branch as "no blob at all" and became a `pass` -- the strongest of the
+        #     three verdicts, on the weakest of the evidence.
+        # Neither revision can be stood in for. The working tree answers a question
+        # nobody asked, so it is used only when the question cannot be put to a
+        # revision at all: no `.git`, `git` off, no commit written, or a synthetic
+        # episode (that corpus is authored here).
+        text = None
+        if row["commit_state"] == "resolved":
+            blob, why = _revision_text(root, commit, path)
+            if blob is None:
+                row["checked_at"] = "no-revision"
+                row["quote"] = "unreadable-at-revision"
+                row["revision_note"] = why
+                failures.append(
+                    f"{row['id']} 所指的 {commit} 里 {path} 取不出文本（{why}）：引语没有在工作树上代替核对"
+                )
+            else:
+                row["checked_at"] = "commit"
+                text = blob
+        elif row["commit_state"] in {"missing-path", "moving-name"}:
+            # The revision resolves and does not hold the file. The working tree may
+            # well hold it -- that is the case that lied -- but a quote checked there
+            # is not checked at the citation's revision, so the row says so and the
+            # commit failure below carries the verdict.
+            row["checked_at"] = "no-revision"
+            row["quote"] = "unchecked-at-revision"
+        elif row["commit_state"] == "unresolved" and history:
+            # There is a repository and it does not have this commit. Safer to leave
+            # the quote unread than to read today's file and call it checked.
+            row["checked_at"] = "no-revision"
+            row["quote"] = "unchecked-at-revision"
+        else:
+            # No repository to ask (frozen extract, `git=False`), so the working
+            # tree is the only text that exists. That reading is honest as long as
+            # the verdict says `unchecked`, which the unresolved list does.
+            row["checked_at"] = "working-tree"
+        if text is None and row["checked_at"] == "working-tree":
+            try:
+                text = (root / path).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                row["quote"] = "unreadable"
+                failures.append(f"{row['id']} 的出处 {path} 读不出来：引语无法核对")
+                continue
+        if text is None:
+            continue
+        wanted = _squash(quote)
+        lines = text.splitlines()
+        found: list[tuple[int, int]] = []
+        for start in range(len(lines)):
+            window = ""
+            for end in range(start, min(start + 15, len(lines))):
+                window += _squash(lines[end])
+                if wanted and wanted in window:
+                    # Each occurrence is recorded at its own tightest span: a wide
+                    # window would let a ref pointing at a neighbouring paragraph
+                    # pass, and the reader who follows that number would land in the
+                    # wrong place. Measured: `ep-2026-10-23-detach` cited line 104
+                    # while the sentence begins on 111, and only the tight span
+                    # shows that.
+                    span = (start + 1, end + 1)
+                    if span not in found:
+                        found.append(span)
+                    break
+        # A window that starts earlier than the sentence also contains it, so the
+        # raw list holds artefacts like (1,3) for a sentence on line 3. Two
+        # occurrences means two *places*, so keep only spans that contain no other
+        # span: what survives is the tight reading of each real occurrence.
+        found = [span for span in found
+                 if not any(other != span and span[0] <= other[0] and other[1] <= span[1]
+                            for other in found)]
+        found.sort()
+        row["occurrences"] = [list(span) for span in found]
+        cited_ranges = _cited_ranges(ref)
+        cited = _cited_lines(ref) if cited_ranges else []
+        if not wanted:
+            row["lines"] = None
+            row["quote"] = "empty"
+            failures.append(f"{row['id']} 没有引语：出处无从核对")
+        elif not found:
+            row["lines"] = None
+            row["quote"] = "absent"
+            failures.append(f"{row['id']} 的引语在 {path} 里找不到：出处与引语不符")
+        else:
+            # A sentence can appear twice in one file, and the record may cite the
+            # second one. Measured: a quote at lines 3 and 5 cited as line 5 was
+            # called a stale map, because the gate compared the ref against the
+            # first occurrence only and the precise number looked wrong. Which
+            # occurrence the record means is what `ref` is for, so the ref selects.
+            # Overlap, not enumeration: the ref and the quote are both spans, and the
+            # only question is whether they meet. A hand-written `第 1–5000 行` is one
+            # comparison, not five thousand.
+            matching = [span for span in found
+                        if any(span[0] <= end and start <= span[1]
+                               for start, end in cited_ranges)]
+            # No number written, so the tightest occurrence is the best reading.
+            selected = min(found, key=lambda s: s[1] - s[0])
+            if matching:
+                selected = matching[0]
+                row["quote"] = "found"
+                # Two spans can only both hold the same number if the quote repeats
+                # inside itself, so this is a note rather than a second verdict.
+                if len(matching) > 1:
+                    row["ref_ambiguous"] = True
+            elif cited:
+                row["quote"] = "stale-ref"
+                failures.append(
+                    f"{row['id']} 的 ref 指第 {'、'.join(str(n) for n in cited)} 行，"
+                    f"引语却在 {path} 第 {'、'.join(f'{a}–{b}' for a, b in found)} 行：行号是旧地图"
+                )
+            else:
+                row["quote"] = "found"
+            # `lines` is where the sentence actually is, even when the ref is stale:
+            # the reader needs the true location most in exactly that case.
+            row["lines"] = list(selected)
+            if len(found) > 1:
+                if matching:
+                    how = f"，按 ref 取第 {selected[0]}–{selected[1]} 行"
+                elif cited:
+                    how = "，ref 指的行不在任何一处里"
+                else:
+                    how = "，未写行号，取最紧的一处"
+                row["occurrence_note"] = (
+                    f"这句话在 {path} 里出现 {len(found)} 次（第 "
+                    f"{'、'.join(f'{a}–{b}' for a, b in found)} 行）" + how
+                )
     unresolved = [r["id"] for r in rows if r["commit_state"] == "unresolved"]
+    moving = [r["id"] for r in rows if r["commit_state"] == "moving-name"]
+    not_at_revision = [r["id"] for r in rows if r.get("checked_at") == "no-revision"]
     # Three words, because two would lie. `pass` means every quote landed where it
-    # says and every commit resolved. `unchecked` means the quotes landed but the
-    # revisions could not be looked up -- which is the state of this whole tree,
-    # since the history was rewritten and the cited commits went with it. Calling
-    # that `pass` would let a reader believe the versions were verified.
+    # says *and* every one of them was read at the revision it names. `unchecked`
+    # means at least one quote could not be put to its revision -- because the
+    # revision is not in this repository, or because there is no repository here to
+    # ask. Calling either `pass` would let a reader believe the versions were
+    # verified. Note that `unchecked` is reachable two ways on purpose: a frozen
+    # extract (no history at all) and a record whose SHAs went with a rewritten
+    # history are both "nobody read that file at that revision", and the rows say
+    # which one happened rather than the verdict swallowing the difference.
     if failures:
         verdict = "fail"
-    elif unresolved:
+    elif unresolved or not_at_revision:
         verdict = "unchecked"
     else:
         verdict = "pass"
     return {
         "kind": "sources",
-        "ran": {"by": f"{BENCH}/sources-v{BENCH_VERSION}", "git": bool(git)},
+        "ran": {"by": f"{BENCH}/sources-v{SOURCES_VERSION}(bench-v{BENCH_VERSION})", "git": bool(git)},
         "verdict": verdict,
         "rows": rows,
         "failures": failures,
         "unresolved_commits": unresolved,
+        "unchecked_at_revision": not_at_revision,
+        "moving_names": [r["id"] for r in rows if r["commit_state"] == "moving-name"],
         "checked_at_commit": sum(1 for r in rows if r.get("checked_at") == "commit"),
         "line": (
             f"出处核对 {len(rows)} 条：引语 {sum(1 for r in rows if r['quote'] == 'found')} 条逐字落在它写的行内；"
             f"commit 在本仓可解析且含有该文件 {sum(1 for r in rows if r['commit_state'] == 'resolved')} 条，"
             f"按所指版本核对 {sum(1 for r in rows if r.get('checked_at') == 'commit')} 条，"
-            f"不可解析 {len(unresolved)} 条"
+            f"不可解析 {len(unresolved)} 条，"
+            f"commit 是会动的名字 {len(moving)} 条，"
+            f"引语没能在这个版本上核对 {len(not_at_revision)} 条"
             + (
-                "（这些只核到引语，没核到版本：不是提交不在库里，就是那个修订上没有这份文件）。"
-                if unresolved
+                "（这几条只有工作树的读法，或者那个修订上就没有这份文件；版本没被问到，不当作核过）。"
+                if not_at_revision
                 else "。"
             )
         ),
