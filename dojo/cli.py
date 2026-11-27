@@ -12,9 +12,11 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from . import commands
 from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
 from .discuss import _load_resume_trace, run_discuss
+from .finding import search_screen
 from .live import LiveConfig, LiveError, run_chat
 from .pipeline import distill, run_pipeline
 from .storage import DojoError, Store, load_simulated_seeds
@@ -22,6 +24,12 @@ from .storage import DojoError, Store, load_simulated_seeds
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
 DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
 DEFAULT_EXPORTS = DEFAULT_HOME / "exports"
+
+
+# Returned by `search` when the screen has already been shown on a terminal and the
+# JSON must not follow it there. A sentinel, not `None`: `None` is a value some command
+# could legitimately return, and the printer must be able to tell the two apart.
+SEARCH_SCREEN_ONLY = object()
 
 
 def _json_argument(value: str, label: str) -> Any:
@@ -446,9 +454,33 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
     if command == "withdraw":
         return store.withdraw(args.id, args.reason)
     if command == "search":
-        result = store.retrieve(args.query or "", args.limit)
+        # `for_reading`: the person's exit also learns what the gate refused and which
+        # wording each row matched. Those are for the screen only -- stdout is a
+        # published contract that other tools parse, so it is printed from a copy with
+        # the screen's keys removed, and the screen goes to stderr. Measured: a caller
+        # comparing the four top-level keys and each row's keys sees no change (#3436).
+        result = store.retrieve(args.query or "", args.limit, for_reading=True)
         _log_reads(store, result["results"], getattr(args, "session", None), "search")
-        return result
+        for line in search_screen(result, database=store.path):
+            print(line, file=sys.stderr)
+        published = {key: value for key, value in result.items()
+                     if key not in ("withheld", "recent")}
+        published["results"] = [
+            {key: value for key, value in row.items()
+             if key not in ("matched_on", "matched_wording")}
+            for row in result["results"]
+        ]
+        # A person at a terminal reads the screen; a script reads stdout. Printing both
+        # on a terminal buried the screen's last line -- the command to run -- under the
+        # whole JSON block, which is what the supervisor measured (24 readable lines,
+        # then 48 of JSON). So stdout is printed only when it is not a terminal. On a
+        # terminal a one-line pointer replaces it, and it names how to get the JSON back:
+        # the host scripts' entry is unchanged, they just have to redirect or pipe.
+        if sys.stdout.isatty():
+            print("（机器可读的 JSON 没有印在终端上；脚本直接读 stdout，或在命令后接"
+                  " ` | python3 -m json.tool`。）", file=sys.stderr)
+            return SEARCH_SCREEN_ONLY
+        return published
     if command == "pipeline":
         return run_pipeline(store, args.session, dry_run=args.dry_run)
     if command == "distill":
@@ -899,6 +931,8 @@ def main(argv: list[str] | None = None) -> int:
             db_path.chmod(0o600)
         except OSError:
             pass
+        if result is SEARCH_SCREEN_ONLY:
+            return 0
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     except (DojoError, sqlite3.Error, OSError, TypeError, ValueError) as exc:

@@ -1787,7 +1787,9 @@ class Store:
             ),
         }
 
-    def _matches(self, terms: set[str]) -> list[tuple[int, set[str], dict[str, Any]]]:
+    def _matches(
+        self, terms: set[str], *, include_withheld: bool = False,
+    ) -> list[tuple[int, set[str], dict[str, Any], dict[str, Any] | None]]:
         """Every retrievable card whose text overlaps `terms`, best overlap first.
 
         A conclusion the user accepted sits at `status=draft` (accepting a wording
@@ -1800,9 +1802,17 @@ class Store:
         what separates "somebody accepted this wording" from "written that way".
         Withdrawn, superseded, redirected and challenged cards stay out as before, and
         a card with no acceptance event never gets in, however conclusion-shaped it is.
+
+        `include_withheld=True` is the reading screen's question, not the gate's: the
+        gate stays exactly as it is and *also* returns the cards it refused, each with
+        a machine-readable reason. #3436 measured why that matters -- a card he
+        remembered, `challenge`d since, returned no row at all, so the screen said
+        "the library holds nothing about this" when the library held that sentence and
+        the doubt. The reason is returned as a code plus counts, never as a sentence:
+        what a refusal is called on screen is the screen's decision.
         """
         rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
-        matches: dict[str, tuple[int, set[str], dict[str, Any]]] = {}
+        matches: dict[str, tuple[int, set[str], dict[str, Any], dict[str, Any] | None]] = {}
         for row in rows:
             state = json.loads(row["state_json"])
             try:
@@ -1819,67 +1829,246 @@ class Store:
             # alone would let it back into search. That is S5, and it is why this is an
             # `and`, not just a call.
             accepts = self._acquisition_events(canonical["id"])
-            if canonical["status"] != "discussable" and not (
+            kept = canonical["status"] == "discussable" or (
                 canonical["status"] == "draft"
                 and is_accepted_conclusion(canonical, accepts, self._snapshot_digest(canonical["id"]))
-            ):
+            )
+            if not kept and not include_withheld:
                 continue
-            found = terms.intersection(lexical_terms(candidate_text(canonical)))
-            if found:
-                previous = matches.get(canonical["id"])
-                if previous is None or len(found) > previous[0]:
-                    matches[canonical["id"]] = (len(found), found, canonical)
+            found = terms.intersection(lexical_terms(searchable_text(canonical, accepts)))
+            if not found:
+                continue
+            withheld = None if kept else self._withheld_basis(canonical, accepts)
+            previous = matches.get(canonical["id"])
+            if previous is None or len(found) > previous[0]:
+                matches[canonical["id"]] = (len(found), found, canonical, withheld)
         return sorted(matches.values(), key=lambda item: (-item[0], item[2]["id"]))
 
-    def retrieve(self, query: str, limit: int = 10) -> dict[str, Any]:
+    def recently_written(self, limit: int = 3) -> list[dict[str, Any]]:
+        """The cards whose wording entered this library most recently, newest first.
+
+        Read from `snapshots.created_at` of the version that first carried each card's
+        *current* wording, so a status change does not make an old sentence look new
+        (the same rule `time_basis` follows). This is a way in, not a search: it says
+        nothing about meaning, and it exists because word overlap cannot answer "I
+        remember the gist" -- #3436 measured a query in his own words that matched no
+        card at all while the library held it.
+
+        Only cards that could be read at all are returned: redirected cards are shown
+        at their target, withdrawn ones are included with their status printed, because
+        a person browsing recent work needs to see that a card was withdrawn.
+        """
+        if limit < 1:
+            return []
+        rows = self.connection.execute(
+            "SELECT id FROM candidates ORDER BY id"
+        ).fetchall()
+        found: list[tuple[str, dict[str, Any]]] = []
+        for row in rows:
+            try:
+                state, chain = self.resolve(row["id"])
+            except DojoError:
+                continue
+            if state.get("redirect_to") or len(chain) > 1:
+                continue
+            basis = self.time_basis(state["id"], state)
+            when = basis.get("versioned_at")
+            if not isinstance(when, str):
+                continue
+            found.append((when, state))
+        found.sort(key=lambda item: (item[0], item[1]["id"]), reverse=True)
+        return [state for _when, state in found[:limit]]
+
+    def _withheld_basis(
+        self, state: dict[str, Any], accepts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Why the retrieval gate refused this card, in facts rather than in prose.
+
+        Read from the record, one code per cause, and the causes are not exclusive --
+        a card can be challenged and later withdrawn. The order is the order a reader
+        would care about: a redirect sends them elsewhere, a withdrawal is his own
+        retraction, a doubt is somebody else's, and a stale acceptance is only about
+        which wording was agreed to.
+        """
+        basis: dict[str, Any] = {"codes": []}
+        target = state.get("redirect_to")
+        if target:
+            basis["codes"].append("redirected")
+            basis["redirect_to"] = target
+        if state.get("status") == "withdrawn":
+            basis["codes"].append("withdrawn")
+        if state.get("status") == "challenged":
+            doubts = [value for value in state.get("contradictions") or [] if isinstance(value, str)]
+            basis["codes"].append("challenged")
+            # The ledger says how many; the last one is the doubt that made it
+            # `challenged` (`challenge` appends). Both are facts, not a reading of them.
+            basis["contradiction_count"] = len(doubts)
+            if doubts:
+                basis["latest_doubt"] = doubts[-1]
+        # `accepts` is the card's whole event ledger, not its acceptance events: every
+        # card written through `add` has events, so testing it directly labelled an
+        # untouched draft "somebody once accepted an earlier wording". Caught by this
+        # slice's own test before the screen ever printed it.
+        agreements = [event for event in accepts if _is_acceptance_event(event)]
+        # Only when it is the whole story: a challenged or withdrawn card is not handed over
+        # for that reason already, and stacking "and also no acceptance record" on it made
+        # the first line of an entry carry two causes and read like a verdict (seen on a
+        # terminal). This code answers "why was a plain draft refused", which is otherwise
+        # an unexplained rejection.
+        if not agreements and state.get("status") == "draft" and not basis["codes"]:
+            # The gate's other refusal, and the commonest one: a `draft` nobody recorded
+            # an acceptance for. It has to be named, because "retrieval will not hand it
+            # over" with no reason reads as an unexplained rejection -- and the reason is
+            # a fact about the ledger, never about the sentence (he may have agreed in a
+            # room nobody wrote down).
+            basis["codes"].append("no_acceptance_record")
+        if "challenged" not in basis["codes"] and agreements and not is_accepted_conclusion(
+            state, accepts, self._snapshot_digest(state["id"])
+        ):
+            # An acceptance exists but binds no wording this card holds now -- the card
+            # was rewritten after somebody agreed to it. Not "nobody ever agreed", which
+            # is the sentence this whole line of work exists to stop printing.
+            basis["codes"].append("acceptance_superseded")
+        return basis
+
+    def retrieve(self, query: str, limit: int = 10, *, for_reading: bool = False) -> dict[str, Any]:
+        """Cards whose text overlaps the query, plus -- when asked -- what was refused.
+
+        `for_reading` is the person's screen (`dojo search`). It adds two things the
+        model's context must not grow: the cards the gate refused, with the record's
+        reason for each, and, per result, which of the card's wordings matched. Both
+        are additive keys read from rows that already exist; with the flag off every
+        byte is what it was.
+        """
         query = str(query or "").strip()
         if limit < 1 or limit > 100:
             raise DojoError("limit must be between 1 and 100")
         terms = lexical_terms(query, query=True)
         if not terms:
-            return {"query": query, "method": "distinct lexical term overlap; no semantic inference", "matched_terms": [], "results": []}
-        ordered = self._matches(terms)[:limit]
+            empty: dict[str, Any] = {"query": query, "method": "distinct lexical term overlap; no semantic inference", "matched_terms": [], "results": []}
+            if for_reading:
+                empty["withheld"] = []
+                # A query with no searchable term at all is the same situation on screen
+                # as a query that matched nothing, so it gets the same way in.
+                empty["recent"] = self._recent_rows(3)
+            return empty
+        ordered = self._matches(terms, include_withheld=for_reading)
         results = []
-        for score, found, state in ordered:
-            row = {
-                "id": state["id"],
-                "version": state["version"],
-                "status": state["status"],
-                "statement": state["statement"],
-                "kind": state["kind"],
-                "score": score,
-                "matched_terms": sorted(found),
-                "scope": state.get("scope", []),
-                "premises": state.get("premises", []),
-                "alternatives": state.get("alternatives", []),
-                "contradictions": state.get("contradictions", []),
-                "unknowns": state.get("unknowns", []),
-                "sources": state.get("sources", []),
-                "relations": self._present_state(state).get("relations", []),
-                "aliases": state.get("aliases", []),
-            }
-            # #1929: a card he revised carried the reason it changed only in the ledger,
-            # so this row described the sentence and hid how it got that way. Added by
-            # value, only when a revision of *this* wording exists.
-            row.update(self.revision_basis(state["id"], state))
-            # r111c: `status` is `discussable` for a conclusion the user accepted and
-            # equally for a card a facilitator merely unblocked, so this screen could
-            # hand back an unaccepted draft as settled. Judged by the value, and only
-            # when true: an accepted conclusion's row keeps the same bytes.
-            if is_unaccepted_draft(state):
-                row["unaccepted_draft"] = True
-            # r115: the ledger holds when the sentence was written and when this exact
-            # wording was accepted; this screen showed neither, so a reader could not
-            # tell today's card from a fortnight-old one. Two separate keys, added only
-            # when the fact exists: a row for a card with no acceptance keeps exactly
-            # the bytes it had.
-            row.update(self.time_basis(state["id"], state))
+        for score, found, state, withheld in ordered:
+            if withheld is not None or len(results) >= limit:
+                continue
+            row = self._card_row(state, score, found)
+            if for_reading:
+                row.update(self._matched_wording(state, found))
             results.append(row)
-        return {
+        payload: dict[str, Any] = {
             "query": query,
             "method": "transparent lexical overlap (distinct query terms only); not semantic search or truth ranking",
             "matched_terms": sorted(terms),
             "results": results,
+        }
+        if for_reading:
+            # Same score order as the results, so the one he half-remembers is not
+            # buried under the ones he does not.
+            payload["withheld"] = [
+                {
+                    **self._card_row(state, score, found),
+                    **self._matched_wording(state, found),
+                    # The reason is a record code plus counts; what it is called on
+                    # screen is `finding.py`'s decision, not this method's.
+                    "refused": withheld,
+                }
+                for score, found, state, withheld in ordered if withheld is not None
+            ]
+            if not ordered:
+                # No words overlapped at all, so this is the one case where a list is
+                # still the useful thing to print: recent cards by ledger entry time,
+                # with the reason for each refusal and its conditions, so he can see
+                # the one he meant. Named as a different method on screen -- it is not
+                # a search result and is never sorted as one.
+                payload["recent"] = self._recent_rows(3)
+        return payload
+
+    def _recent_rows(self, limit: int) -> list[dict[str, Any]]:
+        """Recent cards with the gate's verdict on each, for the screen's fallback."""
+        return [
+            {
+                **self._card_row(state, 0, set()),
+                "refused": self._withheld_basis(
+                    state, self._acquisition_events(state["id"])
+                ) if state["status"] != "discussable" and not self.has_acceptance(state["id"], state)
+                else None,
+            }
+            for state in self.recently_written(limit)
+        ]
+
+    def _card_row(self, state: dict[str, Any], score: int, found: set[str]) -> dict[str, Any]:
+        """Everything a reader (or the model) is told about one matched card.
+
+        Split out of `retrieve` when the refused cards started carrying the same facts: two
+        copies of this block would drift, and the one that drifted quietly would be the
+        one a person reads about the sentence he was looking for (#3436).
+        """
+        row: dict[str, Any] = {
+            "id": state["id"],
+            "version": state["version"],
+            "status": state["status"],
+            "statement": state["statement"],
+            "kind": state["kind"],
+            "score": score,
+            "matched_terms": sorted(found),
+            "scope": state.get("scope", []),
+            "premises": state.get("premises", []),
+            "alternatives": state.get("alternatives", []),
+            "contradictions": state.get("contradictions", []),
+            "unknowns": state.get("unknowns", []),
+            "sources": state.get("sources", []),
+            "relations": self._present_state(state).get("relations", []),
+            "aliases": state.get("aliases", []),
+        }
+        # #1929: a card he revised carried the reason it changed only in the ledger,
+        # so this row described the sentence and hid how it got that way. Added by
+        # value, only when a revision of *this* wording exists.
+        row.update(self.revision_basis(state["id"], state))
+        # r111c: `status` is `discussable` for a conclusion the user accepted and
+        # equally for a card a facilitator merely unblocked, so this screen could
+        # hand back an unaccepted draft as settled. Judged by the value, and only
+        # when true: an accepted conclusion's row keeps the same bytes.
+        if is_unaccepted_draft(state):
+            row["unaccepted_draft"] = True
+        # r115: the ledger holds when the sentence was written and when this exact
+        # wording was accepted; this screen showed neither, so a reader could not
+        # tell today's card from a fortnight-old one. Two separate keys, added only
+        # when the fact exists: a row for a card with no acceptance keeps exactly
+        # the bytes it had.
+        row.update(self.time_basis(state["id"], state))
+        return row
+
+    def _matched_wording(self, state: dict[str, Any], found: set[str]) -> dict[str, Any]:
+        """Which of this card's wordings the query actually overlapped.
+
+        A card that was rewritten keeps its earlier sentence in the ledger, and #3436
+        measured that searching for the sentence he remembers returned nothing at all.
+        So the earlier wordings are searched too -- and, when one of them is what
+        matched, the row says which sentence and that it is not what the card says now.
+        """
+        on_current = bool(found & lexical_terms(candidate_text(state)))
+        earlier_hit = None
+        for earlier in earlier_wordings(state, self._acquisition_events(state["id"])):
+            if found & lexical_terms(earlier):
+                earlier_hit = earlier
+                break
+        if earlier_hit is None:
+            return {"matched_on": "current"}
+        # Both ends are reported when both matched, because the two facts answer two
+        # different questions: "is this the card I mean" and "did it change under me".
+        # Saying only `current` here hid the second on a rewritten card whose new
+        # sentence shares most of its words with the old one -- measured on the walk
+        # library, where the remembered sentence and the current one overlapped on
+        # 5 bigrams and the screen then showed no sign of the change.
+        return {
+            "matched_on": "current_and_earlier" if on_current else "earlier",
+            "matched_wording": earlier_hit,
         }
 
     def broadcast(self, query: str, limit: int = 10, exclude_session: str | None = None) -> dict[str, Any]:
@@ -1903,7 +2092,7 @@ class Store:
             return {"query": query, "method": method, "matched_terms": [], "results": [], "suppressed": []}
         results = []
         suppressed = []
-        for score, found, state in self._matches(terms):
+        for score, found, state, _withheld in self._matches(terms):
             info = independence(state, self._acquisition_events(state["id"]))
             reason = None
             if exclude_session is not None and exclude_session in info["provenance_groups"]:
@@ -2651,6 +2840,39 @@ def candidate_text(state: dict[str, Any]) -> str:
     for source in state.get("sources", []):
         values.extend([source.get("claim", ""), source.get("type", ""), source.get("scope_note", "")])
     return " ".join(str(value) for value in values)
+
+
+def earlier_wordings(state: dict[str, Any], events: list[dict[str, Any]]) -> list[str]:
+    """The sentences this card used to say, newest first, as the ledger wrote them.
+
+    Read from `revise` rows only -- a `revise.repeat` is the same request arriving
+    again, and `from_statement` there is the sentence that was already left. Nothing is
+    inferred from a snapshot diff: the event names both ends, so a rewritten-and-
+    restored card yields the same list either way. Values are those the writer stored,
+    never a paraphrase, because the screen's job is to show what he remembers, not to
+    improve on it.
+    """
+    seen: list[str] = []
+    current = str(state.get("statement") or "")
+    for event in reversed(events):
+        if event.get("event") != "revise":
+            continue
+        left = (event.get("details") or {}).get("from_statement")
+        if not isinstance(left, str) or not left.strip() or left == current or left in seen:
+            continue
+        seen.append(left)
+    return seen
+
+
+def searchable_text(state: dict[str, Any], events: list[dict[str, Any]]) -> str:
+    """What a search may match on: the card now, plus the sentences it used to say.
+
+    Wider than `candidate_text` and used *only* by retrieval's own matcher. What is
+    handed to the model, exported or diffed keeps `candidate_text`, so the model never
+    sees a sentence the card no longer holds as though the card held it; a result that
+    matched on an earlier wording says so in `matched_wording` (#3436).
+    """
+    return " ".join([candidate_text(state), *earlier_wordings(state, events)])
 
 
 SEEDS: list[dict[str, Any]] = [
