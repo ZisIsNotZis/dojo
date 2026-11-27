@@ -17,8 +17,8 @@
 | 9 | 同一句话的两个理由在账本里分得清 | `probe.py` | `rows_for_the_two_reasons: [revise, revise]`，`the_new_reason_is_not_a_repeat: true` |
 | 10 | 第二个理由不动版本，也不重开管线 | 同上 | `a_new_reason_moves_the_version: false`，`version_after_the_replay: 2` |
 | 11 | 同一理由再说一遍仍然算重放 | 同上 | `the_actual_replay_is_marked: revise.repeat` |
-| 12 | 决定各有门 | `python3 -m unittest tests.test_repeat_safety` | **14 OK** |
-| 13 | 门在改前的树上会红 | 见下「红臂」 | 臂 1：11 项红（10 失败 + 1 报错）；臂 2：3 项红。其余在两种树上都过，是防过度收紧的回归门 |
+| 12 | 决定各有门 | `python3 -m unittest tests.test_repeat_safety` | **20 OK**（含 3 项源码门） |
+| 13 | 门在改前的树上会红 | 见下「红臂」 | 臂 1：11 项红；臂 2：3 项红；臂 4：`8eec607` 12 项、`e161d35` 7 项。其余在两种树上都过，是防过度收紧的回归门 |
 | 14 | 已发布的截断测试跟着改名 | `python3 -m unittest tests.test_http_interruption` | 3 OK |
 | 15 | 既有存储行为不变 | `python3 -m unittest tests.test_storage` | 97 OK |
 | 16 | 证据里的日期是真日期 | `ls docs/evidence/` | `2026-11-27-repeat-safety`，与提交日一致 |
@@ -83,6 +83,39 @@ FAILED (failures=2, errors=3)
 ```
 
 那个 `!=` 就是复核人看到的现象：同一理由、不同目标，第三条被写成重放。三项 error 是因为旧树根本没有 `sequence` 字段——它们守的是「指针可跟随」，在旧树上无处可跟随，所以报错而不是断言失败；这一点写清楚，免得被当成门自己写坏了。
+
+## 臂 4 —— 对 `8eec607` 与 `e161d35`：第三处的门不是给自己发奖
+
+只带三份门（两个测试文件 + `probe.py`）到未改动的旧树上：
+
+```
+8eec607（本轮之前交付的树）  Ran 33  FAILED (failures=8, errors=4)
+e161d35（目标对了、值的比较还没做） Ran 33  FAILED (failures=5, errors=2)
+
+共有的红：
+  test_optional_inputs_are_part_of_the_request          （存储：换 scope 被当重放）
+  test_every_optional_input_reaches_the_recorded_request（存储：request 里没有 scope 等值）
+  test_optional_input_values_are_part_of_the_request     （probe scenario_e）
+  test_a_row_without_a_recorded_ask_is_not_silently_called_a_new_request
+  test_write_has_a_dedicated_request_parameter           （源码门：没有 request 参数）
+  test_no_call_site_omits_its_request                    （源码门）
+  test_the_bookkeeping_subtraction_is_still_gone         （源码门：减法清单还在）
+8eec607 另有：
+  test_one_reason_two_targets_is_not_a_replay            （上一轮已修，此处如实变红）
+  test_a_replay_names_a_row_that_asked_for_the_same_thing
+  test_the_printed_block_really_shows_two_rows_and_one_repeat
+```
+
+`e161d35` 上那 5 红 2 错恰好是本轮要修的东西：目标记了、值没记；减法清单还在；源码门没有可守的参数。C 上一轮的两项在 `e161d35` 上**绿**，在 `8eec607` 上红——说明每一条门守的是自己那一处，没有互相借功。
+
+## 变异 3/4：两种局部退回
+
+| 变异 | 只改了什么 | 读数 |
+|---|---|---|
+| 字段名当请求 | `request` 里放 `changed_fields` 而不是值 | `Ran 33  FAILED (failures=2, errors=1)`：三项，都在「可选输入的值」这一条上（存储 + probe + 文档读 probe） |
+| 写入点漏传请求 | `challenge`、`withdraw` 两处退回三参数调用 | `Ran 33  FAILED (failures=1)`：只有 `test_no_call_site_omits_its_request` 红 |
+
+第二个变异是这条源码门存在的理由：**行为门看不见它**——现有的行为测试没有任何一条会走到「`challenge` 的请求记少了」这个后果，因为后果只在将来写新行时出现。门红在承诺上，不在现象上，这一点如实写明。
 
 ## 变异检查：把 C 的修法局部退回
 

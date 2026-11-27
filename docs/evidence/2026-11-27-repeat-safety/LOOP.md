@@ -169,7 +169,7 @@ python3 -m dojo revise c-one --statement '卡片显示状态' --reason '无障�
 | `dojo/live.py` | 新增 `incomplete_response` 种类；比对 Content-Length，分块截断也用这一类；不保留半截正文 |
 | `dojo/discuss.py` | 这一类**不自动重试**；只为「读不完整」如实说明，不再说成格式错误；这一轮记 `response_incomplete`，会话继续 |
 | `dojo/storage.py` | `_write` 在效果未变时不起新版本；`_same_request` 只在请求本身重复时才写 `<event>.repeat`，否则用自己的名字写一条、版本留在原处；`revise` 记 `to_statement`；`history()` 吐 `sequence` |
-| `tests/test_repeat_safety.py` | 20 项门：A、B 各一半，C 八项（两个理由两行、同一理由仍算重放、第二个理由不重开管线、一个理由两个目标不是重放、重放指向同一目标的原文、可选输入的值属于请求、每个可选输入都进 `request`、旧行不被说成新请求），加 3 项源码门（`_write` 必须收 `request`、调用点不得漏传、减法清单不许回来） |
+| `tests/test_repeat_safety.py` | 20 项门（其中 3 项是源码门）：A、B 各一半，C 八项（两个理由两行、同一理由仍算重放、第二个理由不重开管线、一个理由两个目标不是重放、重放指向同一目标的原文、可选输入的值属于请求、每个可选输入都进 `request`、旧行不被说成新请求），加 3 项源码门（`_write` 必须收 `request`、调用点不得漏传、减法清单不许回来） |
 | `tests/test_http_interruption.py` | 两条断言从 `connect` 改为 `incomplete_response`（**这是改了已发布的断言**，理由见下） |
 
 `tests/test_http_interruption.py` 原来把「body 被截断」钉成 `connect`。那条断言本身没错（它要保证的是不重试、不泄漏半截正文，这两点都保住了），但它把「连接失败」与「响应读不完整」压成了同一类，而这正是 A 的根因。改的是名字，不是它守的事实；两条断言的原意在新名下仍然被测。
