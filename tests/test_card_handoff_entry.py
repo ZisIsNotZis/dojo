@@ -47,7 +47,7 @@ class TheCardHandoffEntryPoint(unittest.TestCase):
                          "the entry point did not pass:\n%s" % done.stdout[-3000:])
         self.assertIn("全部成立。", done.stdout)
         # The three facts this slice exists for, each checked by its own item.
-        for phrase in ("原来是", "改主意", "不算第二个独立来源"):
+        for phrase in ("之前是", "改动理由", "不算第二个独立来源"):
             self.assertIn(phrase, done.stdout, phrase)
 
     def test_it_is_not_vacuous(self):
@@ -66,7 +66,11 @@ class TheCardHandoffEntryPoint(unittest.TestCase):
         # stopped biting when it did -- so it asserts it found the line, and the check
         # below asserts the entry point goes red, not just that some bytes were edited.
         self.assertNotEqual(source, stripped, "the handout line was not found to remove")
-        self.assertIn("handoff_for_model(handed, handed_basis)", source)
+        # Moved again by the boundary slice: the call now carries the ledger's
+        # acceptance fact beside the card. The guard is on the line that puts the
+        # handout in the request, not on any particular spelling of its arguments.
+        self.assertIn("handoff_for_model(handed, handed_basis, acceptance=handed_acceptance)",
+                      source)
         (work / "dojo" / "discuss.py").write_text(stripped, encoding="utf-8")
         done = self.run_entry(work)
         self.assertEqual(1, done.returncode,

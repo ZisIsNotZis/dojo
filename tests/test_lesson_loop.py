@@ -97,7 +97,14 @@ class LessonLoopTests(unittest.TestCase):
         self.assertIn(OLD, prompt, "被改掉的那句必须出现，否则读者不知道换过")
         self.assertIn(WHY, prompt)
         # A reader has to be able to tell the old sentence is not the current claim.
-        self.assertIn("这句是他后来改掉的，不是现在的说法。", prompt)
+        #
+        # Reworded by the boundary slice: "这句是他后来改掉的" named an author the `revise`
+        # row does not store (a reader or a script can revise a card), and the screen's
+        # twin of this line named a direction -- "它比更早那句窄" -- that the row does not
+        # record either. What the row does record is that this wording replaced that one,
+        # and the reason it was given, so that is what the line says.
+        self.assertIn("库里记着现在的说法换掉的是这一句；不是现在的说法。", prompt)
+        self.assertNotIn("他后来改掉的", prompt)
 
     # ---- it speaks only for the wording the card holds now ---------------------
 

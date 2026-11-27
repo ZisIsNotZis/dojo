@@ -276,8 +276,8 @@ class HandoffTests(HandoffCase):
         block = handoff_block(shown["candidate"], shown.get("revision_basis"))
         model_text = handoff_for_model(shown["candidate"], shown.get("revision_basis"))
         for text in (block, model_text):
-            self.assertNotIn("原来是", text)
-            self.assertNotIn("改主意", text)
+            self.assertNotIn("之前是", text)
+            self.assertNotIn("改动理由", text)
         self.assertIn(STATEMENT, block)
 
     def test_an_unreadable_card_starts_nothing(self):

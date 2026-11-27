@@ -98,10 +98,31 @@ python3 -m dojo list               # a version nobody accepted is kept as `unacc
 ### Opening a session on an earlier card, and continuing one
 
 `--card ID` hands the session one card you already have. The opening names the sentence, the
-version it replaced, his reason, and the sources; the first request that reaches the model
-carries the same four, marked as material rather than as your latest words. Repeating the
-sentence back does not count as a second independent source: the handout writes the read row
-that the echo gate reads.
+version it replaced, the reason the library recorded, whether the library holds a record that
+somebody accepted this content -- and the card's **limits**: when it holds, when it does not,
+what is still unmeasured, and what it rests on, one line each, verbatim as stored. Source
+records are itemised with what each one actually claims, including the caveat its writer put
+on it. The first request that reaches the model carries the same material, marked as material
+rather than as your latest words. Repeating the sentence back does not count as a second
+independent source: the handout writes the read row that the echo gate reads.
+
+Three lines on that screen are worded deliberately, because each may state only what the
+program checked:
+
+- `draft` prints just 草稿. A draft is not a sentence nobody agreed to: a conclusion agreed to
+  in conversation stays `draft` until somebody marks it discussable. Whether an acceptance is
+  on record is printed from the ledger, as its own sentence, and a missing record reads “this
+  library has no such record”, never “nobody agreed”.
+- The 可讨论 parenthetical says somebody marked it worth discussing. `confirm` and "accepted
+  this wording" are different acts, and one word for both makes one screen contradict itself.
+- A revised card prints 库里记着这一句换过说法，之前是…, and never 变窄 or 变宽: a `revise`
+  row records which wording it left and the reason it was given, not a direction and not an
+  author. A counterexample added by a challenge is printed under 什么时候不成立, beside the
+  ones the card already had.
+
+The card's `alternatives` stay off the opening screen: a route it did not take does not help
+you decide about your own case, and five lines of limits is already long. `show` and the model
+still carry them.
 
 ```sh
 python3 -m dojo discuss --card c1 --resume discuss-<id>.jsonl   # refused: a card is a start-of-session choice

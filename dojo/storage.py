@@ -2108,11 +2108,15 @@ class Store:
                     if revision.get("left_wording"):
                         lines.append(
                             "revision_left_wording: " + revision["left_wording"]
-                            + " | 这句是他后来改掉的，不是现在的说法。"
+                            # "这句是他后来改掉的" named an author the `revise` row does
+                            # not store (a reader or a script can revise a card too), and
+                            # it named a direction the row does not record either. The
+                            # row records that this wording replaced that one, and why.
+                            + " | 库里记着现在的说法换掉的是这一句；不是现在的说法。"
                         )
                     lines.append(
                         "revision_reason: " + revision["reason"]
-                        + " | 他改主意的理由，原话；不是对现在这句的赞同，也不证明它成立。"
+                        + " | 库里记下的改动理由；不是对现在这句的赞同，也不证明它成立。"
                     )
                 if state.get("relations"):
                     lines.append("relations: " + " | ".join(

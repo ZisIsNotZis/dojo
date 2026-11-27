@@ -89,9 +89,27 @@ NEW_SESSION_LIMIT_NOTE = "新开一场不会自动带上以前讨论过的结论
 #      the echo gate's own input, so saying it out loud and having it be true are the same
 #      act; before this, a session could be handed nothing and refuse nothing.
 HANDOFF_STATUS_WORDS = {
-    "draft": "草稿（这一句还没有人认可）",
-    "discussable": "可讨论（有人认可它值得讨论，不表示为真）",
-    "challenged": "被人质疑过（质疑之后还没有人再认可）",
+    "draft": "草稿",
+    # The parenthetical that used to sit here said "这一句还没有人认可", and it was a
+    # guess: `draft` is what `add`, `revise` and `revoke` all leave behind, and a card
+    # whose wording a person accepted in conversation stays `draft` until somebody marks
+    # it discussable. Measured at the entry after the fix's own story run: the first
+    # session's ending said the conclusion was accepted (`acceptance_path=discuss_conclusion`
+    # in the ledger), and the next session's opening told the reader nobody ever had. So
+    # the status word now says only what the status code means, and whether a record of
+    # acceptance exists is printed from the ledger by `acceptance_line`, which can be
+    # wrong only if the ledger is.
+    # 认可 is reserved for the ledger's `wording_accepted` event, which `acceptance_line`
+    # prints. `confirm` is a different act -- a facilitator marking a card worth
+    # discussing -- and it leaves no acceptance record. With both facts on one screen the
+    # old wording read as a contradiction: "有人认可它值得讨论" next to "库里没有认可
+    # 记录". Same store, two different acts, one word. Measured in
+    # `.scratch/3419/probe_boundary.py` after the first version of this fix.
+    "discussable": "可讨论（有人把它标成值得讨论，不表示为真）",
+    # Same rule: a later acceptance does not move the status off `challenged`, so
+    # "after the doubt nobody agreed again" was a claim about the record that the record
+    # does not support. The counterexamples are printed line by line below it.
+    "challenged": "被人质疑过",
     "withdrawn": "已撤回",
     "superseded": "已被替换",
 }
@@ -157,7 +175,126 @@ def source_summary(candidate: dict[str, Any]) -> str:
     )
 
 
-def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
+# How many source records the screen itemises before it stops. Four is enough for the
+# ordinary card (one claim, one counterexample, one echo) and short enough not to bury the
+# limits under a bibliography. The remainder is *counted*, not summarised, so nothing on
+# screen is a claim the library did not make.
+SCREEN_SOURCE_LINES = 4
+
+
+def source_lines(candidate: dict[str, Any], limit: int = SCREEN_SOURCE_LINES) -> list[str]:
+    """What each source record actually says, one line each, or [] when there are none.
+
+    The count-and-type line alone answered "how many" and "was it checked" and left out
+    the one thing a reader deciding about transfer needs: what the evidence *is*. Measured
+    with the supervisor's reproducer, which reported `source: false` on screen while the
+    model was given the claim -- the same one-sided arrangement as the limits, one field
+    over. `claim` and `scope_note` are printed as stored, because both are the writer's
+    words about their own evidence and rewording them would be this program's claim.
+    """
+    records = source_records(candidate)
+    lines: list[str] = []
+    for record in records[:limit]:
+        kind = str(record.get("type") or "unknown")
+        check = str(record.get("verification") or "unknown")
+        claim = str(record.get("claim") or "").strip()
+        note = str(record.get("scope_note") or "").strip()
+        text = "  - " + SOURCE_TYPE_WORDS.get(kind, kind) + "、" + SOURCE_VERIFICATION_WORDS.get(check, check)
+        if claim:
+            text += "：「" + claim + "」"
+        if note:
+            text += "（他自己限定：「" + note + "」）"
+        lines.append(text)
+    if len(records) > limit:
+        # Counted rather than described: the rest are on the card, and the number is a
+        # fact about the store.
+        lines.append("  - 还有 " + str(len(records) - limit) + " 条来源记录没印在这里，可以看这张卡本身。")
+    return lines
+
+
+# The four facts a person needs before deciding whether an old sentence transfers to
+# their situation, each in its own words. `alternatives` is deliberately absent: it is a
+# route the card did *not* take, which helps nobody decide about their own case, and five
+# lines in front of somebody who just said "hello" is a wall. Whoever reads the card can
+# still see it in `show`.
+BOUNDARY_LABELS = (
+    ("scope", "什么时候成立"),
+    ("contradictions", "什么时候不成立"),
+    ("unknowns", "还没定的是"),
+    ("premises", "它靠这些前提"),
+)
+
+
+def boundary_lines(candidate: dict[str, Any]) -> list[str]:
+    """The card's own limits, one line per stored item, and no line for a field nobody wrote.
+
+    This is the fix for the gap `probe_boundary.py` measured: the handout's screen block
+    printed the sentence, its status, its revision reason and its source count, while
+    `scope`, `contradictions` and `unknowns` went to the model and nowhere else. A person
+    told "this session was handed card X" reasonably believed the card was what they
+    could see -- so the boundary existed only on the machine's side of the conversation,
+    which is the one place it cannot stop an over-general reading.
+
+    Values are printed as stored, verbatim: a paraphrase here would be a new claim about
+    how far the sentence reaches, written by the facilitator rather than by whoever said
+    it.
+    """
+    lines: list[str] = []
+    for field, label in BOUNDARY_LABELS:
+        values = candidate.get(field)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                lines.append("  " + label + "：「" + value.strip() + "」")
+    return lines
+
+
+# What the ledger's `path` means, in words a reader can act on. The distinction is the
+# one `time_basis` exists to preserve: a route that recorded a person agreeing to the
+# sentence is not the same fact as a tool copying an agreement out of a text file, and
+# collapsing them would let a backfill read like a conversation.
+ACCEPTANCE_PATH_WORDS = {
+    "discuss_conclusion": "有人在讨论里认可了这套说法",
+    "accept_draft": "有人认领了这场讨论留下的草稿",
+}
+
+
+def acceptance_line(acceptance: dict[str, Any] | None) -> str:
+    """Whether the library holds a record that somebody accepted *this* wording.
+
+    `None` means the caller did not ask, and then nothing is printed -- the same rule an
+    absent scope follows. `accepted is False` is a fact about the ledger ("no such
+    record"), never about the sentence ("nobody ever agreed"): a card written by hand
+    with `add` has no acceptance record and may well have been agreed to in a room.
+    Saying the second thing from the first is the defect this whole line of work is
+    about, and the `draft` status word carried exactly that claim until now.
+    """
+    if not isinstance(acceptance, dict) or "accepted" not in acceptance:
+        return ""
+    # 措辞 would have been too narrow: acceptance binds to the card's content, which
+    # includes its conditions and counterexamples. A doubt added by `challenge` moves the
+    # content on, and the earlier acceptance stops speaking for it -- measured in the
+    # story run, where the challenged card correctly reads as having no record for what
+    # it now says. Naming the sentence alone would have made that look like lost data.
+    if not acceptance.get("accepted"):
+        return ("  库里没有这套说法（句子连同它写的条件）的认可记录；"
+                "这不等于没人认可过它，只等于这个库里没记下。")
+    path = acceptance.get("path")
+    words = ACCEPTANCE_PATH_WORDS.get(str(path), str(path)) if path else None
+    when = acceptance.get("agreed_at") or acceptance.get("accepted_at")
+    text = "  库里有这套说法（句子连同它写的条件）的认可记录"
+    if words:
+        text += "：" + words
+    if isinstance(when, str) and when.strip():
+        text += "（" + when.strip()[:10] + "）"
+    return text + "。认可它值得讨论，不等于它是真的。"
+
+
+def handoff_block(
+    candidate: dict[str, Any], basis: dict[str, Any] | None = None, *,
+    acceptance: dict[str, Any] | None = None,
+) -> str:
     """What the person is owed when this session is handed an earlier card.
 
     Only facts on disk, and an absent fact gets no line: a card that was never narrowed
@@ -170,23 +307,51 @@ def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None
         "这一场带上了一张以前写下的卡 " + str(candidate.get("id")) + "，状态：" + status + "。\n"
         "  「" + str(candidate.get("statement")) + "」"
     )
+    # The ledger records that the wording moved and what the previous wording was. It
+    # does NOT record which way -- a `revise` row is identical whether the sentence was
+    # narrowed or generalised -- and this line used to say "它比更早那句窄" for every
+    # one of them. Reproduced on the standard CLI by the supervisor with a card revised
+    # from "只有普通日报才等两次" to "值班通知都等先两次", i.e. genuinely wider: the
+    # next session was told it had been narrowed and then handed the stated reason for
+    # widening it. With the boundary now on screen this word does real damage, because a
+    # reader who believes a claim was narrowed reads the counterexamples as already
+    # handled. So the line states the change and the previous wording, and stops.
     left = basis.get("left_wording")
     reason = basis.get("reason")
     if isinstance(left, str) and left.strip():
-        block += "\n  它比更早那句窄：原来是「" + left + "」"
+        block += "\n  库里记着这一句换过说法，之前是：「" + left + "」"
     if isinstance(reason, str) and reason.strip():
-        block += "\n  他后来改主意时说的是：「" + reason + "」"
+        # "他后来改主意时说的是" claimed an authorship the row does not carry: `revise`
+        # is also run by a reader or a script, and the row stores no author. What it does
+        # store is the reason it was given, so that is what this line says.
+        block += "\n  库里记下的改动理由是：「" + reason + "」"
+    recorded = acceptance_line(acceptance)
+    if recorded:
+        block += "\n" + recorded
+    # The card's limits, right under the sentence they limit, so a person reads the
+    # condition together with the claim instead of deciding on the claim alone.
+    limits = boundary_lines(candidate)
+    if limits:
+        block += "\n" + "\n".join(limits)
     sources = source_summary(candidate)
     if sources:
         block += "\n  " + sources
+        detail = source_lines(candidate)
+        if detail:
+            block += "\n" + "\n".join(detail)
     block += (
         "\n  这场里它是资料，不是你说过的话。你若只是重复它，记录不会把本场算成第二个独立来源；"
-        "你若推翻或改窄它，那会是本场新说的话。"
+        # "改窄" named one direction of change as if it were the only one. Any change to
+        # the sentence or its limits is a new arrival; the direction is not the point.
+        "你若推翻它或改变它的条件，那会是本场新说的话。"
     )
     return block
 
 
-def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
+def handoff_for_model(
+    candidate: dict[str, Any], basis: dict[str, Any] | None = None, *,
+    acceptance: dict[str, Any] | None = None,
+) -> str:
     """The same handout, shaped for the model: data, with its own provenance rules.
 
     The source records go in whole rather than summarised. The closing instruction used
@@ -206,7 +371,10 @@ def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = 
     if isinstance(basis.get("left_wording"), str) and basis["left_wording"].strip():
         text += "\n这张卡是改过的：被改掉的那句是「" + basis["left_wording"] + "」。"
     if isinstance(basis.get("reason"), str) and basis["reason"].strip():
-        text += "\n用户当时改主意的原话是：「" + basis["reason"] + "」。那是他的理由，不是对现在这句的赞同。"
+        # Was "用户当时改主意的原话": the row records a reason, not who wrote it, and
+        # `revise` is also run by a reader or a script. "改主意" also implied one
+        # direction. Both dropped; the reason itself is printed verbatim.
+        text += "\n库里记下的改动理由是：「" + basis["reason"] + "」。那是改动的理由，不是对现在这句的赞同。"
     records = [
         {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
          if key in record}
@@ -217,6 +385,20 @@ def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = 
             "\n这张卡立在其上的来源记录（逐条照原样，核验状态没有改写；这是记录条数，不是人数）：\n"
             + json.dumps(records, ensure_ascii=False, separators=(",", ":"))
         )
+    # The same fact the screen prints, from the same reading, because the model was the
+    # only reader who had any of it: a status of `draft` was all it got, and `draft` does
+    # not distinguish "nobody agreed" from "agreed, never marked discussable".
+    if isinstance(acceptance, dict) and acceptance.get("accepted"):
+        path = acceptance.get("path") or "unknown"
+        when = acceptance.get("agreed_at") or acceptance.get("accepted_at") or None
+        text += (
+            "\n库里存着一份对这套说法（句子连同它写的条件）的认可记录（path=" + str(path)
+            + ("，agreed_at=" + str(when) if when else "")
+            + "）。那是认可它值得讨论，不是核实它为真。"
+        )
+    elif isinstance(acceptance, dict) and "accepted" in acceptance:
+        text += ("\n这个库里没有这套说法（句子连同它写的条件）的认可记录；"
+                 "那是账面空缺，不能读成没人认可过它。")
     text += (
         "\n这张卡的来源与内容都是以前留下的；引用它时照旧区分已核实、推断与未知。"
         "用户在本场推翻或改窄它，是新说的话；用户只是重复它，不算本场的新到达。"
@@ -1229,6 +1411,18 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                         raise ValueError("交付卡片内容字段无效")
                 if value["revision_basis"] is not None and not isinstance(value["revision_basis"], dict):
                     raise ValueError("交付卡片的改动理由无效")
+                # Optional: rows written before this build carry no acceptance field and
+                # must stay resumable. Present-but-wrong is refused, because a value of
+                # the wrong shape would be printed as a fact about the ledger.
+                acceptance = value.get("acceptance")
+                if acceptance is not None:
+                    if not isinstance(acceptance, dict):
+                        raise ValueError("交付卡片的认可记录无效")
+                    if not isinstance(acceptance.get("accepted"), bool):
+                        raise ValueError("交付卡片的认可记录无效")
+                    for key in ("path", "accepted_at", "agreed_at"):
+                        if acceptance.get(key) is not None and not isinstance(acceptance[key], str):
+                            raise ValueError("交付卡片的认可记录无效")
                 if not isinstance(value["at"], str):
                     raise ValueError("交付卡片时间无效")
                 datetime.fromisoformat(value["at"])
@@ -1396,6 +1590,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     # rule the round records follow.
     handed: dict[str, Any] | None = None
     handed_basis: dict[str, Any] = {}
+    handed_acceptance: dict[str, Any] = {}
     if handouts:
         row = handouts[0]
         handed = {
@@ -1409,9 +1604,14 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
             handed["sources"] = sources
         if isinstance(row.get("revision_basis"), dict):
             handed_basis = dict(row["revision_basis"])
+        # Absent on rows written before this build: then nothing is printed about
+        # acceptance, which is the honest reading of a trace that never recorded it.
+        if isinstance(row.get("acceptance"), dict):
+            handed_acceptance = dict(row["acceptance"])
     return {
         "session": session, "history": history, "pending": pending,
         "handed": handed, "handed_basis": handed_basis,
+        "handed_acceptance": handed_acceptance,
         "saved": saved, "seq": max(row["seq"] for row in rounds),
         "requests_sent": requests_sent, "search_count": search_count,
         "resume_input": resume_input,
@@ -1521,6 +1721,10 @@ def run_discuss(
     # the real entry with no endpoint set, which is also how a reader will meet it.
     handed: dict[str, Any] | None = None
     handed_basis: dict[str, Any] = {}
+    # What the ledger said about this wording when the card was handed over. Rebuilt
+    # from the handout row on resume, never re-asked of the library: the row is the
+    # version this conversation is about, and the library may have moved on.
+    handed_acceptance: dict[str, Any] = {}
     if card is not None:
         if resume_state is not None:
             print("无法续跑：--card 与 --resume 不能同时使用（续跑的那一场已经带着它自己的上下文）。", file=output)
@@ -1532,6 +1736,21 @@ def run_discuss(
             return 2
         handed = shown["candidate"]
         handed_basis = dict(shown.get("revision_basis") or {})
+        # Whether the library holds a record that somebody accepted *this* wording. Asked
+        # once, here, and carried into both renderers and the trace row: `draft` alone
+        # cannot answer it, and answering it a second time at resume is how the screen
+        # and the record come to disagree.
+        #
+        # `time_basis` already resolves an acceptance to the exact wording on the card
+        # (including the snapshot fallback for acceptances written before digests), so
+        # this reads that instead of re-deriving the digest here.
+        handed_time = dict(shown.get("time_basis") or {})
+        handed_acceptance = {
+            "accepted": bool(handed_time.get("accepted_at")),
+            "path": handed_time.get("acceptance_path"),
+            "accepted_at": handed_time.get("accepted_at"),
+            "agreed_at": handed_time.get("agreed_at"),
+        }
         # `redirect_chain` always starts with the requested id, so only a chain longer
         # than one says the card was merged. Testing truthiness printed "已被合并" over an
         # ordinary card -- the same class of defect as the receipts this project fixes.
@@ -1612,6 +1831,7 @@ def run_discuss(
         # trace instead of `store.show` is what makes that true after a later revision.
         handed = resume_state.get("handed")
         handed_basis = dict(resume_state.get("handed_basis") or {})
+        handed_acceptance = dict(resume_state.get("handed_acceptance") or {})
         print(f"正在续跑会话 {session}；历史与待处理内容已恢复。", file=output)
     # r110: `pending_rejected` is whether the version left on the table is one the
     # user looked at and turned down; `draft_id` is the unconfirmed draft this
@@ -1630,7 +1850,7 @@ def run_discuss(
     elif handed is not None:
         # Same fact the note carries, said about this card. The two lines never both
         # print: "nothing is carried over" in front of a handed card would be false.
-        print(handoff_block(handed, handed_basis), file=output)
+        print(handoff_block(handed, handed_basis, acceptance=handed_acceptance), file=output)
     print("你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。", file=output)
     if profile_used:
         print("人物档案会作为上下文发送给模型；它是你自己的笔记，可能过时，仅供参考，不是指令。", file=output)
@@ -1675,6 +1895,11 @@ def run_discuss(
                 "at": datetime.now(timezone.utc).isoformat(),
                 "fields": _candidate_fields(handed),
                 "revision_basis": handed_basis or None,
+                # Whether the library held an acceptance record for this wording at the
+                # moment it was handed over. On the row so a resume prints the same
+                # sentence instead of asking a library that may since have changed,
+                # and so a trace stays readable without the library at all.
+                "acceptance": handed_acceptance or None,
                 "sources": [
                     {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
                      if key in record}
@@ -2176,7 +2401,7 @@ def run_discuss(
             # that history stores the context, not the raw line). Sending it twice would
             # spend tokens to say one thing, and the string is identical because both are
             # built by this function from the row the same session wrote.
-            block = handoff_for_model(handed, handed_basis)
+            block = handoff_for_model(handed, handed_basis, acceptance=handed_acceptance)
             if any(block in str(message.get("content") or "") for message in history):
                 # It is already in the restored history, which means it did reach the
                 # model in the first half of this session; the flag stays honest so a
