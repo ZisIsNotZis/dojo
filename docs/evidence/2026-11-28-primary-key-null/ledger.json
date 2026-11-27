@@ -1,0 +1,135 @@
+{
+ "about": "真实材料的探究账本：一条从公开技术文档里读到的经验，怎样从「知道有这回事」变成「知道什么时候会咬人、该写什么」。材料是四份可公开引用的官方文档（SQLite 两份、PostgreSQL 一份、MySQL 一份），加上在本机引擎上跑出来的读数。",
+ "not": "不是用户研究；不是对任何数据库的评测。'user' 事件是材料原文摘录，'tool_result' 事件是本机 probe.py 的真实输出。引用逐字，build_ledger.py 会校验引文确实出现在被引事件里。",
+ "story": "3c9e5b7a1d2f4a86b0c7e93d5a1f8b24",
+ "synthetic": false,
+ "record_provenance": {
+  "kind": "authored_transcript_from_public_material",
+  "material": [
+   "https://sqlite.org/quirks.html",
+   "https://sqlite.org/lang_createtable.html",
+   "https://www.postgresql.org/docs/current/ddl-constraints.html",
+   "https://dev.mysql.com/doc/refman/8.0/en/create-table.html"
+  ],
+  "replay": "python3 docs/evidence/2026-11-28-primary-key-null/probe.py",
+  "note": "两份 sqlite.org 页面按产品的判据（去 # 片段后 URL 不同）算两处材料，但它们是同一作者、同一站点的文档，不是两次独立观察。这一点写进 uncertainties，不拿它冒充独立验证。"
+ },
+ "events": [
+  {
+   "seq": 1, "run": "c1a0e2b4d6f80001", "kind": "start", "at": "2026-11-28T02:10:00+00:00",
+   "payload": {"synthetic": false, "story": "3c9e5b7a1d2f4a86b0c7e93d5a1f8b24", "continued_from": null,
+     "model": "offline-authored-transcript", "reasoning_effort": "low", "response_format": "json_object",
+     "delivery_mode": "full_rewrite", "tool_budget": 4, "request_budget": 12,
+     "record_provenance": "authored_transcript_from_public_material"}
+  },
+  {
+   "seq": 2, "run": "c1a0e2b4d6f80001", "kind": "user", "at": "2026-11-28T02:10:01+00:00",
+   "payload": {"synthetic": false,
+     "text": "SQLite 的文档里写着「PRIMARY KEYs Can Sometimes Contain NULLs」。我读到这条就当它是一条怪癖记下来了：知道有这回事，代码里别依赖 NULL 主键就行。"}
+  },
+  {
+   "seq": 3, "run": "c1a0e2b4d6f80001", "kind": "knowledge_proposal", "at": "2026-11-28T02:10:02+00:00",
+   "payload": {"synthetic": false, "epistemic_status": "model_proposal_not_certified",
+     "proposal": {"statement": "「SQLite 的 PRIMARY KEY 允许 NULL」是一条应记住的怪癖；知道它存在，就足以避免踩到。",
+       "kind": "descriptive", "method": "reading_a_documented_caveat",
+       "premises": [{"event": 2, "quote": "知道有这回事，代码里别依赖 NULL 主键就行", "role": "assumption"}],
+       "assumptions": ["记住一条怪癖等于知道它会造成什么后果"],
+       "conditions": ["只在写新表并且由自己决定 schema 时成立"],
+       "alternatives": ["把「什么时候会咬人、什么时候不会」写成可检查的判断，并写进 schema"],
+       "falsifier": "若能找到一种常见写法，在文档说的例外之外仍然会因 NULL 主键而受损，则「记住就够了」不成立。",
+       "revises": null}}
+  },
+  {
+   "seq": 4, "run": "c1a0e2b4d6f80001", "kind": "tool_result", "at": "2026-11-28T02:10:03+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://sqlite.org/quirks.html",
+       "note": "读「Quirks, Caveats, and Gotchas」第 5 节原文"},
+     "status": "executed",
+     "result": {"url": "https://sqlite.org/quirks.html",
+       "title": "§5 PRIMARY KEYs Can Sometimes Contain NULLs",
+       "text": "A PRIMARY KEY in an SQLite table is usually just a UNIQUE constraint. Due to an historical oversight, the column values of a PRIMARY KEY are allowed to be NULL. This is a bug, but by the time the problem was discovered there where so many databases in circulation that depended on the bug that the decision was made to support the buggy behavior moving forward. You can work around this problem by adding a NOT NULL constraint on each column of the PRIMARY KEY. Exceptions: The value of an INTEGER PRIMARY KEY column must always be a non-NULL integer because the INTEGER PRIMARY KEY is an alias for the ROWID."}}
+  },
+  {
+   "seq": 5, "run": "c1a0e2b4d6f80001", "kind": "tool_result", "at": "2026-11-28T02:10:04+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://sqlite.org/lang_createtable.html",
+       "note": "读规范侧的 CREATE TABLE §3.5"},
+     "status": "executed",
+     "result": {"url": "https://sqlite.org/lang_createtable.html",
+       "title": "§3.5 The PRIMARY KEY",
+       "text": "For the purposes of determining the uniqueness of primary key values, NULL values are considered distinct from all other values, including other NULLs. If an INSERT or UPDATE statement attempts to modify the table content so that two or more rows have identical primary key values, that is a constraint violation. According to the SQL standard, PRIMARY KEY should always imply NOT NULL. Unfortunately, due to a bug in some early versions, this is not the case in SQLite."}}
+  },
+  {
+   "seq": 6, "run": "c1a0e2b4d6f80001", "kind": "tool_result", "at": "2026-11-28T02:10:05+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://www.postgresql.org/docs/current/ddl-constraints.html",
+       "note": "对照另一家引擎的规范表述"},
+     "status": "executed",
+     "result": {"url": "https://www.postgresql.org/docs/current/ddl-constraints.html",
+       "title": "5.5.4 Primary Keys",
+       "text": "A primary key constraint indicates that a column, or group of columns, can be used as a unique identifier for rows in the table. This requires that the values be both unique and not null."}}
+  },
+  {
+   "seq": 7, "run": "c1a0e2b4d6f80001", "kind": "tool_result", "at": "2026-11-28T02:10:06+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://dev.mysql.com/doc/refman/8.0/en/create-table.html",
+       "note": "第三家引擎，验证「主键非空」不是某一家的口味"},
+     "status": "executed",
+     "result": {"url": "https://dev.mysql.com/doc/refman/8.0/en/create-table.html",
+       "title": "CREATE TABLE · PRIMARY KEY",
+       "text": "PRIMARY KEY A unique index where all key columns must be defined as NOT NULL. If they are not explicitly declared as NOT NULL, MySQL declares them so implicitly (and silently)."}}
+  },
+  {
+   "seq": 8, "run": "c1a0e2b4d6f80001", "kind": "tool_result", "at": "2026-11-28T02:10:07+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://sqlite.org/quirks.html#pk_null_probe",
+       "note": "本机 probe.py 的读数：文档说的四种状态到底哪几种成立"},
+     "status": "executed",
+     "result": {"url": "https://sqlite.org/quirks.html#pk_null_probe",
+       "title": "本机 SQLite 3.53.4 上的读数",
+       "text": "plain text pk: 两次插入都接受，库里留下 2 个 NULL 主键，用 IS NULL 一次查到 2 行，无法按主键分辨。text pk + NOT NULL / WITHOUT ROWID / STRICT：三种都拒绝，报 NOT NULL constraint failed。INTEGER PRIMARY KEY：NULL 落成 1 和 2，没有 NULL 主键（文档说的「转成唯一整数」成立）。复合主键 plain：同样接受两个 NULL。代价：2 行 NULL 主键，一条 DELETE ... WHERE k IS NULL 删掉 2 行。"}}
+  },
+  {
+   "seq": 9, "run": "d2b1f3c5e7a90002", "kind": "start", "at": "2026-11-28T02:11:00+00:00",
+   "payload": {"synthetic": false, "story": "3c9e5b7a1d2f4a86b0c7e93d5a1f8b24", "continued_from": "c1a0e2b4d6f80001",
+     "model": "offline-authored-transcript", "reasoning_effort": "low", "response_format": "json_object",
+     "delivery_mode": "full_rewrite", "tool_budget": 4, "request_budget": 12,
+     "record_provenance": "authored_transcript_from_public_material"}
+  },
+  {
+   "seq": 10, "run": "d2b1f3c5e7a90002", "kind": "user", "at": "2026-11-28T02:11:01+00:00",
+   "payload": {"synthetic": false,
+     "text": "那就别停在「知道有这回事」。我要的是后来的人能直接用的判断：什么时候会咬人、什么时候不会、写 schema 时该写什么。而且我们自己这个仓里到底有没有这个口子？"}
+  },
+  {
+   "seq": 11, "run": "d2b1f3c5e7a90002", "kind": "tool_result", "at": "2026-11-28T02:11:02+00:00",
+   "payload": {"action": {"kind": "read_source", "url": "https://sqlite.org/quirks.html#repo_probe",
+       "note": "把同一个问题问本仓自己的 schema：dojo/storage.py 的 candidates 表"},
+     "status": "executed",
+     "result": {"url": "https://sqlite.org/quirks.html#repo_probe",
+       "title": "本仓 schema 的读数（修复前）",
+       "text": "candidates 表声明的是 id TEXT PRIMARY KEY，没有 NOT NULL。Store.add 会用 ID_RE 校验 id，所以经公开 API 到不了 NULL；但绕过 API 直接写一行 NULL 主键之后：list_candidates() 返回 2 条（其中 id=None），store._get(None) 抛 candidate not found: None。即这行会被列出来，却打不开——保证在调用方，不在 schema。"}}
+  },
+  {
+   "seq": 12, "run": "d2b1f3c5e7a90002", "kind": "knowledge_proposal", "at": "2026-11-28T02:11:03+00:00",
+   "payload": {"synthetic": false, "epistemic_status": "model_proposal_not_certified",
+     "proposal": {"statement": "处理 NULL 主键的正确层次不是「记住这个怪癖」，而是三条可检查的判断：(1) 会咬人的是「按主键分辨/定位一行」的地方——多个 NULL 主键彼此不可区分，一条按该键的条件可以命中多行；只会数行数的代码看不出问题。(2) 不会咬人的是文档点名的例外：INTEGER PRIMARY KEY（NULL 被改写成 ROWID）、WITHOUT ROWID、STRICT，以及列上写了 NOT NULL。(3) 因此写 schema 时应当把 NOT NULL 写在主键列上，让保证落在 schema 而不是调用方；只依赖应用层校验的，等于把保证寄托在「每个写入口都记得校验」。",
+       "kind": "normative", "method": "documented_caveat_plus_local_measurement",
+       "premises": [
+         {"event": 4, "quote": "the column values of a PRIMARY KEY are allowed to be NULL", "role": "evidence"},
+         {"event": 5, "quote": "NULL values are considered distinct from all other values, including other NULLs", "role": "evidence"},
+         {"event": 6, "quote": "This requires that the values be both unique and not null", "role": "evidence"},
+         {"event": 7, "quote": "all key columns must be defined as NOT NULL", "role": "evidence"},
+         {"event": 8, "quote": "plain text pk: 两次插入都接受", "role": "evidence"},
+         {"event": 11, "quote": "保证在调用方，不在 schema", "role": "evidence"}
+       ],
+       "assumptions": ["本机引擎版本的行为能代表该文档描述的版本范围"],
+       "conditions": ["适用于 SQLite；PostgreSQL/MySQL 按各自文档本就强制主键非空，不存在这个口子"],
+       "alternatives": ["只在应用层校验主键非空：能用，但每个写入口都要记得，且列出与读取会分叉"],
+       "falsifier": "若在 NOT NULL 之外还有一种常见写法会让 NULL 主键进入表（文档未列出的情形），或本机实测与文档不符，则这三条判断需要重写。",
+       "revises": 3}}
+  },
+  {
+   "seq": 13, "run": "d2b1f3c5e7a90002", "kind": "review_evidence_notice", "at": "2026-11-28T02:11:04+00:00",
+   "payload": {"synthetic": false, "epistemic_status": "recorded_source_comparison_not_truth_verdict",
+     "target": 12, "sources": [],
+     "comparison": {"relation": "supports_independently", "events": [4, 5]},
+     "reason": "两处读取是不同 URL 的正文：#4 是经验侧（这是历史遗留的 bug，给了 workaround 与三条例外），#5 是规范侧（说清了为什么危险：NULL 彼此不同，所以可以有很多个）。二者说的不是同一句话，但合起来才够支撑「什么时候会咬人」。同站作者，不构成独立观察。"}
+  }
+ ]
+}

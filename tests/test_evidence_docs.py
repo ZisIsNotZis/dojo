@@ -111,7 +111,13 @@ class TheCorrectedRedArmActuallyBites(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.work, ignore_errors=True)
 
     def extract(self) -> Path:
-        if not is_git_checkout(ROOT):
+        toplevel = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"],
+                                  capture_output=True, text=True).stdout.strip()
+        if not toplevel or Path(toplevel).resolve() != ROOT:
+            # ROOT is not itself the repository root -- e.g. an extract unpacked inside
+            # another checkout. `git archive` there archives the wrong tree, so this is
+            # a skip, not a failure of the code being tested.
+            self.skipTest("ROOT is not a git checkout (toplevel=%r)" % toplevel)
             self.skipTest('not a git checkout, so git archive cannot extract the baseline')
         target = self.work / 'baseline'
         target.mkdir()

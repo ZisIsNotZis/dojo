@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import sys
 import uuid
 from contextlib import contextmanager
 from difflib import SequenceMatcher
@@ -252,6 +253,9 @@ class Store:
                     "  1) 把记录重新导入一个带时刻的库（导入工具必须写 events.created_at）；\n"
                     "  2) 只把它当素材，不冻结成带时刻的包。"
                 )
+            # A read-only open must describe the library, not gate it: reading an old
+            # library is exactly how someone finds out what is in it. The gap is a
+            # statement about writes, so it is reported on the write path only.
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
@@ -262,7 +266,13 @@ class Store:
         self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS candidates (
-                id TEXT PRIMARY KEY,
+                -- NOT NULL is not redundant here. In SQLite a PRIMARY KEY on a column is
+                -- only a UNIQUE constraint, and NULLs are distinct from each other for
+                -- uniqueness, so without this the schema admits many rows whose key is
+                -- NULL (sqlite.org/quirks.html §5). `Store.add` rejects such ids, but
+                -- then the guarantee lives in the caller, and a row written by any other
+                -- path lists as a candidate and cannot be opened by its key.
+                id TEXT NOT NULL PRIMARY KEY,
                 version INTEGER NOT NULL CHECK(version > 0),
                 state_json TEXT NOT NULL
             );
@@ -291,6 +301,55 @@ class Store:
             );
             """
         )
+        self._check_candidate_key_is_not_null()
+
+    def _check_candidate_key_is_not_null(self) -> None:
+        """Report a library that predates the NOT NULL on `candidates.id`. Never repairs it.
+
+        `CREATE TABLE IF NOT EXISTS` does not touch a table that already exists, so a
+        library created by an earlier release keeps the weaker declaration: it accepts
+        NULL keys while a library created now refuses them. Nothing visible says so.
+
+        Opening a library must not change it -- the same rule as #1893 above, which is why
+        the read-only path checks this too. An earlier attempt rewrote `sqlite_master`
+        here, on open, and kept a copy of the main file as a backup. That was wrong in a
+        way worth recording: with another connection open in WAL mode the committed rows
+        are in `-wal`, so the copy was empty, and restoring it would have destroyed data.
+        Constraining an old library is a real migration; it is a command a person runs
+        (`scripts/upgrade_key_constraint.py`), on a library nobody has open, and it is
+        verified by sqlite before it keeps anything.
+        """
+        if not self._candidate_key_has_not_null():
+            raise DojoError(self._legacy_key_message())
+
+    def _candidate_key_has_not_null(self) -> bool:
+        columns = {row["name"]: row for row in
+                   self.connection.execute("PRAGMA table_info(candidates)")}
+        key = columns.get("id")
+        return key is None or bool(key["notnull"])
+
+    def _legacy_key_message(self) -> str:
+        """One sentence per situation, ending in the command that changes it."""
+        try:
+            broken = self.connection.execute(
+                "SELECT count(*) FROM candidates WHERE id IS NULL").fetchone()[0]
+        except sqlite3.DatabaseError:
+            broken = 0
+        head = (f"这个库的 candidates.id 没有 NOT NULL：{self.path}\n"
+                "它是旧版本建的库：SQLite 里主键只是 UNIQUE，而 NULL 彼此算不同，"
+                "所以这种库能存下多个 NULL 主键，按主键查或删时无法分辨。\n")
+        if broken:
+            body = (f"这个库里已经有 {broken} 行主键是 NULL。一条 "
+                    "`DELETE ... WHERE id IS NULL` 会把它们一起删掉。\n"
+                    "哪几行该留、该补什么 id 只有你知道，所以这里不动它。\n"
+                    f"  python3 scripts/upgrade_key_constraint.py {self.path} --check\n"
+                    "会列出这些行；补好 id 之后再跑一次不带 --check 的同一命令。")
+        else:
+            body = ("库里没有 NULL 主键行，历史是健康的；这条约束只是没写进表里。\n"
+                    "  关闭所有正在使用这个库的程序，然后运行：\n"
+                    f"  python3 scripts/upgrade_key_constraint.py {self.path}\n"
+                    "它会在一个事务里重建这张表并逐项核对；核对不过就整体回滚，不动数据。")
+        return head + body
 
     def close(self) -> None:
         self.connection.close()
