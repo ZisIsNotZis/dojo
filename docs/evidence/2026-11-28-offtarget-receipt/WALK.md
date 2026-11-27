@@ -8,7 +8,7 @@ cd "$(git rev-parse --show-toplevel)"     # 仓库根目录
 python3 docs/evidence/2026-11-28-offtarget-receipt/verify.py
 ```
 
-十三项全 OK、末行 `全部成立。`。其中你最想先看的是 C3–C5：
+十七项全 OK、末行 `全部成立。`。其中你最想先看的是 C3–C5：
 
 ```
 OK     C3 回执不再说「你答了」或「四件你都答了」
