@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 PART_NAMES = ("situation", "tension", "move", "price", "off", "provenance")
@@ -81,18 +82,58 @@ QUESTIONS: dict[str, dict[str, Any]] = {
 NON_ANSWERS = ("不知道", "没有", "不清楚", "说不清", "说不好", "不好说", "因人而异", "看情况", "没什么", "想不起来", "忘了")
 STRUCTURED = {"y", "n", "yes", "no", "是", "否", "q", "1", "2", "3", "4", "ok"}
 
+# 「这一题跳过」是一句决定，不是一句回答。以前它被读成 `answer`：屏幕最后说四件都落在
+# 他说过的话上，而他在四次里说的是「先跳过这一题」。识别的边界要窄——只认整句就是
+# 跳过请求（或后面只跟一句「还没想好」这类交代），因为「我跳过这一步的时候就会出错」
+# 是失效那件要的原话，不能当成跳过。
+SKIP_PATTERNS = (
+    # 跳过 / 先跳过 / 跳过这一题 / 这题先跳过 ...
+    r"^(?:那|就|先|我|麻烦|请)*(?:先)?(?:跳过|略过)(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)?(?:吧|了|一下|啦)?$",
+    r"^(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)(?:就|先)?(?:跳过|略过)(?:吧|了|一下)?$",
+    r"^(?:下一|换一|另)(?:题|个|件|条|步|问)$",
+    r"^(?:不想说|不想回答|不想讲|不说了|不答了|不回答|答不上来)(?:了|吧|啦)?$",
+)
+SKIP_HEDGES = ("我还没想好", "还没想好", "没想好", "想不起来", "不确定", "以后再说", "先这样", "回头再说", "暂时不")
+
+
+def _normalize_skip(text: str) -> str:
+    return "".join(ch for ch in (text or "") if not ch.isspace()).strip("。！？…，,、~～!?.；;")
+
+
+def is_skip_request(text: str) -> bool:
+    """Whether the person asked to skip *this question*, in plain speech.
+
+    Whole-sentence only: a clause that merely mentions skipping ("我跳过这一步的时候就会
+    出错") is material, not a request. A trailing hedge ("先跳过这一题，我还没想好") is allowed.
+    """
+    core = _normalize_skip(text)
+    if not core:
+        return False
+    if any(re.fullmatch(pattern, core) for pattern in SKIP_PATTERNS):
+        return True
+    for separator in ("，", ",", "；", ";"):
+        if core.count(separator) == 1:
+            first, rest = core.split(separator)
+            if any(re.fullmatch(pattern, first) for pattern in SKIP_PATTERNS):
+                if rest in SKIP_HEDGES or rest.rstrip("了啦吧") in SKIP_HEDGES:
+                    return True
+    return False
+
 
 def classify_answer(text: str) -> str:
     """A crude, declared reading: does this answer count as an answer at all?
 
     It does not judge whether the answer *fills* the part (that is `to_fill`, judged by a reader);
-    it only separates a real attempt from an empty one, a declared non-answer, or a form-like reply.
+    it only separates a real attempt from an empty one, a declared non-answer, a request to
+    skip this one, or a form-like reply.
     """
     value = (text or "").strip()
     if not value:
         return "none"
     if value.lower() in STRUCTURED:
         return "structured"
+    if is_skip_request(value):
+        return "skip"
     if value.strip("。！？…，, ") in NON_ANSWERS:
         return "none"
     return "answer"

@@ -1,18 +1,24 @@
-"""四件问完之后，屏幕上有没有一句说「哪几件是你说过的」。
+"""四件问完之后，屏幕上那句话说的是不是真的。
 
-测的是真入口 `run_discuss` 的屏幕输出，不是常量：一场四件全答、一场四件全跳过，
-再加一场答两件跳过两件，三种情况下这一句都必须与轨迹里的 `collected`/`supplied` 一致。
-`--no-trace` 下同样成立——这一句讲的是本场会话里发生过什么，不是磁盘上留了什么。
+这一支测的是真入口 `run_discuss` 的屏幕输出，而且每一场都同时读轨迹与库，因为上一版
+这句话的毛病正是「屏幕说了、记录里没有」：
+
+- 他在四次里说「先跳过这一题」，屏幕却说「四件都落在你说过的话上」；
+- 屏幕说「我按这条的写法补上了」，可卡片在提问**之前**就写好了，问答从头到尾没碰它。
+
+所以每条断言都拿屏幕上的字与 `session_end` 的 `collected`/`skipped`/`supplied`
+以及库的快照三方对照，而不是只 grep 一句话。
 """
 
 import io
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from dojo.discuss import closing_text, run_discuss
-from dojo.elicit import PART_ORDER
+from dojo.elicit import PART_ORDER, QUESTIONS, classify_answer
 from dojo.storage import Store
 
 CONCLUSION = {
@@ -27,6 +33,10 @@ CONCLUSION = {
 
 ALL_FOUR = ("上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
             "第一次觉得亏是没人再复核", "有一次我照着做反而漏了")
+SKIP = "先跳过这一题"
+# 一问答、一件说跳过、一件两个空行（问 + 换问法都没答）、一件答：
+# 三种结局都要在屏幕上分得开，而且跳过的件不能再吃一次换问法。
+MIXED = ("上次是把一套检查交给别人的时候", SKIP, "", "", "有一次我照着做反而漏了")
 
 
 def result(answer, candidate=None, user_stance="neutral"):
@@ -58,29 +68,57 @@ TWO_TURNS = [
 ]
 
 
+def store_snapshot(root):
+    """Every row of every table, as plain tuples -- so "the card did not move" is
+    checkable byte for byte instead of being taken on trust."""
+    database = sorted(root.glob("*.sqlite3"))
+    if not database:
+        return {}
+    connection = sqlite3.connect(database[0])
+    try:
+        tables = [row[0] for row in connection.execute(
+            "select name from sqlite_master where type='table' order by name")]
+        return {table: connection.execute(f"select * from {table}").fetchall()
+                for table in tables}
+    finally:
+        connection.close()
+
+
 class ClosingLineTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.store = Store(self.root / "dojo.sqlite3")
+        self.snapshots = []
 
     def tearDown(self):
         self.store.close()
         self.temp.cleanup()
 
-    def run_session(self, answers, no_trace=False):
+    def run_session(self, answers, no_trace=False, snapshot_each_turn=True):
         output = io.StringIO()
+        scripted = ["讲一条做法", "对", *answers]
+        if snapshot_each_turn:
+            inner = read_lines(scripted)
+
+            def read_line(prompt):
+                # Snapshot before each answer is consumed: this is the state the person
+                # is answering against, i.e. what the card already says.
+                self.snapshots.append(store_snapshot(self.root))
+                return inner(prompt)
+        else:
+            read_line = read_lines(scripted)
         code = run_discuss(
             self.store,
             client=FakeClient(TWO_TURNS),
-            read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
+            read_line=read_line,
             output=output,
             no_trace=no_trace,
         )
+        self.snapshots.append(store_snapshot(self.root))
         return code, output.getvalue()
 
     def recorded(self):
-        """The session_end reading, when a trace exists."""
         sessions = sorted((self.root / "sessions").glob("*.jsonl"))
         self.assertTrue(sessions, "本场应当留下轨迹")
         for line in sessions[-1].read_text(encoding="utf-8").splitlines():
@@ -89,67 +127,171 @@ class ClosingLineTests(unittest.TestCase):
                 return row["elicitation"]
         return None
 
-    def test_all_four_answered_says_so_and_matches_the_trace(self):
+    def host_lines(self, text):
+        return [line[len("主持人> "):] for line in text.splitlines()
+                if line.startswith("主持人> ")]
+
+    def closing_line(self, text):
+        for body in self.host_lines(text):
+            if body.startswith("四件问完了") or body.startswith("问到这里停了"):
+                return body
+        return None
+
+    # ---- the four stated outcomes, each checked against the record ----------------
+
+    def test_all_four_answered_says_all_four_and_the_record_agrees(self):
         code, text = self.run_session(ALL_FOUR)
         self.assertEqual(0, code)
         end = self.recorded()
         self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertEqual([], end["skipped"])
         self.assertEqual([], end["supplied"])
-        self.assertIn("四件都落在你说过的话上", text)
-        # Not a bare claim: no part may be named as filled when the trace says otherwise.
+        line = self.closing_line(text)
+        self.assertIn("四件你都答了", line)
         for part in PART_ORDER:
-            self.assertNotIn(f"{part} 没说出来", text)
+            self.assertNotIn(f"{part} 没答出来", line)
+            self.assertNotIn(f"你说跳过 {part}", line)
 
-    def test_all_four_skipped_names_every_part_as_filled(self):
-        code, text = self.run_session(("", "", "", ""))
+    def test_all_four_skipped_says_skipped_not_answered(self):
+        code, text = self.run_session((SKIP,) * 4)
         self.assertEqual(0, code)
         end = self.recorded()
         self.assertEqual([], end["collected"])
-        self.assertEqual(list(PART_ORDER), end["supplied"])
-        self.assertIn("四件都没说出来", text)
-        self.assertIn("、".join(PART_ORDER), text)
+        self.assertEqual(list(PART_ORDER), end["skipped"])
+        self.assertEqual([], end["supplied"])
+        line = self.closing_line(text)
+        self.assertIn("你说跳过", line)
+        self.assertIn("、".join(PART_ORDER), line)
+        # The defect this test exists for: four skip requests used to be reported as
+        # "四件都落在你说过的话上".
+        self.assertNotIn("四件都落在你说过的话上", text)
+        self.assertNotIn("四件你都答了", line)
 
-    def test_two_answered_two_skipped_splits_them_the_way_the_trace_does(self):
-        # A skipped part costs two lines (the ask and its follow-up), so 张力 and 失效
-        # each get an empty pair. Getting this wrong silently shifts every later answer
-        # onto the wrong part -- which is exactly what the first version of this test did.
-        code, text = self.run_session(("上次是把一套检查交给别人的时候", "", "",
-                                       "第一次觉得亏是没人再复核", "", ""))
+    def test_answered_skipped_and_unanswered_are_three_different_words(self):
+        code, text = self.run_session(MIXED)
         self.assertEqual(0, code)
         end = self.recorded()
-        self.assertEqual(["情境", "代价"], end["collected"])
-        self.assertEqual(["张力", "失效"], end["supplied"])
-        self.assertIn("情境、代价 是你说过的", text)
-        self.assertIn("张力、失效 没说出来", text)
+        self.assertEqual(["情境", "失效"], end["collected"])
+        self.assertEqual(["张力"], end["skipped"])
+        self.assertEqual(["代价"], end["supplied"])
+        line = self.closing_line(text)
+        self.assertIn("你答了 情境、失效", line)
+        self.assertIn("你说跳过 张力", line)
+        self.assertIn("没答出来 代价", line)
+        # Order comes from PART_ORDER, not from the order the lists filled up.
+        self.assertLess(line.index("情境"), line.index("张力"))
+        self.assertLess(line.index("张力"), line.index("代价"))
 
-    def test_the_line_comes_after_the_last_question_not_before_it(self):
-        from dojo.elicit import QUESTIONS
-        code, text = self.run_session(ALL_FOUR)
+    def test_all_blank_says_nothing_was_answered(self):
+        # A blank part costs two lines: the ask and its follow-up.
+        code, text = self.run_session(("",) * 8)
         self.assertEqual(0, code)
-        last_part = PART_ORDER[-1]
-        first_q = text.find(QUESTIONS[last_part]["ask"])
-        self.assertGreater(first_q, -1)
-        self.assertGreater(text.find("四件问完了"), first_q)
+        end = self.recorded()
+        self.assertEqual([], end["collected"])
+        self.assertEqual([], end["skipped"])
+        self.assertEqual(list(PART_ORDER), end["supplied"])
+        line = self.closing_line(text)
+        self.assertIn("没答出来", line)
+        self.assertNotIn("你答了", line)
+        # Nothing was answered, so nothing may be said about where answers went.
+        self.assertNotIn("这些回答", line)
 
-    def test_it_holds_with_the_trace_off(self):
-        code, text = self.run_session(("上次是把一套检查交给别人的时候", "", "", ""), no_trace=True)
+    # ---- the sentence must not claim the answers reached the card -----------------
+
+    def test_the_card_does_not_move_when_answers_arrive(self):
+        """The claim "我按这条的写法补上了" is what a reader took as "the card changed".
+
+        Dumping every table at every turn shows the card is written before the first
+        question and never rewritten: all snapshots are identical. The line must
+        therefore say the answers stayed out of the card, and say the card predates them.
+        """
+        code, text = self.run_session(MIXED)
         self.assertEqual(0, code)
-        # No trace to read, so the sentence must stand on the session's own lists.
-        self.assertIn("四件问完了", text)
-        self.assertIn("情境 是你说过的", text)
+        self.assertTrue(self.snapshots, "no snapshot was taken")
+        # The first snapshots are taken before the card exists (they cover the rounds
+        # that decide it); from the first question onward the card must not move.
+        with_card = [snap for snap in self.snapshots if snap.get("candidates")]
+        self.assertTrue(with_card, "结论卡应当在第一问之前就已写入")
+        self.assertIs(self.snapshots.index(with_card[0]), 2,
+                      "第一问之前就该有卡：第 0/1 次读入是开场两轮")
+        first = with_card[0]
+        for later in with_card[1:]:
+            self.assertEqual(first, later, "库在问答过程中被改写了")
+        line = self.closing_line(text)
+        self.assertIn("没有写进卡片", line)
+        self.assertIn("卡片是提问前写下的那句", line)
+        self.assertNotIn("补上了", line)
 
-    def test_the_pure_function_says_nothing_it_cannot_support(self):
-        self.assertEqual(
-            "四件问完了：四件都落在你说过的话上。卡片上的字这一版仍全算我写的。",
-            closing_text(list(PART_ORDER), []),
-        )
-        mixed = closing_text(["情境"], ["张力", "代价", "失效"])
-        self.assertIn("情境 是你说过的", mixed)
-        self.assertIn("张力、代价、失效 没说出来", mixed)
-        # Order comes from PART_ORDER, not from however the lists were built.
-        reordered = closing_text(["代价", "情境"], ["失效", "张力"])
-        self.assertIn("情境、代价 是你说过的", reordered)
-        self.assertIn("张力、失效 没说出来", reordered)
+    # ---- the person who leaves early ---------------------------------------------
+
+    def test_stopping_early_still_gets_a_receipt_without_false_completion(self):
+        """The entry block invites "想停随时结束输入"; that person used to get nothing."""
+        code, text = self.run_session(("上次是把一套检查交给别人的时候",))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["情境"], end["collected"])
+        line = self.closing_line(text)
+        self.assertIsNotNone(line, "提前结束的人没有拿到回执")
+        self.assertIn("你答了 情境", line)
+        self.assertIn("没答出来 张力", line)
+        self.assertIn("代价、失效 没问到", line)
+        # Four questions were not all put to him, so the completion claim is false here.
+        self.assertNotIn("四件问完了", line)
+
+    # ---- skip recognition --------------------------------------------------------
+
+    def test_a_skip_request_is_asked_once_and_not_again(self):
+        code, text = self.run_session((SKIP,) * 4)
+        self.assertEqual(0, code)
+        asks = [QUESTIONS[part]["ask"] for part in PART_ORDER]
+        follow_ups = [text_ for part in PART_ORDER
+                      for text_ in QUESTIONS[part]["follow_ups"].values()]
+        shown = self.host_lines(text)
+        self.assertEqual(asks, [line for line in shown if line in asks])
+        self.assertEqual([], [line for line in shown if line in follow_ups])
+        self.assertEqual(4, self.recorded()["turns"])
+
+    def test_plain_speech_skip_forms_all_read_as_skip(self):
+        for phrase in ("先跳过这一题", "跳过", "这题先跳过", "下一题", "不想说",
+                       "先跳过这一题，我还没想好", "跳过吧。"):
+            self.assertEqual("skip", classify_answer(phrase), phrase)
+
+    def test_material_that_merely_mentions_skipping_is_still_an_answer(self):
+        # 失效那件要的原话正是这种句子，不能把它当成跳过请求。
+        for phrase in ("我跳过这一步的时候就会出错",
+                       "有一次我照着做反而漏了，因为中间那步被跳过了",
+                       "跳过复核就会出问题"):
+            self.assertEqual("answer", classify_answer(phrase), phrase)
+        for phrase in ("不知道", "看情况", "因人而异"):
+            self.assertEqual("none", classify_answer(phrase), phrase)
+
+    # ---- --no-trace --------------------------------------------------------------
+
+    def test_with_the_trace_off_it_does_not_promise_retention(self):
+        code, text = self.run_session((SKIP,) * 4, no_trace=True)
+        self.assertEqual(0, code)
+        line = self.closing_line(text)
+        self.assertIn("你说跳过", line)
+        self.assertNotIn("留在本场记录", line)
+
+    def test_with_the_trace_on_the_skipped_parts_are_still_recorded(self):
+        code, _ = self.run_session((SKIP,) * 4)
+        self.assertEqual(0, code)
+        self.assertEqual(list(PART_ORDER), self.recorded()["skipped"])
+
+    # ---- the pure function -------------------------------------------------------
+
+    def test_the_pure_function_names_three_outcomes_in_part_order(self):
+        line = closing_text(["情境", "失效"], ["张力"], ["代价"])
+        self.assertIn("你答了 情境、失效", line)
+        self.assertIn("你说跳过 张力", line)
+        self.assertIn("没答出来 代价", line)
+        self.assertIn("没有写进卡片", line)
+
+    def test_the_pure_function_does_not_say_all_four_when_they_were_not_asked(self):
+        line = closing_text(["情境"], [], ["张力"], unfinished=["代价", "失效"])
+        self.assertNotIn("四件问完了", line)
+        self.assertIn("没问到", line)
 
 
 if __name__ == "__main__":
