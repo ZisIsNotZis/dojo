@@ -268,6 +268,10 @@ class AReaderCanReachTheChain(unittest.TestCase):
         self.assertIn("不是「他的看法」", loop)
         self.assertIn("同一只手", loop)
         self.assertIn("空白压平", loop, "the squashing limit is not written down")
+        # A re-check found two regressions through the ordinary CLI; the record has to
+        # carry them, or the next reader believes the first version was right.
+        self.assertIn("两个反例", loop)
+        self.assertIn("test_recheck_counterexamples", loop)
 
 
 

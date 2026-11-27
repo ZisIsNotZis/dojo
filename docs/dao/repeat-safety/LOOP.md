@@ -154,3 +154,51 @@ python3 -B -m unittest tests.test_source_citations
 `check_landing.py` 的读数（`check_landing.py` 现场重算，不是抄的）：
 `attach_second_group_is_recorded` 为 `true`；`exact_replay_writes_no_event` 为 `true`；
 `same_group_under_one_session_is_one_provenance` 为 `true`；`distill_source_change_is_not_a_second_card` 为 `true`。
+
+---
+
+## 9. 复核人用正常 CLI 找到的两个反例（都成立，已修）
+
+复核不是再读一遍代码，是拿普通命令去用。两处都落在这条判断管辖的重试/核对路径上，两处都是我的错。
+
+### 反例一：无组别来源的重放报错
+
+两个会话各给一条**没注明组别**的材料，然后把第二条原样再发一次：
+
+```sh
+python3 -m dojo add --id c1 --kind abstract_idea --statement '句子' \
+  --source-json '{"id":"src-a","type":"unknown","claim":"甲先说的","verification":"unknown"}' --session s1
+python3 -m dojo attach-source c1 \
+  --source-json '{"id":"src-b","type":"unknown","claim":"乙再说的","verification":"unknown"}' --session s2
+python3 -m dojo attach-source c1 \
+  --source-json '{"id":"src-b","type":"unknown","claim":"乙再说的","verification":"unknown"}' --session s2
+```
+
+| | 上一版（`fc65d5e`） | 现在 |
+|---|---|---|
+| 重放那一行的退出码 | **2**，`error: source ID already exists: src-b` | **0** |
+| 账本 | 不动 | 不动 |
+
+原因：我拿 `independence()` 去问「这一条来源算不算新 provenance」，而它算的是**整张卡**；
+我把候选来源接进 `state` 又补一条合成事件，于是同一条被数了两遍，读出一组并不存在的组别，
+再往下走就撞上 `_source_ids_available` 的重名检查。判据问错了层级：这里要问的是**一条来源**。
+现在是一个谓词，三种「同一份 provenance」都写在里面（同一来源对象 / 同一具名组 / 无组别但同一会话交的），
+`"unknown"` 按「没写组名」处理而不是当成组名。
+
+### 反例二：提交存在，但那份文件在那个修订上还不存在
+
+把一条正确引语的提交号换成本仓**确实存在**、但那时还没有那份文件的提交，核对仍说 `pass`。
+`git cat-file -e <sha>^{commit}` 只证明对象在，不证明路径在。一条引语不能拿一个从未包含它的修订去核对。
+现在提交要过两关：是提交，**并且**那个修订上有这份文件。状态因此多一个词 `missing-path`，判 `fail`；
+「提交不在库里」仍是 `unchecked`——三个词对应三件事，不合并。
+
+### 这两个反例现在在交付检查里
+
+`tests/test_recheck_counterexamples.py`，6 项：其中 2 项在上一版 `fc65d5e` 上红、现在绿，
+另 4 项是防过度收紧的回归门（第二个会话仍然新增 provenance、同一具名组仍是 no-op、
+能解析且含文件的提交仍 `pass`、不存在的提交仍 `unchecked`），在两种树上都绿。
+第一项用 CLI 跑，走的正是复核人用的那条路；第二项在真实的两个提交的临时仓里跑。
+
+```sh
+python3 -B -m unittest tests.test_recheck_counterexamples
+```

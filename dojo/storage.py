@@ -628,19 +628,10 @@ class Store:
             # CLI, `attach-source` with a second group under the same session gave
             # rc 0, wrote no event and kept no source. The case `attach-source`
             # exists for was the one case it silently discarded.
-            events_before = [
-                event for event in self.history(candidate_id)["events"]
-                if event.get("event") in ("add", "attach_source")
-            ]
-            before = independence(state)
-            added = dict(state)
-            added["sources"] = list(state.get("sources", [])) + [source_value]
-            after = _independence_with_extra_acquisition(added, source_value, session, events_before)
-            if after["provenance_groups"] == before["provenance_groups"]:
-                # This source adds no provenance the card did not already have: a
-                # named group the card already carries, or (for a group-less source)
-                # a session whose material is already logged. A genuine no-op, and
-                # the shape a published test pins.
+            events = [event for event in self.history(candidate_id)["events"]
+                      if event.get("event") in ("add", "attach_source")]
+            if any(_same_provenance(item, source_value, session, state, events)
+                   for item in state.get("sources", [])):
                 return state
             self._source_ids_available([source_value])
             state["sources"] = list(state.get("sources", [])) + [source_value]
@@ -2320,20 +2311,64 @@ def wording_digest(state: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def _independence_with_extra_acquisition(
-    state: dict[str, Any], source: dict[str, Any], session: str | None,
-    events: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """`independence`, with the pending `attach_source` counted as one more acquisition.
+def _same_provenance(
+    existing: dict[str, Any], candidate: dict[str, Any], session: str | None,
+    state: dict[str, Any], events: list[dict[str, Any]],
+) -> bool:
+    """Is `candidate` the same provenance the card already carries through `existing`?
 
-    `independence` attributes a group-less source to the session that acquired it by
-    reading the `attach_source` events. The event for this source is not written yet,
-    so it is appended here rather than inserted into the database first: the caller
-    asks whether writing it would change the provenance set, and only then writes.
+    Three ways, and they are the ones the libraries distinguish and the published
+    tests pin:
+
+      * **the same source object** (id, type, claim, group, verification). A replay
+        of the request, not a second arrival;
+      * **a named group the card already carries.** Independence is counted per
+        group, so a second source naming that group adds nothing. This is what
+        `test_attaching_the_same_session_twice_is_a_no_op` pins, and it holds even
+        when the two sources arrive under one session;
+      * **a group-less source the same session already handed over.** A group-less
+        source has no key of its own, so the acquiring session is the only key there
+        is -- which is why two sessions with group-less sources are two provenance
+        (`test_a_group_less_source_attached_by_two_sessions_is_two_provenances`), and
+        why replaying one of them changes nothing.
+
+    This is deliberately a predicate about one source. The previous version asked
+    `independence()` about the whole card with the candidate spliced in, which
+    counted the candidate twice (once from `state`, once from a synthetic event) and
+    reported provenance that did not exist.
     """
-    pending = {"event": "attach_source",
-               "details": {"source": source.get("id"), "session": session}}
-    return independence(state, [*events, pending])
+    keys = ("id", "type", "claim", "independence_group", "verification")
+    if all(existing.get(key) == candidate.get(key) for key in keys):
+        return True
+    # `"unknown"` is what a caller who names no group writes, so it is not a name:
+    # treating it as one made two group-less sources look like one provenance.
+    named = candidate.get("independence_group")
+    if named and named != "unknown":
+        return existing.get("independence_group") == named
+    if not session:
+        return False
+    return session in _acquired_by(state, events, existing.get("id"))
+
+
+def _acquired_by(
+    state: dict[str, Any], events: list[dict[str, Any]], source_id: str | None,
+) -> set[str]:
+    """Sessions that handed over `source_id`.
+
+    Read from the `attach_source` events, with the card's own writing session as the
+    fallback `independence()` also uses: on a card the `add` call wrote in one
+    session, that is the only answer available.
+    """
+    acquirers = {
+        (event.get("details") or {}).get("session")
+        for event in events
+        if (event.get("details") or {}).get("source") == source_id
+    }
+    acquirers.discard(None)
+    if not acquirers and len(state.get("sessions") or []) == 1:
+        acquirers = set(state["sessions"])
+    return acquirers
+
 
 def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """What a card's provenance supports, computed from its sources and sessions.

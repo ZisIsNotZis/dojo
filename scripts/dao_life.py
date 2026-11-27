@@ -1576,17 +1576,33 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
     failures: list[str] = []
     root = Path(base) if base is not None else REPO_ROOT
 
-    def resolves(commit: str) -> bool:
+    def resolves(commit: str, path: str = "") -> str:
+        """`resolved`, `missing-path`, or `unresolved`.
+
+        Reading the commit is not enough. A short SHA that exists proves an object
+        is there; it says nothing about whether the file the quote came from existed
+        at that revision. Measured: swapping a real citation's commit for another
+        commit in this repository -- one that predates the file -- still answered
+        `pass`, because only the object was checked. A quote cannot be verified
+        against a revision that never contained it, and that is what holding the
+        file at the cited commit is for.
+        """
         if not git or not commit:
-            return False
+            return "unresolved"
         try:
-            done = subprocess.run(
+            there = subprocess.run(
                 ["git", "cat-file", "-e", commit + "^{commit}"],
                 cwd=str(root), capture_output=True, timeout=120,
             )
+            if there.returncode != 0:
+                return "unresolved"
+            holding = subprocess.run(
+                ["git", "cat-file", "-e", commit + ":" + path],
+                cwd=str(root), capture_output=True, timeout=120,
+            )
         except (OSError, subprocess.SubprocessError):
-            return False
-        return done.returncode == 0
+            return "unresolved"
+        return "resolved" if holding.returncode == 0 else "missing-path"
 
     for episode in data["episodes"]["episodes"]:
         source = episode.get("source") or {}
@@ -1646,10 +1662,12 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
         elif not commit:
             row["commit_state"] = "unrecorded"
             failures.append(f"{row['id']} 没写 commit：这份出处无法固定在某个版本上")
-        elif resolves(commit):
-            row["commit_state"] = "resolved"
         else:
-            row["commit_state"] = "unresolved"
+            row["commit_state"] = resolves(commit, path)
+            if row["commit_state"] == "missing-path":
+                failures.append(
+                    f"{row['id']} 的提交 {commit} 里没有 {path}：引语不可能在这个修订上核对"
+                )
     unresolved = [r["id"] for r in rows if r["commit_state"] == "unresolved"]
     # Three words, because two would lie. `pass` means every quote landed where it
     # says and every commit resolved. `unchecked` means the quotes landed but the
@@ -1671,10 +1689,10 @@ def check_sources(data: dict[str, Any], *, base: Path | None = None, git: bool =
         "unresolved_commits": unresolved,
         "line": (
             f"出处核对 {len(rows)} 条：引语 {sum(1 for r in rows if r['quote'] == 'found')} 条逐字落在它写的行内；"
-            f"commit 在本仓可解析 {sum(1 for r in rows if r['commit_state'] == 'resolved')} 条，"
+            f"commit 在本仓可解析且含有该文件 {sum(1 for r in rows if r['commit_state'] == 'resolved')} 条，"
             f"不可解析 {len(unresolved)} 条"
             + (
-                "（这些只核到引语，没核到版本；本仓历史被重建过，它们指向的版本已不在库里）。"
+                "（这些只核到引语，没核到版本：不是提交不在库里，就是那个修订上没有这份文件）。"
                 if unresolved
                 else "。"
             )
