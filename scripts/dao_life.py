@@ -544,6 +544,48 @@ def check_field(
     }
 
 
+def sources_cell(
+    dao: dict[str, Any],
+    receipts: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """这一条道引的那些凭据，在它们自己写的修订上读到了吗？
+
+    只看这条道挂着的 episode（`covers` 与 provenance 里的 episode），不看全库：
+    别的道没核上，不该让这条道降词。
+
+    四种读数，两种封顶：
+      pass       每条都在它写的 revision 上读到了那段字
+      fail       有引语根本不在它写的位置上，或 commit 是个会动的名字
+      uncertain  修订问不到（浅克隆没取到、或没有那份文件）：不是核过，也不是没对
+      not_run    没有需要核的引文（作者自己写的模拟材料）：不适用，不封顶
+    """
+    covered = set((dao.get("situation") or {}).get("covers") or [])
+    for item in dao.get("provenance") or []:
+        if item.get("episode"):
+            covered.add(item["episode"])
+    all_rows = (receipts.get("sources") or {}).get("rows") or []
+    rows = [row for row in all_rows if row.get("id") in covered]
+    required = [row for row in rows if row.get("commit_state") != "not-required"]
+    if not required:
+        return {"verdict": "not_run", "rows": len(rows), "checked": 0,
+                "ids": [row.get("id") for row in rows],
+                "why": "没有需要按修订核的引文"}
+    checked = [row for row in required if row.get("checked_at") == "commit"]
+    absent = [row["id"] for row in required
+              if row.get("quote") in {"absent", "stale-ref"}]
+    moving = [row["id"] for row in required
+              if row.get("commit_state") == "moving-name"]
+    if absent or moving:
+        verdict = "fail"
+    elif len(checked) == len(required):
+        verdict = "pass"
+    else:
+        verdict = "uncertain"
+    return {"verdict": verdict, "rows": len(required), "checked": len(checked),
+            "ids": [row.get("id") for row in required],
+            "absent": absent, "moving": moving}
+
+
 def status_of(
     dao: dict[str, Any],
     receipts: dict[str, dict[str, Any]],
@@ -574,16 +616,34 @@ def status_of(
         ("落地", field["verdict"]),
     ]
     cell_text = " / ".join(f"{name} {VERDICT_WORD[verdict]}" for name, verdict in cells)
+    # 出处核对封顶这一行。它以前只印在库级，单条道那一行照旧写「检（3/3）」：
+    # 一次 read 的读数里，第 2 行说 3/3，第 18 行说按所指版本核对 0 条。
+    # 读者读那一条时会以为引文核过了。所以它和三格一样参与封顶：
+    # 这个修订上读不到引文，就不许这一行说「检」。
+    # 未跑（没有可核的引文，例如作者自己写的模拟材料）不封顶：那不是失败，是不适用。
+    sources = sources_cell(dao, receipts)
+    if sources["verdict"] in {"fail", "uncertain"}:
+        word, mark = base, "未检"
     return {
         "word": word,
         "mark": mark,
         "count": passed,
         "cells": cells,
+        "sources": sources,
         "authorship": who,
         "supplied": supplied_parts(dao.get("part_sources") or {}),
         "his": his_parts(dao.get("part_sources") or {}),
-        "line": f"{word} · {mark}（{passed}/3：{cell_text}）",
+        "line": f"{word} · {mark}（{passed}/3：{cell_text}）" + source_suffix(sources),
     }
+
+
+def source_suffix(sources: dict[str, Any]) -> str:
+    """把出处那一格接在同一行上，而不是藏在第 18 行。"""
+    verdict = sources.get("verdict")
+    if verdict == "not_run":
+        return ""
+    word = {"pass": "过", "fail": "不过", "uncertain": "未核"}[verdict]
+    return f" · 出处 {word}（{sources.get('checked', 0)}/{sources.get('rows', 0)} 条按所指版本核对）"
 
 
 def missing_receipts(dao: dict[str, Any], receipts: dict[str, dict[str, Any]]) -> list[str]:

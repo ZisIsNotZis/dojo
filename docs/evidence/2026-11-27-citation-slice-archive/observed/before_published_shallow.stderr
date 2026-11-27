@@ -1,0 +1,4 @@
+
+FAIL
+  不变式被破坏：docs/dao/person-dojo
+  不变式被破坏：docs/dao/repeat-safety

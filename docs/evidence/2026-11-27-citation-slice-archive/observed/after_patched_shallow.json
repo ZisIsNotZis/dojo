@@ -1,0 +1,116 @@
+{
+ "checkout": "/dev/shm/r3335/final",
+ "head": "f445a0b84eb654efc459e350be78ab098e52bd23",
+ "shallow": "true",
+ "archived_text": [
+  {
+   "file": "REVIEW-3326-first.md",
+   "sha256": "bc01fa64730cf8fc465a4c5b206fc0ad7e71c04b874d9257500738a5ba1e7fae",
+   "matches_declared": true
+  },
+  {
+   "file": "REVIEW-3326-second.md",
+   "sha256": "7b1542f1074d8e68e0a5f45e8aeb18a9207b711a9644852a6a870acf6091d90b",
+   "matches_declared": true
+  }
+ ],
+ "libraries": [
+  {
+   "library": "docs/dao/person-dojo",
+   "exit": 0,
+   "first_line": "dojo-d-001  v1  自述 · 未检（3/3：自洽 过 / 可反驳 过 / 落地 过） · 出处 未核（0/2 条按所指版本核对）",
+   "sources_line": "出处核对 19 条：引语 0 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 0 条，按所指版本核对 0 条，不可解析 19 条，commit 是会动的名字 0 条，引语没能在这个版本上核对 19 条（这几条只有工作树的读法，或者那个修订上就没有这份文件；版本没被问到，不当作核过）。",
+   "invariant": {
+    "holds": true,
+    "source_cell": "uncertain",
+    "why": "这一行没有声称检过，所以没有可被夸大的东西"
+   }
+  },
+  {
+   "library": "docs/dao/repeat-safety",
+   "exit": 0,
+   "first_line": "repeat-d-001  v1  自述 · 未检（3/3：自洽 过 / 可反驳 过 / 落地 过） · 出处 未核（0/1 条按所指版本核对）",
+   "sources_line": "出处核对 1 条：引语 0 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 0 条，按所指版本核对 0 条，不可解析 1 条，commit 是会动的名字 0 条，引语没能在这个版本上核对 1 条（这几条只有工作树的读法，或者那个修订上就没有这份文件；版本没被问到，不当作核过）。",
+   "invariant": {
+    "holds": true,
+    "source_cell": "uncertain",
+    "why": "这一行没有声称检过，所以没有可被夸大的东西"
+   }
+  },
+  {
+   "library": "docs/dao/demo-strangers",
+   "exit": 0,
+   "first_line": "demo-d-101  v1  模拟 · 未检（2/3：自洽 过 / 可反驳 过 / 落地 未跑）",
+   "sources_line": "出处核对 3 条：引语 3 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 0 条，按所指版本核对 0 条，不可解析 0 条，commit 是会动的名字 0 条，引语没能在这个版本上核对 0 条。",
+   "invariant": {
+    "holds": true,
+    "source_cell": "unknown",
+    "why": "这一行没有声称检过，所以没有可被夸大的东西"
+   }
+  }
+ ],
+ "ref_shapes": [
+  {
+   "case": "control: the right line number",
+   "ref": "第 3 行",
+   "expected": "pass",
+   "got": "pass",
+   "quote": "found",
+   "as_expected": true
+  },
+  {
+   "case": "control: one wrong line number",
+   "ref": "第 40 行",
+   "expected": "fail",
+   "got": "fail",
+   "quote": "stale-ref",
+   "as_expected": true
+  },
+  {
+   "case": "residual 1: a wrong number before the right one",
+   "ref": "第 40 行，或第 3 行",
+   "expected": "pass",
+   "got": "pass",
+   "quote": "found",
+   "as_expected": true
+  },
+  {
+   "case": "residual 2: digits but no parsable line range",
+   "ref": "§10 第 2 条（第 272 字）",
+   "expected": "pass",
+   "got": "pass",
+   "quote": "found",
+   "as_expected": true
+  }
+ ],
+ "moving_label": {
+  "prefix": "dada",
+  "commit_with_quote": "dada77e6ca401a43735bb71eaee7f343344e1ee0",
+  "commit_without": "dada0b6d4f7bec139eeb5298af3add8a74c2a7cf",
+  "bare_name_resolves": false,
+  "record_changed_between_stages": false,
+  "stages": {
+   "no_label: the name is ambiguous": {
+    "verdict": "unchecked",
+    "quote": "unchecked-at-revision",
+    "commit_state": "unresolved",
+    "lines": null
+   },
+   "label points at the commit that has the quote": {
+    "verdict": "pass",
+    "quote": "found",
+    "commit_state": "resolved",
+    "lines": [
+     3,
+     3
+    ]
+   },
+   "the same label moved; the record is untouched": {
+    "verdict": "fail",
+    "quote": "absent",
+    "commit_state": "resolved",
+    "lines": null
+   }
+  }
+ }
+}

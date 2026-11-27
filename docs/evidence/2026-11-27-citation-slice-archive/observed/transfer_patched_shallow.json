@@ -1,0 +1,58 @@
+{
+ "checkout": "/dev/shm/r3335/final",
+ "files": {
+  "BRIEF.md": {
+   "sha256": "f03597492575fbeb838d75ed27b864875e227fb147381365394b234b9dc6b19d",
+   "matches_declared": true
+  },
+  "BEFORE.md": {
+   "sha256": "a5427c2222e44bab34bf8a14f345495da2d8229a7c04c1582d62ee4bd27d940e",
+   "matches_declared": true
+  },
+  "AFTER.md": {
+   "sha256": "5c4b1d9ecd60e5ce62da37d8dff66af480ead60bda36389a36d35eca2697ab66",
+   "matches_declared": true
+  },
+  "DIFF.md": {
+   "sha256": "57cf757e9378cf9e132192a5e6406bf6baefbb541af2c85a987cfd061349e7d4",
+   "matches_declared": true
+  }
+ },
+ "order": {
+  "witness": "判定与证据脱钩",
+  "before_mentions_it": false,
+  "after_mentions_it": true,
+  "diff_names_it": false
+ },
+ "judgement": {
+  "id": "repeat-d-001",
+  "version": 1,
+  "off": [
+   {
+    "when": "这笔操作没有可比的状态（纯追加、每调一次都产生新对象）",
+    "axis": "has_state",
+    "value": "没有状态可比",
+    "then_kind": "withhold",
+    "then": "不按请求判重；只按效果判，并把「这里没有状态可比」印出来"
+   },
+   {
+    "when": "判重的人是写出这次请求的同一个作者",
+    "axis": "judge",
+    "value": "与被检查的同一个人",
+    "then_kind": "reverse",
+    "then": "判重照旧比整份请求，但换一个独立的一方来复核，并把「谁复核的」写进回执"
+   }
+  ],
+  "covers": [
+   "ep-2026-10-23-detach"
+  ],
+  "one_line": "在一个已经抽身、检查交给系统的人那里，重放与「真的又做了一次」必须事后分得清：判重比整份请求，版本只跟库存状态走；断线时没有证据说明第一次没生效就不重发。代价是每个写入点都得把整份请求原样传下来，漏一个可选输入就退回旧错；当这笔操作本来没有可比的状态、或判重的人就是作者本人时，反过来。"
+ },
+ "cap_exists": true,
+ "main": {
+  "exit": 0,
+  "line": "repeat-d-001  v1  自述 · 未检（3/3：自洽 过 / 可反驳 过 / 落地 过） · 出处 未核（0/1 条按所指版本核对）",
+  "sources": "出处核对 1 条：引语 0 条逐字落在它写的行内；commit 在本仓可解析且含有该文件 0 条，按所指版本核对 0 条，不可解析 1 条，commit 是会动的名字 0 条，引语没能在这个版本上核对 1 条（这几条只有工作树的读法，或者那个修订上就没有这份文件；版本没被问到，不当作核过）。",
+  "shallow": "true"
+ }
+}
