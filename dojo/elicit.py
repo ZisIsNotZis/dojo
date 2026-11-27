@@ -92,7 +92,20 @@ SKIP_PATTERNS = (
     r"^(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)(?:就|先)?(?:跳过|略过)(?:吧|了|一下)?$",
     r"^(?:下一|换一|另)(?:题|个|件|条|步|问)$",
     r"^(?:不想说|不想回答|不想讲|不说了|不答了|不回答|答不上来)(?:了|吧|啦)?$",
+    # Asking is how people ask. "能先跳过这一题吗" is the same request with a question
+    # mark; it used to be recorded as his answer to the part (measured at the entry
+    # point). Only a request whose whole clause *starts* with the asking is allowed.
+    r"^(?:能|可以|可不可以|能否|能不能|可以不可以|让我|容我)?"
+    r"(?:先|就|我|麻烦|请)*(?:先)?(?:跳过|略过)"
+    r"(?:这|那|这一|这一个|此)?(?:一)?(?:题|件|个|步|条)?(?:吗|么|嘛|吧|呢)?$",
+    # "这题先跳过，下一题吧" -- a skip followed by a move-on is still a skip of this one.
+    r"^(?:这|那|这一|这一个)?(?:一)?(?:题|件|个|步|条)?(?:就|先)?(?:跳过|略过)"
+    r"(?:吧|了|一下)?，?(?:下一|换一|另|下)(?:题|个|件|条|步|问)(?:吧|了|啊)?$",
 )
+# "用不着" plus a verb is a skip written as a lack of need, e.g. "这题用不着答了".
+SKIP_NEEDLESS = "用不着"
+# "这题先跳过吧，然后我们下一个" -- the move-on may carry a particle in between.
+SKIP_MOVE_ON = ("下一题", "下一个", "换一个", "换一题", "下一个问题", "下一问")
 SKIP_HEDGES = ("我还没想好", "还没想好", "没想好", "想不起来", "不确定", "以后再说", "先这样", "回头再说", "暂时不")
 
 # A request about *the questions still to come* is not an answer to the one on screen,
@@ -132,7 +145,7 @@ SKIP_REST_ALL = 99
 SKIP_PREFIX_DIGITS = {"一": 1, "二": 2, "两": 2, "俩": 2, "三": 3, "四": 4,
                       "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
 SKIP_REST_VERBS = (
-    "跳过", "略过", "不答了", "不答", "不说了", "不说", "不讲了", "不讲", "不聊了", "不聊",
+    "跳过去", "略过去", "跳过", "略过", "不答了", "不答", "不说了", "不说", "不讲了", "不讲", "不聊了", "不聊",
     "不回答", "不想答", "不想说", "不想讲", "不想聊", "不想问", "不想停", "免了",
 )
 SKIP_VERB_TAIL = ("了", "吧", "啦", "一下", "先")
@@ -153,6 +166,13 @@ def _normalize_skip(text: str) -> str:
 
 def _strip_skip_verb(core: str) -> tuple[str, str] | None:
     """Split a request into (prefix, verb). The verb has to end the sentence."""
+    if SKIP_NEEDLESS in core and SKIP_NEEDLESS not in SKIP_VERB_TAIL:
+        # "这题用不着答了": the lack of need is the verb, and what follows is the manner.
+        prefix, _sep, rest = core.partition(SKIP_NEEDLESS)
+        rest = rest.rstrip("了啦吧")
+        if rest in ("答", "说", "讲", "聊", "问", "回答", ""):
+            return prefix, SKIP_NEEDLESS
+        return None
     for tail in SKIP_VERB_TAIL:
         if core.endswith(tail) and len(core) > len(tail):
             core = core[: -len(tail)]
@@ -169,6 +189,30 @@ def _consume_tokens(prefix: str) -> str:
     return prefix
 
 
+# "改回上一题" -- take back the last thing he did with a part. An explicit instruction, not
+# an inference: the shape text tells him to say exactly this, so it has to work.
+# Every group is optional except the verb: with all of them optional the pattern matched the
+# empty string, so every blank line was read as "take that back" and the part looped forever
+# (caught by the all-blank test).
+SKIP_BACK_PATTERN = re.compile(
+    r"^(?:那|好|还是|算了|不对)?(?:我)?(?:想)?(?:改回|改到|回到|退到)"
+    r"(?:刚才|上|上一|前一|前面)?(?:个|件|题|问)?(?:吧|了)?$"
+)
+
+
+def is_back_request(text: str) -> bool:
+    """Whether he asked to take back the last part.
+
+    Never true for a blank line. Not to check the pattern but the input: an empty reply is
+    "none" in every other reading, and letting it match here silently reopened the same
+    part forever (found by the all-blank test, not by reading the regex).
+    """
+    core = _normalize_skip(text)
+    if not core:
+        return False
+    return bool(SKIP_BACK_PATTERN.fullmatch(core))
+
+
 def skip_scope(text: str) -> int | None:
     """How many of the questions still to come he asked to lay down, if he asked at all.
 
@@ -183,11 +227,15 @@ def skip_scope(text: str) -> int | None:
         return None
     if any(marker in core for marker in SKIP_REST_STORY):
         return None
-    # A trailing hedge ("这几题先跳过，我还没想好") is allowed and nothing else is.
+    # A trailing hedge ("这几题先跳过，我还没想好") or a move-on ("…，下一题吧") is
+    # allowed and nothing else is: a second clause carrying a claim is material.
     for separator in ("，", ",", "；", ";"):
         if core.count(separator) == 1:
             first, rest = core.split(separator)
             if rest in SKIP_HEDGES or rest.rstrip("了啦吧") in SKIP_HEDGES:
+                core = first
+                break
+            if any(rest.startswith(move_on) for move_on in SKIP_MOVE_ON):
                 core = first
                 break
     else:
@@ -229,7 +277,35 @@ def is_skip_request(text: str) -> bool:
             if any(re.fullmatch(pattern, first) for pattern in SKIP_PATTERNS):
                 if rest in SKIP_HEDGES or rest.rstrip("了啦吧") in SKIP_HEDGES:
                     return True
+                if any(rest.startswith(move_on) for move_on in SKIP_MOVE_ON):
+                    return True
+    if SKIP_NEEDLESS in core:
+        # "这题用不着答了": the lack of need is a decline. Only accepted when what is
+        # left in front of it is this-question material, never a wider scope -- a wider
+        # scope needs a count or a remainder word, which `skip_scope` reads.
+        prefix, _sep, rest = core.partition(SKIP_NEEDLESS)
+        if rest.rstrip("了啦吧") in ("答", "说", "讲", "聊", "问", "回答", ""):
+            if not _consume_tokens(prefix):
+                return True
     return skip_scope(text) == 1
+
+
+def reads_like_a_skip_request(text: str) -> bool:
+    """Whether a sentence that was kept as material mentions skipping at all.
+
+    This is not a second parser and it decides nothing. It exists so the conversation can
+    **say what it understood** when the answer is kept: any whole-clause mention of a skip
+    verb that no story marker explains. "剩下那几个我都没讲" is still kept as his words,
+    and the screen says so, which is the only thing the person can act on. Replying
+    "跳过" then ends the part item for real.
+    """
+    core = _normalize_skip(text)
+    if not core:
+        return False
+    if any(marker in core for marker in SKIP_REST_STORY):
+        return False
+    mentions = list(SKIP_REST_VERBS) + [SKIP_NEEDLESS, "跳过去", "略过去"]
+    return any(verb in core for verb in mentions)
 
 
 def classify_answer(text: str) -> str:

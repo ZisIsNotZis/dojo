@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 from dojo.discuss import closing_text, run_discuss
-from dojo.elicit import PART_ORDER, QUESTIONS, classify_answer
+from dojo.elicit import PART_ORDER, QUESTIONS, classify_answer, is_back_request
 from dojo.storage import Store
 
 CONCLUSION = {
@@ -430,6 +430,141 @@ class ClosingLineTests(unittest.TestCase):
         shown = self.host_lines(text)
         self.assertIn(QUESTIONS["失效"]["ask"], shown)
         self.assertNotIn(QUESTIONS["代价"]["ask"], shown)
+
+    def test_asking_politely_to_skip_is_a_skip_not_an_answer(self):
+        """"能先跳过这一题吗？" and "这题先跳过，下一题吧" are the same request.
+
+        Both were recorded as his answer to the part (measured at the entry point), which
+        is the defect this slice exists for. Asking is how people ask.
+        """
+        for phrase in ("能先跳过这一题吗？", "可以跳过吗", "这题先跳过，下一题吧",
+                       "这题先跳过吧，下一题", "这题用不着答了"):
+            self.assertEqual("skip", classify_answer(phrase), phrase)
+            code, text = self.run_session((phrase, "检查的活搬走了，我自己判断少了"))
+            self.assertEqual(0, code)
+            end = self.recorded()
+            self.assertEqual(["情境"], end["skipped"], phrase)
+            self.assertEqual(["张力"], end["collected"], phrase)
+            self.assertIn("你说跳过 情境", self.closing_line(text))
+
+    def test_a_skip_shaped_sentence_that_is_kept_says_so_on_screen_and_in_the_receipt(self):
+        """The parser will miss phrasings. When it does, nothing is decided for him --
+        but the product says what it understood, so he can say "跳过" and be heard.
+        """
+        phrase = "这题先跳过吧，然后我们下一个"
+        self.assertEqual("answer", classify_answer(phrase))
+        code, text = self.run_session((phrase, "检查的活搬走了，我自己判断少了",
+                                       "第一次觉得亏是没人再复核",
+                                       "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        # His words stay exactly as spoken: kept as material, not read as a request.
+        self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertEqual(["情境"], end["uncertain"])
+        events = [row for row in self.trace() if row.get("event") == "elicitation"]
+        self.assertEqual(phrase, events[0]["answer"])
+        self.assertEqual("answer", events[0]["reading"])
+        # The screen says what it understood, at the moment it happens -- and the way out
+        # it names is one the program really performs (see the correction test below).
+        self.assertIn("这句我按你的原话收下了。想重来就说「改回上一题」。", text)
+        # And the receipt does not call it a plain answer.
+        line = self.closing_line(text)
+        self.assertIn("你提到跳过的那句我按原话收在 情境 里", line)
+        self.assertNotIn("你答了 情境", line)
+
+    def test_the_short_word_and_the_correction_are_announced_before_they_are_needed(self):
+        """The note promised "直接说「跳过」" for a part already answered -- advice that
+        could not work, because the product had no way to go back. Now the shape text says
+        the short word up front and names a correction the program really performs.
+        """
+        code, text = self.run_session((SKIP,) * 4)
+        self.assertEqual(0, code)
+        self.assertIn("想略过就说「跳过」；说错了，下一句说「改回上一题」。", text)
+        # The correction has to be a real instruction, not a phrase in a sentence.
+        self.assertEqual("answer", classify_answer("改回上一题"))
+        self.assertTrue(is_back_request("改回上一题"))
+        self.assertFalse(is_back_request(""), "空行不能读成“改回上一题”")
+        # Said before the first question, not after a missed guess.
+        shape_at = text.index("想略过就说「跳过」")
+        self.assertLess(shape_at, text.index(QUESTIONS["情境"]["ask"]))
+
+    def test_the_correction_actually_reopens_the_part(self):
+        """Every promise the receipt makes has to be executable (#3363).
+
+        Two wrong shapes were caught here before this passed: `continue` only advanced the
+        inner turn loop, so the part was never asked again; inserting the part left the one
+        that was interrupted skipped. Both looked fine in the trace.
+        """
+        # A sentence kept as material, then taken back, then answered properly.
+        code, text = self.run_session(
+            ("这题先跳过吧，然后我们下一个", "改回上一题",
+             "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
+             "第一次觉得亏是没人再复核", "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertEqual([], end["uncertain"])
+        self.assertIn("好，退回「情境」。", text)
+        self.assertIn("四件你都答了", self.closing_line(text))
+        readings = [row["reading"] for row in self.trace()
+                    if row.get("event") == "elicitation" and row.get("part") == "情境"]
+        self.assertEqual(["answer", "undo", "answer"], readings)
+
+        # A skip request taken back: the receipt must not still say it was skipped.
+        code, text = self.run_session(
+            ("跳过", "改回上一题", "上次是把一套检查交给别人的时候",
+             "检查的活搬走了，我自己判断少了", "第一次觉得亏是没人再复核",
+             "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual([], end["skipped"])
+        self.assertEqual(list(PART_ORDER), end["collected"])
+        self.assertNotIn("你说跳过", self.closing_line(text))
+
+    def test_a_correction_survives_a_resumed_session(self):
+        """Resume used to rebuild a different story than the screen it resumed (#3363).
+
+        Two independent reconstructions (the live lists and a scan of the trace) disagreed
+        after an undo: a part taken back and then skipped came back as answered, and a
+        part asked after "next two" was reported as set aside. There is now one replay,
+        and both the receipt and `--resume` read it.
+        """
+        from dojo.discuss import _load_resume_trace
+
+        # 情境: skipped, taken back, then answered.
+        code, text = self.run_session(
+            ("跳过", "改回上一题", "上次是把一套检查交给别人的时候",
+             "检查的活搬走了，我自己判断少了", "第一次觉得亏是没人再复核",
+             "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        path = sorted((self.root / "sessions").glob("*.jsonl"))[-1]
+        resumed = _load_resume_trace(path)
+        self.assertEqual(end["collected"], resumed["elicitation_collected"])
+        self.assertEqual(end["skipped"], resumed["elicitation_skipped"])
+        self.assertEqual([], resumed["elicitation_skipped"])
+        self.assertNotIn("你说跳过", self.closing_line(text))
+
+
+    def test_a_counted_request_leaves_the_last_part_his_and_resume_agrees(self):
+        """"接下来两题先跳过" at the first question covers 张力 and 代价, not 失效.
+
+        A part he reached and answered afterwards is his -- it must not stay in the
+        "set aside" list, on screen or after a resume (#3363).
+        """
+        from dojo.discuss import _load_resume_trace
+
+        code, text = self.run_session(("接下来两题先跳过", "有一次我照着做反而漏了"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["失效"], end["collected"])
+        self.assertEqual(["张力", "代价"], end["declined"])
+        path = sorted((self.root / "sessions").glob("*.jsonl"))[-1]
+        resumed = _load_resume_trace(path)
+        self.assertEqual(end["collected"], resumed["elicitation_collected"])
+        self.assertEqual(end["declined"], resumed["elicitation_declined"])
+        self.assertEqual(2, resumed["elicitation_declined_count"])
+        self.assertIn("你答了 失效", self.closing_line(text))
 
     def test_the_whole_set_forms_read_as_one_outcome(self):
         for phrase in ("这几题我想先跳过", "这几题先跳过吧", "剩下几件先跳过",

@@ -25,6 +25,8 @@ from .elicit import (
     QUESTIONS,
     authorship,
     classify_answer,
+    is_back_request,
+    reads_like_a_skip_request,
     skip_scope,
     SKIP_REST_ALL,
     draft_line,
@@ -103,7 +105,10 @@ def provenance_sentence(reading: dict[str, Any]) -> str:
 SHAPE_HEAD = (
     "这条已经写下来了。接下来我问你四件事——情境、张力、代价、失效。"
     "问的都是你刚写下的这条，不是一张问卷。\n"
-    "一次问一件，每件最多两轮；答不上来就跳过，这场照样往下走，想停随时结束输入。"
+    "一次问一件，每件最多两轮；答不上来就跳过，这场照样往下走，想停随时结束输入。\n"
+    # Said before it is needed, and said in the words the product actually reads. A note
+    # that appeared only after a missed guess would be advice nobody can use yet (#3363).
+    "想略过就说「跳过」；说错了，下一句说「改回上一题」。"
 )
 # The retention half has to follow this session's setting. With --no-trace the opening
 # already says the transcript is off, so promising here that his words are kept would be
@@ -127,7 +132,7 @@ def closing_text(
     collected: list[str], skipped: list[str], supplied: list[str], *,
     kept: bool = True, unfinished: list[str] | None = None,
     stopped_at: str | None = None, declined: list[str] | None = None,
-    declined_count: int | None = None,
+    declined_count: int | None = None, uncertain: list[str] | None = None,
 ) -> str:
     """What the person is owed after the four questions: what each one became, and
     what the answers are actually used for.
@@ -164,15 +169,22 @@ def closing_text(
     never = ordered(unfinished or [])
     rested = ordered(declined or [])
     halted = ordered([stopped_at] if stopped_at else [])
+    # Parts whose only answer mentioned skipping but was kept as his words. Calling these
+    # "你答了" would be the same defect this slice exists to remove, so they get their own
+    # clause and his words stay exactly as spoken.
+    unsure = [part for part in ordered(uncertain or []) if part in said]
+    said = [part for part in said if part not in unsure]
     # "四件问完了" is only true if all four really were put to them. Somebody who stopped
     # early, or asked for the rest to be dropped, gets an honest receipt without it.
     opener = "问到这里停了：" if (never or rested or halted) else "四件问完了："
-    if said and len(said) == len(PART_ORDER):
+    if said and len(said) == len(PART_ORDER) and not unsure:
         head = opener + "四件你都答了。"
     else:
         pieces = []
         if said:
             pieces.append("你答了 " + "、".join(said))
+        if unsure:
+            pieces.append("你提到跳过的那句我按原话收在 " + "、".join(unsure) + " 里")
         if left:
             pieces.append("你说跳过 " + "、".join(left))
         if halted:
@@ -805,6 +817,88 @@ def _search_failure_message(query: str, retrieved_at: datetime, message: str) ->
     )
 
 
+def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Replay the elicitation events into what became of each part.
+
+    The trace is append-only, so every ending -- including an undo -- is a row. Replaying
+    in order means the *last* row for a part decides, which is exactly what the live
+    session shows. Before this there were two reconstructions of the same state (the live
+    lists and this scan), and they disagreed after an undo: a part taken back and skipped
+    came back as answered on resume, and a part that was asked after "next two" was
+    reported as set aside (#3363, found by resuming).
+
+    The summary written at session_end is *not* the input here. It is a snapshot of this
+    replay, so reading it would reintroduce a second source of truth.
+    """
+    collected: list[str] = []
+    skipped: list[str] = []
+    supplied: list[str] = []
+    declined: list[str] = []
+    uncertain: list[str] = []
+    declined_count: int | None = None
+
+    def drop(part: str) -> None:
+        for bucket in (collected, skipped, supplied, declined, uncertain):
+            if part in bucket:
+                bucket.remove(part)
+
+    for row in events:
+        part = row.get("part")
+        reading = row.get("reading")
+        if not isinstance(part, str) or part not in PART_KEYS:
+            continue
+        if reading == "undo":
+            # Take back everything that part became -- including a group decline whose
+            # number is no longer true once one of its parts comes back.
+            drop(part)
+            declined_count = None
+            continue
+        if part in declined:
+            # He reached a part he had put aside, so it is not set aside any more, and the
+            # number he named no longer describes this session. Both the live receipt and
+            # resume read this, so they stay one conclusion (#3363).
+            declined_count = None
+            if reading is not None:
+                declined.remove(part)
+        if reading == "answer" and isinstance(row.get("answer"), str):
+            if classify_answer(row["answer"]) == "answer":
+                drop(part)
+                collected.append(part)
+                if row.get("answer") and row.get("uncertain"):
+                    uncertain.append(part)
+        elif reading in {"skip", "skip_rest"}:
+            drop(part)
+            skipped.append(part)
+        if reading == "skip_rest":
+            index = PART_ORDER.index(part)
+            # The number he named, when the row can still show it; otherwise the rest.
+            scope = skip_scope(row.get("answer") or "")
+            remaining = PART_ORDER[index + 1:]
+            covered = remaining if scope in (None, SKIP_REST_ALL) else remaining[:scope]
+            if scope not in (None, SKIP_REST_ALL):
+                declined_count = scope
+            for other in covered:
+                if other not in declined:
+                    declined.append(other)
+    # "Supplied" means both turns were used and it still is not his. A part whose question
+    # was on screen when the input ended is not that: it has its own word in the receipt,
+    # and a part that was never asked has another. Only the second turn counts.
+    for row in events:
+        part = row.get("part")
+        if (row.get("turn") == 2 and isinstance(part, str) and part in PART_KEYS
+                and part not in collected and part not in skipped):
+            if part not in supplied:
+                supplied.append(part)
+    for part in declined:
+        if part in supplied:
+            supplied.remove(part)
+    return {
+        "collected": collected, "skipped": skipped, "supplied": supplied,
+        "declined": declined, "uncertain": uncertain,
+        "declined_count": declined_count,
+    }
+
+
 def _load_resume_trace(path: Path) -> dict[str, Any]:
     """Validate a program-shaped discussion trace without opening it for writing."""
     allowed_reasons = {
@@ -863,6 +957,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     raise ValueError("追问记录缺少必要字段")
                 if value["part"] not in QUESTIONS:
                     raise ValueError("追问记录的件不在四件里")
+                # "undo" is a correction, not an answer: it is recorded once, on turn 1.
                 if value["turn"] not in (1, 2) or not isinstance(value["question"], str):
                     raise ValueError("追问记录的轮次或问句无效")
                 if value["answer"] is not None and not isinstance(value["answer"], str):
@@ -988,38 +1083,18 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                 raise ValueError("无法续跑轨迹：搜索时间无效") from None
         search_count += len(search_records)
     end_summary = next((end.get("elicitation") for end in ends if isinstance(end.get("elicitation"), dict)), None)
-    # Old "promoted" flags only meant a nonempty attempt, not a field mapping.
-    # Recover the answers as collected material, never as an authorship guarantee.
-    elicitation_collected = list(dict.fromkeys(
-        row["part"] for row in elicitations
-        if row.get("reading") == "answer" and isinstance(row.get("answer"), str)
-        and classify_answer(row["answer"]) == "answer"
-    ))
+    # Old "promoted" flags only meant a nonempty attempt, not a field mapping. Recover the
+    # answers as collected material, never as an authorship guarantee.
+    #
+    # One replay decides what each part became, the same one the live receipt uses. The
+    # summary at the end of the trace is a snapshot of that replay, not a second source:
+    # reading it back is how resume and the screen came to disagree (#3363).
+    state = elicitation_state(elicitations)
+    elicitation_collected = state["collected"]
     elicitation_promoted: list[str] = []
-    elicitation_skipped = list(dict.fromkeys(
-        row["part"] for row in elicitations
-        if row.get("reading") == "skip" or row.get("reading") == "skip_rest"
-    ))
-    # Parts he put down as a group, plus the ones the group covered: the summary records
-    # them so a resumed session does not offer to ask them again.
-    elicitation_declined: list[str] = []
-    if end_summary is not None and isinstance(end_summary.get("declined"), list):
-        elicitation_declined = [
-            part for part in end_summary["declined"] if part in PART_KEYS
-        ]
-    for row in elicitations:
-        if row.get("reading") == "skip_rest" and isinstance(row.get("part"), str):
-            index = PART_ORDER.index(row["part"]) if row["part"] in PART_ORDER else None
-            if index is not None:
-                elicitation_declined.extend(PART_ORDER[index + 1:])
-    elicitation_declined = list(dict.fromkeys(
-        part for part in PART_ORDER if part in elicitation_declined
-    ))
-    elicitation_supplied = list(dict.fromkeys(
-        row["part"] for row in elicitations
-        if row.get("turn") == 2 and row["part"] not in elicitation_collected
-        and row["part"] not in elicitation_skipped
-    ))
+    elicitation_skipped = state["skipped"]
+    elicitation_declined = state["declined"]
+    elicitation_supplied = state["supplied"]
     elicitation_turns = len(elicitations)
     elicitation_entry = end_summary.get("entry") if end_summary is not None else None
     return {
@@ -1032,9 +1107,8 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         "elicitation_collected": elicitation_collected,
         "elicitation_skipped": elicitation_skipped,
         "elicitation_declined": elicitation_declined,
-        "elicitation_declined_count": (
-            end_summary.get("declined_count") if end_summary is not None else None
-        ),
+        "elicitation_declined_count": state["declined_count"],
+        "elicitation_uncertain": state["uncertain"],
         "elicitation_supplied": elicitation_supplied,
         "elicitation_turns": elicitation_turns,
         "elicitation_entry": elicitation_entry,
@@ -1259,6 +1333,7 @@ def run_discuss(
         "skipped": list((resume_state or {}).get("elicitation_skipped", [])),
         "declined": list((resume_state or {}).get("elicitation_declined", [])),
         "declined_count": (resume_state or {}).get("elicitation_declined_count"),
+        "uncertain": list((resume_state or {}).get("elicitation_uncertain", [])),
         "events": [],
     }
 
@@ -1279,6 +1354,8 @@ def run_discuss(
             # material, and not something he failed to answer.
             "declined": list(elicitation["declined"]),
             "declined_count": elicitation["declined_count"],
+            # Parts kept as his words although the sentence mentioned skipping.
+            "uncertain": list(elicitation["uncertain"]),
             "unanchored": list(part_sources),
             "supplied": list(elicitation["supplied"]),
             "part_sources": part_sources,
@@ -1296,28 +1373,25 @@ def run_discuss(
             # a question was actually put on screen: the EOF event for the question being
             # asked is recorded, so it is "stopped here", and a part whose ask was never
             # printed (after "剩下的先不答") has no event at all, so it is "not asked".
+            # Read the receipt off the same replay that resume uses, so the screen and a
+            # later `--resume` can only ever show one conclusion (#3363).
+            state = elicitation_state(elicitation["events"])
             asked_parts = {event["part"] for event in elicitation["events"]}
-            if declined is None:
-                declined = list(elicitation["declined"])
-            if declined_count is None:
-                declined_count = elicitation["declined_count"]
-            set_aside = set(declined)
+            set_aside = set(state["declined"])
             never = [part for part in PART_ORDER
                      if part not in asked_parts and part not in set_aside]
             missed = [
                 part for part in PART_ORDER
-                if part not in elicitation["collected"]
-                and part not in elicitation["skipped"]
-                and part not in never
-                and part not in set_aside
+                if part in state["supplied"] and part not in never
                 and part != stopped_at
             ]
             print(
                 "\n主持人> " + closing_text(
-                    elicitation["collected"], elicitation["skipped"], missed,
+                    state["collected"], state["skipped"], missed,
                     kept=trace_is_open, unfinished=never or None,
-                    stopped_at=stopped_at, declined=declined or None,
-                    declined_count=declined_count,
+                    stopped_at=stopped_at, declined=state["declined"] or None,
+                    declined_count=state["declined_count"],
+                    uncertain=state["uncertain"],
                 ),
                 file=output,
             )
@@ -1328,7 +1402,7 @@ def run_discuss(
         # or when silence would end them -- leaving was the only way to find out.
         print("\n主持人> " + shape_text(trace_is_open), file=output)
 
-        def record(part_name: str, turn: int, question: str, answer: str | None, reading: str, *, input_chars: int | None = None) -> None:
+        def record(part_name: str, turn: int, question: str, answer: str | None, reading: str, *, input_chars: int | None = None, uncertain: bool = False) -> None:
             event = {
                 "event": "elicitation",
                 "part": part_name,
@@ -1344,14 +1418,23 @@ def run_discuss(
             if input_chars is not None:
                 event["answer_chars"] = input_chars
                 event["error"] = "user_turn_too_large"
+            if uncertain:
+                # Kept as his words although the sentence mentioned skipping. On the row,
+                # so the replay (and resume) see exactly what the live screen saw.
+                event["uncertain"] = True
             elicitation["events"].append(event)
             elicitation["turns"] += 1
             if trace is not None:
                 trace.append(event)
             note(f"追问 {part_name} 第 {turn} 轮：{reading}")
 
+        last_collected: str | None = None  # the part the last action landed on, for "改回上一题"
         drop = 0  # parts covered by a "next N" request: never asked, never his material
-        for part_name in PART_ORDER:
+        part_names = list(PART_ORDER)
+        index = 0
+        while index < len(part_names):
+            part_name = part_names[index]
+            index += 1
             if drop:
                 drop -= 1
                 continue
@@ -1363,6 +1446,31 @@ def run_discuss(
                     raw = _ask(read_line)
                 except KeyboardInterrupt:
                     raise
+                if raw is not None and is_back_request(raw) and last_collected is not None:
+                    # "改回上一题" has to be read before anything else looks at the line:
+                    # the tests showed a follow-up turn swallowing it as a non-answer, so
+                    # the correction silently did nothing. It undoes whatever the last
+                    # part became -- answered, skipped, or set aside -- and asks it again.
+                    undoing = last_collected
+                    last_collected = None
+                    for bucket in ("collected", "skipped", "supplied", "declined", "uncertain"):
+                        if undoing in elicitation[bucket]:
+                            elicitation[bucket].remove(undoing)
+                    elicitation["declined_count"] = None
+                    drop = 0
+                    # A part that was set aside by "next N" comes back into the asking:
+                    # without this the loop ends again the moment he answers it.
+                    if index >= len(part_names):
+                        part_names.append(undoing)
+                        index = len(part_names) - 1
+                    print("好，退回「" + undoing + "」。", file=output)
+                    record(undoing, 1, QUESTIONS[undoing]["ask"], raw, "undo")
+                    # Reopen that part by pointing the outer loop back at it -- NOT by
+                    # `continue`, which only advances the inner turn loop (the part was
+                    # then never asked again), and not by inserting, which left the
+                    # interrupted part skipped (both measured).
+                    index = part_names.index(undoing)
+                    break
                 if raw is None:
                     record(part_name, turn, question, None, "eof")
                     # The person who leaves early is exactly the one the entry block
@@ -1376,14 +1484,29 @@ def run_discuss(
                         file=output,
                     )
                     record(part_name, turn, question, None, "too_large", input_chars=len(raw))
+                    last_collected = part_name
                 else:
                     reading = classify_answer(raw)
                     if reading == "structured":
                         print("用一句话说就行；这里不填表。", file=output)
                         reading = "none"
                     record(part_name, turn, question, raw, reading)
+                    last_collected = part_name
                     if reading == "answer":
                         elicitation["collected"].append(part_name)
+                        # Say what was understood when his words mention skipping: the
+                        # parser will miss phrasings, and this is what he can act on. It
+                        # changes no stored byte -- the words stay his material.
+                        if reads_like_a_skip_request(raw):
+                            elicitation["uncertain"].append(part_name)
+                            # Mark the row itself: the trace holds this very dict, so resume
+                            # replays the same fact instead of guessing it again.
+                            for event in reversed(elicitation["events"]):
+                                if event["part"] == part_name:
+                                    event["uncertain"] = True
+                                    break
+                            print("这句我按你的原话收下了。想重来就说「改回上一题」。", file=output)
+                        last_collected = part_name
                         break
                     if reading in {"skip", "skip_rest"}:
                         # He asked to skip. Re-asking would ignore what he just said, so
@@ -1404,15 +1527,18 @@ def run_discuss(
                                 elicitation["declined_count"] = counted
                             covered = remaining if scope in (None, SKIP_REST_ALL) else remaining[:scope]
                             elicitation["declined"].extend(covered)
+                            last_collected = part_name
                             if covered and len(covered) == len(remaining):
                                 print("好，剩下的先不问；已经问过的照旧留在本场记录里。", file=output)
                                 print_closing(declined=covered, declined_count=counted)
                                 return "declined"
-                            print("好，这几件先不问。", file=output)
-                            if covered:
-                                drop = len(covered)
-                                break
+                            # A counted request leaves questions after it, so the asking
+                            # continues -- he may correct himself, and the receipt is
+                            # printed once at the end, not here (#3363).
+                            print("好，接下来 " + str(len(covered)) + " 题先不问。", file=output)
+                            drop = len(covered)
                         print("好，这一件跳过。", file=output)
+                        last_collected = part_name
                         break
                 if turn == 2:
                     elicitation["supplied"].append(part_name)

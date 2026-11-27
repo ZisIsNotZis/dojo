@@ -47,6 +47,9 @@ ALL_FOUR = ("上次是把一套检查交给别人的时候", "检查的活搬走
 STOPPED = ("上次是把一套检查交给别人的时候",)
 DROP_REST = ("上次是把一套检查交给别人的时候", "这几题我想先跳过")
 DROP_TWO = ("上次是把一套检查交给别人的时候", "接下来两题先跳过")
+POLITE = ("能先跳过这一题吗？", "检查的活搬走了，我自己判断少了")
+FALLBACK = ("这题先跳过吧，然后我们下一个", "检查的活搬走了，我自己判断少了",
+            "第一次觉得亏是没人再复核", "有一次我照着做反而漏了")
 MATERIAL = ("上次是把一套检查交给别人的时候：剩下的流程我都不讲给新人听",
             "检查的活搬走了，我自己判断少了",
             "第一次觉得亏是没人再复核",
@@ -156,8 +159,10 @@ def main() -> int:
     code_rest, text_rest, events_rest, end_rest, rows_rest = session(DROP_REST)
     code_two, text_two, events_two, end_two, rows_two = session(DROP_TWO)
     code_mat, text_mat, events_mat, end_mat, rows_mat = session(MATERIAL)
+    code_pol, text_pol, _, end_pol, _ = session(POLITE)
+    code_fb, text_fb, events_fb, end_fb, _ = session(FALLBACK)
 
-    if any((code_stop, code_rest, code_two, code_mat)):
+    if any((code_stop, code_rest, code_two, code_mat, code_pol, code_fb)):
         print("FAIL  有一场没有正常结束", file=sys.stderr)
         return 1
 
@@ -215,6 +220,17 @@ def main() -> int:
         "每件只有一个结局词": all(
             all(count <= 1 for count in part_counts(line).values())
             for line in (line_stop, line_rest, line_two, line_mat)
+        ),
+        "问着说跳过也是跳过": (
+            end_pol["elicitation"]["skipped"] == ["情境"]
+            and end_pol["elicitation"]["collected"] == ["张力"]
+            and "你说跳过 情境" in closing(text_pol)
+        ),
+        "认不出的说法既不丢也不冒充回答": (
+            end_fb["elicitation"]["collected"] == list(PART_ORDER)
+            and end_fb["elicitation"]["uncertain"] == ["情境"]
+            and "这句我按你的原话收下了" in text_fb
+            and "你提到跳过的那句我按原话收在 情境 里" in closing(text_fb)
         ),
         "不声称回答进了卡片": (
             card_fixed and "没有写进卡片" in line_mat
