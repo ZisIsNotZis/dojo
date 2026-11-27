@@ -394,15 +394,27 @@ class Store:
         return json.loads(row["state_json"])
 
     def _write(self, state: dict[str, Any], event: str, details: dict[str, Any]) -> dict[str, Any]:
-        """Persist a new version, unless this request would change nothing.
+        """Persist a new version unless this request would change nothing.
 
-        A request whose intended effect is already the stored state -- an identical
-        `confirm`, `challenge` or `revise` sent twice -- must not read as a second
-        action. Version numbers are what the pipeline's "processed to version N"
-        marks compare against, so inflating one on a repeat turns finished work back
-        into pending work. RFC 9110 section 9.2.2 allows a server to log each repeat
-        separately; what it does not allow is leaving the two indistinguishable to a
-        later reader, so the repeat is recorded as its own event naming the original.
+        Two questions that look like one, kept apart here because merging them lost
+        a reason:
+
+        *Did the stored card change?* Version numbers are what the pipeline's
+        "processed to version N" marks compare against, so inflating one over an
+        unchanged card turns finished work back into pending work. Only a change in
+        the stored state moves the version.
+
+        *Is this the same request again?* Two different requests can leave the card
+        in the same state. `revise` a card to the same sentence for a second, new
+        reason is the case that made this necessary: the wording is already there,
+        so nothing moves, but the reason is a fact the reader needs. Recording it as
+        `<event>.repeat` of the first one would file a new argument under an old
+        one. A repeat is the same request (same event, same asked-for details)
+        arriving twice, not merely the same resulting state.
+
+        Either way the version stays put and the ledger keeps a row: RFC 9110
+        section 9.2.2 permits logging each request, and refuses to leave a replay
+        and a real second action indistinguishable.
         """
         candidate_id = state["id"]
         current = self._get(candidate_id)
@@ -410,14 +422,19 @@ class Store:
         unchanged = {key: value for key, value in state.items() if key != "version"} == {
             key: value for key, value in current.items() if key != "version"}
         if unchanged:
-            original = self.connection.execute(
-                "SELECT seq FROM events WHERE candidate_id=? AND event=? ORDER BY seq DESC LIMIT 1",
-                (candidate_id, event),
-            ).fetchone()
-            self._event(candidate_id, event + REPEAT_EVENT_SUFFIX, {
-                **details, "version": current["version"],
-                "repeat_of": original["seq"] if original else None,
-                "effect": "unchanged",
+            repeat_of = self._same_request(candidate_id, event, details)
+            if repeat_of is not None:
+                self._event(candidate_id, event + REPEAT_EVENT_SUFFIX, {
+                    **details, "version": current["version"],
+                    "repeat_of": repeat_of,
+                    "effect": "unchanged",
+                })
+                return current
+            # A different request with the same effect: the card does not move, but
+            # this is not a replay, so it is written under its own name with the
+            # version it left in place.
+            self._event(candidate_id, event, {
+                **details, "version": current["version"], "effect": "unchanged",
             })
             return current
         state["version"] = current["version"] + 1
@@ -434,6 +451,31 @@ class Store:
         self._event(candidate_id, event, {**details, "version": state["version"]})
         return state
 
+    def _same_request(self, candidate_id: str, event: str, details: dict[str, Any]) -> int | None:
+        """The seq of an earlier row that recorded this same request, or None.
+
+        Compared on what the caller *asked for*, not on the state it produced: the
+        reason a `revise` was sent and the basis a `confirm` was given. Bookkeeping
+        that every write adds is skipped, because it differs between two runs of the
+        same request and says nothing about intent: `version` (where the card was),
+        `from_statement` (the wording being left), `effect` and `repeat_of`.
+        """
+        if not details:
+            return None
+        wanted = {key: value for key, value in details.items()
+                  if key not in _REQUEST_BOOKKEEPING}
+        if not wanted:
+            return None
+        rows = self.connection.execute(
+            "SELECT seq,details_json FROM events WHERE candidate_id=? AND event=? ORDER BY seq DESC",
+            (candidate_id, event),
+        ).fetchall()
+        for row in rows:
+            earlier = json.loads(row["details_json"])
+            if {key: value for key, value in earlier.items()
+                    if key not in _REQUEST_BOOKKEEPING} == wanted:
+                return int(row["seq"])
+        return None
     def _source(self, source: dict[str, Any]) -> dict[str, str]:
         if not isinstance(source, dict):
             raise DojoError("each source must be a JSON object")
@@ -1996,12 +2038,21 @@ def is_unaccepted_draft(state: dict[str, Any]) -> bool:
 
 ACCEPTANCE_EVENT = "wording_accepted"
 # A repeated request whose effect was already stored writes `<event>.repeat` and names the
+# A repeated request whose effect was already stored writes `<event>.repeat` and names the
 # event it repeats. The version does not move: a repeat must not read as a second action,
 # and `pipeline_marks` compares against versions, so moving one would make finished work
 # pending again. The row exists so a later reader can tell a replay from a real second
 # action -- RFC 9110 section 9.2.2 permits logging each request, not blurring them.
+#
+# "The same request" is decided by what was asked for, not by the state it produced:
+# revising to the same sentence for a new reason leaves the card in the same state and is
+# still a new fact, so it is written as its own event (version unchanged, `effect`
+# `unchanged`) with no `repeat_of`. See `_same_request`.
 REPEAT_EVENT_SUFFIX = ".repeat"
-# A merge the store refused, written on the source card's ledger. A refusal changes no
+# Details that every write adds and that differ between two runs of the *same* request,
+# so they cannot be part of "is this the same request": where the card's version was,
+# which wording it left, and the repeat bookkeeping itself.
+_REQUEST_BOOKKEEPING = frozenset({"version", "from_statement", "effect", "repeat_of"})
 # version -- refusing to do something must not look like doing it -- but it does leave a
 # row, so `dojo events --id` can show that the rule fired and on which two cards, instead
 # of the command failing with only a message nobody kept.

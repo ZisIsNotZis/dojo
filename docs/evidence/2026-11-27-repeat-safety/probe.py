@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Re-measure both decisions in this slice. Offline; no network, no model.
 
-    python3 -B docs/evidence/2026-11-29-repeat-safety/probe.py
+    python3 -B docs/evidence/2026-11-27-repeat-safety/probe.py
 
 Scenario A drives the real `OpenAICompatibleClient` and the real `run_discuss`
 against a local stub that answers 200 with a Content-Length and then sends fewer
@@ -12,7 +12,12 @@ Scenario B drives the real store. It confirms a card, marks it "processed to
 version N" the way a pipeline pass does, then confirms it with the identical
 request and asks whether the mark still holds.
 
-Both halves print one JSON object. Nothing here writes outside a temp directory.
+Scenario C is the same store seen from the other side: two *different* requests
+that leave the card in the same state. Revising a card to the sentence it already
+has, for a second and new reason, must keep the version (the wording did not
+change) and must not file the new reason as a replay of the first.
+
+All three print one JSON object. Nothing here writes outside a temp directory.
 """
 import io
 import json
@@ -141,6 +146,35 @@ def scenario_b():
     }
 
 
+def scenario_c():
+    store = Store(str(Path(tempfile.mkdtemp(prefix="probe-c-")) / "lib.sqlite3"))
+    store.add("卡片文案", "abstract_idea", candidate_id="c-one", scope=["探针"])
+    store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
+    after_first = store.show("c-one")["candidate"]["version"]
+    store.revise("c-one", "同一句话", "触屏读屏需要一个可读状态")
+    after_second = store.show("c-one")["candidate"]["version"]
+    store.revise("c-one", "同一句话", "触屏读屏需要一个可读状态")   # the actual replay
+    events = store.history("c-one")["events"]
+    revisals = [e for e in events if e["event"].startswith("revise")]
+    second = [e for e in revisals if e["event"] == "revise"
+              and e["details"].get("reason") == "触屏读屏需要一个可读状态"]
+    repeat = revisals[-1]
+
+    return {
+        "version_after_first_reason": after_first,
+        "version_after_a_new_reason": after_second,
+        "a_new_reason_moves_the_version": after_second != after_first,
+        "rows_for_the_two_reasons": [e["event"] for e in revisals[:2]],
+        "the_new_reason_is_not_a_repeat": bool(second) and "repeat_of" not in second[0]["details"],
+        "reasons_in_the_ledger": [e["details"].get("reason") for e in revisals],
+        "the_actual_replay_is_marked": repeat["event"],
+        "version_after_the_replay": store.show("c-one")["candidate"]["version"],
+    }
+
+
 if __name__ == "__main__":
-    print(json.dumps({"scenario_a": scenario_a(), "scenario_b": scenario_b()},
-                     ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "scenario_a": scenario_a(),
+        "scenario_b": scenario_b(),
+        "scenario_c": scenario_c(),
+    }, ensure_ascii=False, indent=2))

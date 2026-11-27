@@ -201,6 +201,54 @@ class ARepeatIsNotASecondAction(unittest.TestCase):
         self.store.challenge("c-one", "未必有益")
         self.assertEqual(version, self.store.show("c-one")["candidate"]["version"])
 
+    # --- same effect is not the same request -----------------------------------
+    # Merging those two questions is what filed a second argument under the first:
+    # the card reached the same wording either way, so "state unchanged" was read
+    # as "the same request again". Both halves are asserted, because a fix that
+    # kept every row distinct by bumping the version would pass the first alone.
+
+    def test_two_reasons_for_one_sentence_are_two_rows(self):
+        self.store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
+        self.store.revise("c-one", "同一句话", "触屏读屏需要一个可读状态")
+        events = self.store.history("c-one")["events"]
+        revisals = [e for e in events if e["event"].startswith("revise")]
+        self.assertEqual(
+            ["移动端同伴看不见活动灯", "触屏读屏需要一个可读状态"],
+            [e["details"].get("reason") for e in revisals])
+        # Neither is a replay of the other, so the second carries no pointer back.
+        self.assertNotIn("repeat_of", revisals[-1]["details"])
+        # The wording never changed, so the version did not move either: add=1,
+        # first revise=2, and the second reason leaves it at 2.
+        self.assertEqual(2, self.store.show("c-one")["candidate"]["version"])
+
+    def test_the_same_reason_twice_is_still_a_replay(self):
+        """The distinction must not turn into 'every revise is new'."""
+        self.store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
+        self.store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
+        events = self.store.history("c-one")["events"]
+        self.assertEqual("revise.repeat", events[-1]["event"])
+        # One real revise row, one replay row -- not two real ones.
+        self.assertEqual(1, len([e for e in events if e["event"] == "revise"]))
+        # ... and the pointer names the row for that same reason, not any revise.
+        row = self.store.connection.execute(
+            "SELECT details_json FROM events WHERE seq=?",
+            (events[-1]["details"]["repeat_of"],)).fetchone()
+        self.assertEqual("移动端同伴看不见活动灯",
+                         json.loads(row["details_json"])["reason"])
+
+    def test_a_second_reason_does_not_reopen_the_pipeline(self):
+        self.store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
+        version = self.store.show("c-one")["candidate"]["version"]
+        self.store.connection.execute(
+            "INSERT INTO pipeline_marks(session,pass_name,candidate_id,version,created_at)"
+            " VALUES('s1','distill','c-one',?,'2026-11-27T00:00:00Z')", (version,))
+        self.store.connection.commit()
+        self.store.revise("c-one", "同一句话", "触屏读屏需要一个可读状态")
+        self.assertEqual(version, self.store.show("c-one")["candidate"]["version"])
+        mark = self.store.connection.execute(
+            "SELECT version FROM pipeline_marks WHERE candidate_id='c-one'").fetchone()[0]
+        self.assertEqual(version, mark)
+
 
 if __name__ == "__main__":
     unittest.main()

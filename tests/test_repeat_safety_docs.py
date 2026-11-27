@@ -1,10 +1,15 @@
 """The repeat-safety evidence must keep matching what it measures.
 
-`docs/evidence/2026-11-29-repeat-safety/LOOP.md` states numbers: three requests
+`docs/evidence/2026-11-27-repeat-safety/LOOP.md` states numbers: three requests
 before, one after; version 2 before and after a repeat; a pipeline mark that
-stayed valid. Prose that quotes numbers is exactly the kind of thing that rots
-silently when the code moves, so the numbers are re-produced here from the
-committed probe and compared with what the doc says.
+stayed valid; two reasons for one sentence ending up in two rows. Prose that
+quotes numbers is exactly the kind of thing that rots silently when the code
+moves, so the numbers are re-produced here from the committed probe and compared
+with what the doc says.
+
+The front pages make two claims about this slice, and both are checked as routes
+rather than as wording: that the reader is pointed at the evidence, and that the
+block the page prints really shows the two reasons as separate rows.
 
 It also refuses two shapes that would make the evidence reassuring instead of
 true:
@@ -32,7 +37,7 @@ def _repo_root():
 
 
 ROOT = _repo_root()
-EVIDENCE = ROOT / 'docs' / 'evidence' / '2026-11-29-repeat-safety'
+EVIDENCE = ROOT / 'docs' / 'evidence' / '2026-11-27-repeat-safety'
 PROBE = EVIDENCE / 'probe.py'
 
 
@@ -95,6 +100,104 @@ class TheDocsNumbersAreTheProbesNumbers(unittest.TestCase):
     def test_the_doc_keeps_the_uncertainty_section(self):
         """A slice that reads as settled invites the next reader to stop checking."""
         self.assertIn('不确定', self.loop)
+
+    def test_a_second_reason_is_not_a_replay(self):
+        """Decision C, measured rather than asserted."""
+        c = self.reading['scenario_c']
+        self.assertEqual(2, c['version_after_first_reason'])
+        self.assertEqual(2, c['version_after_a_new_reason'])
+        self.assertEqual(['revise', 'revise'], c['rows_for_the_two_reasons'])
+        self.assertTrue(c['the_new_reason_is_not_a_repeat'])
+        self.assertEqual('revise.repeat', c['the_actual_replay_is_marked'])
+        self.assertEqual(2, c['version_after_the_replay'])
+
+
+class TheFrontPagesPointAtTheEvidence(unittest.TestCase):
+    """A reader who starts at the front page must be able to find this slice.
+
+    Two things are refused: a page that never mentions the evidence directory,
+    and a page that describes the plugin's behaviour without showing a command
+    that produces it. Naming a path in prose is not registration -- the same rule
+    the knowledge-chain gate applies to the `stories` views.
+    """
+
+    PAGES = ('README.md', 'README.zh-CN.md')
+    EVIDENCE_LINK = 'docs/evidence/2026-11-27-repeat-safety/'
+
+    def page(self, name):
+        return (ROOT / name).read_text(encoding='utf-8')
+
+    def test_each_page_links_the_evidence(self):
+        for page in self.PAGES:
+            with self.subTest(page=page):
+                self.assertIn(self.EVIDENCE_LINK, self.page(page),
+                              '%s never points at this slice\'s evidence' % page)
+
+    def test_each_page_names_both_decisions(self):
+        """The page claims two decisions changed; both must be on it by name."""
+        for page in self.PAGES:
+            text = self.page(page)
+            with self.subTest(page=page):
+                self.assertIn('incomplete_response', text,
+                              '%s does not name the cut-response decision' % page)
+                self.assertIn('revise.repeat', text,
+                              '%s does not name the replay decision' % page)
+
+    def test_each_page_shows_a_command_for_the_replay_claim(self):
+        for page in self.PAGES:
+            text = self.page(page)
+            with self.subTest(page=page):
+                self.assertTrue(
+                    any('same-words' in line and 'dojo events' in line
+                        for line in text.splitlines()),
+                    '%s says how a repeat is recorded but shows no command to see it' % page)
+
+    def test_the_printed_block_really_shows_two_rows_and_one_repeat(self):
+        """Run the page's own block and read the ledger it produces."""
+        import subprocess
+        import sys
+        for page in self.PAGES:
+            with self.subTest(page=page):
+                script = self._block(page)
+                work = Path(__import__('tempfile').mkdtemp(prefix='repeat-doc-'))
+                home = work / 'home'
+                home.mkdir()
+                env = {k: v for k, v in os.environ.items()
+                       if k in ('PATH', 'LANG', 'LC_ALL', 'TZ')}
+                env.update({'HOME': str(home), 'TMPDIR': str(work),
+                            'PYTHONPATH': str(ROOT), 'PYTHONDONTWRITEBYTECODE': '1'})
+                proc = subprocess.run(['sh', '-eu', '-c', script], cwd=str(ROOT),
+                                      capture_output=True, text=True, env=env,
+                                      stdin=subprocess.DEVNULL, timeout=120)
+                self.assertEqual(0, proc.returncode, proc.stderr[-1200:])
+                events = json.loads(proc.stdout[proc.stdout.rindex('[\n'):])
+                self.assertEqual(['add', 'revise', 'revise', 'revise.repeat'],
+                                 [e['event'] for e in events])
+                reasons = [e['details'].get('reason') for e in events[1:]]
+                self.assertEqual(['\u79fb\u52a8\u7aef\u540c\u4f34\u770b\u4e0d\u89c1\u6d3b\u52a8\u706f',
+                                  '\u89e6\u5c4f\u8bfb\u5c4f\u9700\u8981\u4e00\u4e2a\u53ef\u8bfb\u72b6\u6001',
+                                  '\u89e6\u5c4f\u8bfb\u5c4f\u9700\u8981\u4e00\u4e2a\u53ef\u8bfb\u72b6\u6001'],
+                                 reasons)
+                self.assertNotIn('repeat_of', events[2]['details'],
+                                 'the new reason was filed as a replay')
+                self.assertIn('repeat_of', events[3]['details'])
+
+    def _block(self, page):
+        blocks, current = [], None
+        for line in self.page(page).splitlines():
+            stripped = line.strip()
+            if current is None:
+                if stripped == '```sh':
+                    current = []
+                continue
+            if stripped == '```':
+                blocks.append('\n'.join(current) + '\n')
+                current = None
+                continue
+            current.append(line)
+        found = [b for b in blocks if 'same-words' in b]
+        self.assertEqual(1, len(found), '%s must print exactly one block for this claim' % page)
+        return found[0]
 
 
 if __name__ == '__main__':

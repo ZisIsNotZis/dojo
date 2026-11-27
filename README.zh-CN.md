@@ -113,6 +113,24 @@ python3 -m dojo list               # 没人认可的版本保留为 `unaccepted_
 - **「一条道的一生」这条 loop。** `scripts/dao_life.py` 从具体经历建出道库，检查自洽与可反驳，印出哪些落地格从未跑过、要什么才能跑，并按逐对关系比较两个库——不调模型、不联网、不连数据库。
 - **一场真会话能写成探针笔记。** `scripts/dao_session.py` 把 `discuss` 的 JSONL 轨迹写成探针格式的笔记，并写一份 `session.json`：四件里哪几件是他真在会话里答到的。哪件没答、张力说不出两边、或回答里带着笔记无法逐字承载的字符，它就具名拒收、盘上不写；随后 `dao_life.py` 只按会话晋升过的那几件算作者，提炼里把没晋升的一件写成「他的原话」会被判不过。
 
+**一条判断，改了这里的两处决定。** 规则是：重复请求看的是**意图效果**；客户端只有在**有证据**说明第一次没有生效时才可以重试。本仓有两处决定在这条规则下是错的：
+
+- **截断的响应被重发了。** 正文比 `Content-Length` 短，被归成「模型输出格式不合法」并自动重试两次——一个用户回合发了三个请求，还让用户去改提示词。现在它是 `incomplete_response`：不重试，并告诉用户是传输断了。
+- **第二个理由被记成了重放。** 把卡片改成它已经是的那句话、只为补一个新理由，措辞一点没变——而存储层把「卡片没动」读成了「同一个请求又来了」，于是新理由被记成第一个的重放。两个不同的论点在账本里共用一个名字。现在守的规则是：*版本只在库存的卡片变了时才动；而「是不是重放」看请求，不看结果*。
+
+下面的块在真实库上演示第二处：两个理由，两行；同一个理由再来一次，一行，加一行 `.repeat`。
+```sh
+DEMO=$(mktemp -d)
+export DOJO_DB=$DEMO/twice.sqlite3
+python3 -m dojo add --id same-words --kind abstract_idea --statement '一键确认很好用'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '移动端同伴看不见活动灯'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '触屏读屏需要一个可读状态'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '触屏读屏需要一个可读状态'
+python3 -m dojo events --id same-words   # 两个理由都在，外加一行说自己是一次重放
+```
+
+两个理由各是一行普通 `revise`，谁也不指谁。重放那一行是 `revise.repeat`，指名它重放的是哪一条；`version` 全程停在 2，所以已经处理完的管线 pass 不会重新变成待办。两处决定的前后读数、以及在旧树上会红的臂，都在 [`docs/evidence/2026-11-27-repeat-safety/`](docs/evidence/2026-11-27-repeat-safety/)。
+
 ## 架构
 
 运行时刻意做小：一个 SQLite 文件就是全部状态，CLI 只是薄薄一层 argparse，存储层之上的一切要么提议、要么渲染。

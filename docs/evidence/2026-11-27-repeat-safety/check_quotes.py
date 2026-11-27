@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every quoted block must appear verbatim in the source text.
 
-    python3 -B docs/evidence/2026-11-29-repeat-safety/check_quotes.py \
+    python3 -B docs/evidence/2026-11-27-repeat-safety/check_quotes.py \
         <rfc9110.txt> [<rfc9112.txt> ...]
 
 The RFC files are not committed: they are the publisher's, and they are large.

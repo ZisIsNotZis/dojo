@@ -113,6 +113,40 @@ python3 -m dojo list               # a version nobody accepted is kept as `unacc
 - **The "life of one dao" loop.** `scripts/dao_life.py` builds a dao library from concrete episodes, checks self-consistency and refutability, prints which observations were never run and what would be needed, and compares two libraries pair by pair — no model, no network, no database.
 - **A real conversation becomes a probe note.** `scripts/dao_session.py` turns a `discuss` JSONL trace into the probe note plus `session.json`, the record of which four parts he actually answered. An unanswered part, a tension without two sides, or an answer the note format cannot carry refuses by name and writes nothing; `dao_life.py` then takes authorship from the session, so an `extraction.json` that claims a part the session did not promote is refused.
 
+**One judgement, two places it changed a decision.** The rule is that a repeat is judged
+by its *intended effect*, and that a client may retry only with evidence that the first
+attempt did not take effect. Two decisions in this repository were wrong under it:
+
+- **A cut response was re-sent.** A body shorter than its `Content-Length` was classified
+  as a malformed model answer and retried twice — three requests for one user turn, and
+  the user told to fix their prompt. It is now `incomplete_response`: not retried, and the
+  user is told the transfer broke.
+- **A second reason was filed as a replay.** Revising a card to the sentence it already
+  has, for a new reason, changes no wording — and the store read "the card did not move"
+  as "the same request again", recording the new reason as a repeat of the first. Two
+  different arguments ended up in the ledger under one name. The rule now kept is that
+  *the version moves only when the stored card changes, but a repeat is decided by the
+  request, not by its result.*
+
+The block below shows the second one on a real library: two reasons, two rows; the same
+reason again, one row and one `.repeat`.
+
+```sh
+DEMO=$(mktemp -d)
+export DOJO_DB=$DEMO/twice.sqlite3
+python3 -m dojo add --id same-words --kind abstract_idea --statement '一键确认很好用'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '移动端同伴看不见活动灯'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '触屏读屏需要一个可读状态'
+python3 -m dojo revise same-words --statement '一键确认很快' --reason '触屏读屏需要一个可读状态'
+python3 -m dojo events --id same-words   # both reasons, plus one row that says it was a replay
+```
+
+The two reasons are separate `revise` rows and neither names the other. The repeat is a
+`revise.repeat` naming the row it repeats, and `version` stays at 2 throughout, so no
+finished pipeline pass turns back into pending work. Before/after readings for both
+decisions, and the arms that fail on the old trees, are in
+[`docs/evidence/2026-11-27-repeat-safety/`](docs/evidence/2026-11-27-repeat-safety/).
+
 ## Architecture
 
 The runtime is deliberately small: one SQLite file is the whole state, the CLI is a thin argparse surface, and everything above the store either proposes or renders.
