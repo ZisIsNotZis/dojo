@@ -81,6 +81,9 @@ python3 -B -m unittest tests.test_transcript_view                # 12 项
 python3 -B -m unittest tests.test_one_card_version               # 4 项
 python3 -B -m unittest tests.test_non_answer_words               # 5 项
 python3 -B -m unittest discover -s tests                         # 全量
-python3 .scratch/3389/probe_transcript_redarms.py <tree>         # 11 条臂，两层见证都红
-python3 .scratch/3389/probe_transcript.py <tree>                 # 真 CLI 走一遍：回执 → 回看 → 截断 → --no-trace
+python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 11 条臂，两层见证都红
 ```
+
+本片的真入口探针（回执 → 照抄命令 → 截断 → `--no-trace` 全打印）在仓库外的
+`.scratch/3389/probe_transcript.py`；它不随交付树走，因为上面那份 `verify.py` 跑的就是
+同一条路径，且能在干净导出上重跑。
