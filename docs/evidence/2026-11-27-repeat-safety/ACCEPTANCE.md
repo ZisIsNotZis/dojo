@@ -17,12 +17,15 @@
 | 9 | 同一句话的两个理由在账本里分得清 | `probe.py` | `rows_for_the_two_reasons: [revise, revise]`，`the_new_reason_is_not_a_repeat: true` |
 | 10 | 第二个理由不动版本，也不重开管线 | 同上 | `a_new_reason_moves_the_version: false`，`version_after_the_replay: 2` |
 | 11 | 同一理由再说一遍仍然算重放 | 同上 | `the_actual_replay_is_marked: revise.repeat` |
-| 12 | 三个决定各有门 | `python3 -m unittest tests.test_repeat_safety` | **12 OK** |
-| 13 | 门在改前的树上会红 | 见下「红臂」 | **6 项失败**；其余 6 项在两种树上都过（守「别吞掉真实动作」与「别把新理由当重放」的回归门） |
+| 12 | 决定各有门 | `python3 -m unittest tests.test_repeat_safety` | **14 OK** |
+| 13 | 门在改前的树上会红 | 见下「红臂」 | 臂 1：11 项红（10 失败 + 1 报错）；臂 2：3 项红。其余在两种树上都过，是防过度收紧的回归门 |
 | 14 | 已发布的截断测试跟着改名 | `python3 -m unittest tests.test_http_interruption` | 3 OK |
 | 15 | 既有存储行为不变 | `python3 -m unittest tests.test_storage` | 97 OK |
 | 16 | 证据里的日期是真日期 | `ls docs/evidence/` | `2026-11-27-repeat-safety`，与提交日一致 |
-| 17 | 全套 | `python3 -m unittest discover -s tests` | 见下 |
+| 17 | 一个理由、两个目标不是重放 | `probe.py` | `rows_for_one_reason_two_targets: [revise, revise, revise]`，`the_second_target_is_not_a_replay: true` |
+| 18 | 重放指向的那一行要的是同一句话 | 同上 | `repeat_of_names_the_row_with_the_same_target: true`，`repeat_of_does_not_name_the_other_target: true` |
+| 19 | 读者能顺着 `repeat_of` 找到行 | `dojo show --history` / `store.history()` | 每条事件带 `sequence`，与 `repeat_of` 同一套编号 |
+| 20 | 全套 | `python3 -m unittest discover -s tests` | 见下 |
 
 ## 红臂
 
@@ -31,8 +34,8 @@
 **臂 1 —— 对 `d023b17`（本轮之前的已发布基线）：证明 A、B 两项决定真的改变了行为。**
 
 ```
-Ran 12 tests
-FAILED (failures=9)
+Ran 14 tests
+FAILED (failures=10, errors=1)
   test_an_identical_confirm_does_not_move_the_version
   test_a_repeat_leaves_a_row_that_says_it_was_a_repeat
   test_the_pipeline_mark_stays_valid_across_a_repeat
@@ -40,22 +43,43 @@ FAILED (failures=9)
   test_the_same_reason_twice_is_still_a_replay
   test_a_second_reason_does_not_reopen_the_pipeline
   test_two_reasons_for_one_sentence_are_two_rows
+  test_one_reason_two_targets_is_not_a_replay
+  test_a_replay_names_a_row_that_asked_for_the_same_thing   (报错：旧树没有 sequence)
   test_a_short_body_is_named_for_the_framing_not_for_the_model
   test_one_user_turn_sends_exactly_one_request
 ```
 
-另外 3 项（`a_real_second_action_still_writes`、`two_different_revisions_are_two_versions`、`OversizeBodyIsNotReportedAsIncomplete` 那一项）在改前树上也过。这是**预期**的：它们是防过度收紧的回归门，不是缺陷复现门。写清楚是为了别让「12 项里 9 项红」被读成「全红」。
+另外 3 项（`a_real_second_action_still_writes`、`two_different_revisions_are_two_versions`、`OversizeBodyIsNotReportedAsIncomplete` 那一项）在改前树上也过。这是**预期**的：它们是防过度收紧的回归门，不是缺陷复现门。写清楚是为了别让「14 项里 11 项红」被读成「全红」。臂 1 里有一项是报错而不是失败：`sequence` 在 `d023b17` 上不存在，而那条门要顺着指针找行——找不到就是红，形态不同。
 
 **臂 2 —— 对 `ce36ed2`（上一版候选，A、B 已修、C 未修）：证明 C 的门不是摆设。**
 
 ```
-Ran 12 tests
-FAILED (failures=1)
+Ran 14 tests
+FAILED (failures=2, errors=1)
   test_two_reasons_for_one_sentence_are_two_rows
     AssertionError: ['revise', 'revise.repeat'] != ['revise', 'revise']
+  test_one_reason_two_targets_is_not_a_replay
+  test_a_replay_names_a_row_that_asked_for_the_same_thing   (报错：没有 sequence)
 ```
 
-这一条正是复核人报的那个现象：同一句话、两个理由，第二个被记成第一个的重放。同一个文件在 `ce36ed2` 上只有这一项红、其余 11 项全绿，说明 C 的门没有顺手把 A、B 的结论也算成自己的功劳。
+第一条正是复核人报的第一个现象：同一句话、两个理由，第二个被记成第一个的重放。另外两项问的是复核人报的后半（一个理由、两个目标），在 `ce36ed2` 上同样红。其余 11 项全绿，说明 C 的门没有顺手把 A、B 的结论也算成自己的功劳。
+
+## 臂 3 —— 对 `8eec607`（复核人报的后半）：证明新门不是给自己发奖
+
+只把 `tests/test_repeat_safety.py`、`tests/test_repeat_safety_docs.py`、`probe.py` 三份门拷到**未改动的** `8eec607` 抽取上跑：
+
+```
+Ran 26 tests
+FAILED (failures=2, errors=3)
+  test_one_reason_two_targets_is_not_a_replay                     (存储)
+  test_one_reason_two_targets_is_not_a_replay                     (probe)
+  test_a_replay_names_a_row_that_asked_for_the_same_thing         (存储，缺 sequence 报错)
+  test_the_printed_block_really_shows_two_rows_and_one_repeat     (README.md，缺 sequence 报错)
+  test_the_printed_block_really_shows_two_rows_and_one_repeat     (README.zh-CN.md，同上)
+  AssertionError: Lists differ: ['revise', 'revise', 'revise'] != ['revise', 'revise', 'revise.repeat']
+```
+
+那个 `!=` 就是复核人看到的现象：同一理由、不同目标，第三条被写成重放。三项 error 是因为旧树根本没有 `sequence` 字段——它们守的是「指针可跟随」，在旧树上无处可跟随，所以报错而不是断言失败；这一点写清楚，免得被当成门自己写坏了。
 
 ## 变异检查：把 C 的修法局部退回
 

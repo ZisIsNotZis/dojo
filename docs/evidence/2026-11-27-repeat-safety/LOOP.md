@@ -102,6 +102,30 @@ python3 -m dojo revise c-one --statement '同一句话' --reason '触屏读屏�
 
 判据因此拆成两个问题：**版本动不动**看库存状态是否变化；**是不是重放**看请求本身（事件名 + 请求方给的细节，排除版本、改前措辞这些每次运行都不一样的记账字段）是否出现过。两条同时成立才写 `<event>.repeat`；状态没变但请求不同，就用自己的名字写一条，版本留在原处。
 
+### 决定 C 的后半：理由相同、目标不同，也不是同一个请求
+
+C 的第一版把「请求」判成「事件名 + 理由」，复核时用真命令又量出一个洞。同一张卡：
+
+```sh
+python3 -m dojo revise c-one --statement '窄屏显示状态'    --reason '无障碍需求'
+python3 -m dojo revise c-one --statement '所有视口显示状态' --reason '布局复核'
+python3 -m dojo revise c-one --statement '所有视口显示状态' --reason '无障碍需求'
+```
+
+| | C 第一版（`8eec607`） | 现在 |
+|---|---|---|
+| 第三条在账本里的名字 | `revise.repeat` | `revise` |
+| 它指回的那一行要的措辞 | **窄屏显示状态** | 不指任何人 |
+| 版本 | 3 → 3 | 3 → 3 |
+
+对用户来说，理由和目标**都得**相同才是重放：第三条重复的是理由，不是请求——它要的「所有视口」正是第二条刚做完的那句话，而它指回的第一条要的是「窄屏」。指针落到一行要着别的话的记录上，比没有指针更糟：读历史的人会以为那次窄屏修改就是这句话的来源。
+
+根因和 C 第一版是同一类：**比的东西比请求少**。`revise` 当时只记了 `from_statement`（从哪句话来）和理由，没记 `to_statement`（要到哪句话去）。`from_statement` 是记账（同一张卡可以从任何地方来），`to_statement` 才是请求本身的一半。现在两者都记，判据仍是「事件名 + 请求细节」逐项相同。
+
+第二件事是让指针可跟随：`repeat_of` 是一个 `seq`，但 `history()` 以前不吐序号，只有 `dojo events` 吐。于是 `show --history` 的读者拿着 `repeat_of` 没处查。现在 `history()` 里每条事件都带 `sequence`，就是 `repeat_of` 用的那个数。
+
+现在的读数（`scenario_d`）：三条都是 `revise`，`the_second_target_is_recorded` 为 `所有视口显示状态`，`repeat_of_names_the_row_with_the_same_target` 为 `true`，`repeat_of_does_not_name_the_other_target` 为 `true`。
+
 ### 三个决定为什么算同一个经验
 
 因为要判的是同一件事，只是换了一层：**重复请求的效果是否与单次相同，以及事后能不能分辨**。A 在网络上（要不要重发），B 在存储里（重发到了会怎样），C 在账本里（两次不同的请求会不会被当成一次）。A 的修法依据是「有证据才重试」，B 的修法依据是「日志可以多写，但版本不能假装变了」，C 的修法依据是「允许每次都记，就必须让每次都能分清」。
@@ -124,8 +148,8 @@ python3 -m dojo revise c-one --statement '同一句话' --reason '触屏读屏�
 |---|---|
 | `dojo/live.py` | 新增 `incomplete_response` 种类；比对 Content-Length，分块截断也用这一类；不保留半截正文 |
 | `dojo/discuss.py` | 这一类**不自动重试**；只为「读不完整」如实说明，不再说成格式错误；这一轮记 `response_incomplete`，会话继续 |
-| `dojo/storage.py` | `_write` 在效果未变时不起新版本；`_same_request` 只在请求本身重复时才写 `<event>.repeat`，否则用自己的名字写一条、版本留在原处 |
-| `tests/test_repeat_safety.py` | 11 项门：A、B 各一半，C 三项（两个理由两行、同一理由仍算重放、第二个理由不重开管线） |
+| `dojo/storage.py` | `_write` 在效果未变时不起新版本；`_same_request` 只在请求本身重复时才写 `<event>.repeat`，否则用自己的名字写一条、版本留在原处；`revise` 记 `to_statement`；`history()` 吐 `sequence` |
+| `tests/test_repeat_safety.py` | 15 项门：A、B 各一半，C 五项（两个理由两行、同一理由仍算重放、第二个理由不重开管线、一个理由两个目标不是重放、重放指向同一目标的原文） |
 | `tests/test_http_interruption.py` | 两条断言从 `connect` 改为 `incomplete_response`（**这是改了已发布的断言**，理由见下） |
 
 `tests/test_http_interruption.py` 原来把「body 被截断」钉成 `connect`。那条断言本身没错（它要保证的是不重试、不泄漏半截正文，这两点都保住了），但它把「连接失败」与「响应读不完整」压成了同一类，而这正是 A 的根因。改的是名字，不是它守的事实；两条断言的原意在新名下仍然被测。
@@ -159,7 +183,8 @@ python3 -m dojo revise c-one --statement '同一句话' --reason '触屏读屏�
 - 只在 CPython 3.14 的 `urllib` 上实测。其它客户端/框架对截断的处理不同；`probe.py` 测的是**本仓**这条路。
 - 只测了 Content-Length 与 chunked 两种框架。其它框架下「读不完整」可能表现成别的异常；`incomplete_response` 的判据是「声明的字节没到齐」，新框架要单独确认。
 - 没有真实模型端点参与。`_Cut` 是本地 stub，它证明的是**本仓**在收到截断响应时的行为，不是某个厂商服务的行为。
-- `_same_request` 的判据是「事件名 + 请求细节（除去 `version`/`from_statement`/`effect`/`repeat_of`）完全相同」。它默认「相同的措辞 + 相同的理由 = 同一个请求」，这与 `_strings` 的去重语义一致；它**不**比较调用方身份，所以两个不同的人碰巧写出逐字相同的理由会被算作重放。目前 CLI 没有调用方身份可比较，这是已知边界。
+- `_same_request` 的判据是「事件名 + 请求细节（除去 `version`/`from_statement`/`effect`/`repeat_of`）完全相同」。对 `revise` 来说，细节包含 `to_statement` 和理由，所以「理由相同、目标不同」不再是重放。它**不**比较调用方身份，所以两个不同的人碰巧提出逐字相同的请求会被算作重放。目前 CLI 没有调用方身份可比较，这是已知边界。
+- 这个判据依赖「写请求的人把请求本身记进 details」。`revise` 现在记全了；其它写路径只记了各自的请求细节（`challenge` 的 `text`、`confirm` 的 `basis` 等）。若将来新增一个「细节记不全」的写路径，它会退回 C 第一版的错误——不是 `_same_request` 会察觉的，而是没有任何门。这是判据的结构性弱点，只能靠「新写路径必须记全请求」这条纪律，目前没有自动检查。
 - 版本仍然只看状态：若将来有操作**故意**要求「内容相同也算新版本」，现有判据会把它吞掉；目前没有这种操作（`abstain` 本来就不起版本）。
 - `confirm` 带会话：同一会话重复确认，实测版本不动（`confirmed_sessions` 去重后状态未变），**按重放处理**；换一个会话再来确认，版本 2 → 3，**按真实动作处理**。这一条我最初是推错的 —— 以为 `confirmed_sessions` 会追加、因而每次都会起新版本；实测否掉了。写在这里，是因为它正是本节的判据（除 `version` 外状态是否相等）在会话字段上的表现。
 
@@ -172,5 +197,7 @@ python3 -B -m unittest tests.test_repeat_safety
 ```
 
 `probe.py` 的三个场景都自带临时库；`_Cut` 只监听 127.0.0.1，不对外发包。
+
+`scenario_d` 的读数：`rows_for_one_reason_two_targets` 为 `["revise", "revise", "revise"]`、`the_second_target_is_not_a_replay` 为 `true`、`the_actual_replay_is_marked` 为 `revise.repeat`、`repeat_of_does_not_name_the_other_target` 为 `true`。
 
 `scenario_c` 的读数：`rows_for_the_two_reasons` 为 `["revise", "revise"]`、`the_new_reason_is_not_a_repeat` 为 `true`、`a_new_reason_moves_the_version` 为 `false`、`the_actual_replay_is_marked` 为 `revise.repeat`。

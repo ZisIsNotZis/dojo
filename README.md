@@ -127,9 +127,16 @@ attempt did not take effect. Two decisions in this repository were wrong under i
   different arguments ended up in the ledger under one name. The rule now kept is that
   *the version moves only when the stored card changes, but a repeat is decided by the
   request, not by its result.*
+  Deciding it by the *reason* alone was half a rule: taking a card to narrow screens for
+  accessibility, then to every viewport for another reason, then to every viewport citing
+  accessibility again, repeats a reason but not a request — and the pointer named the
+  narrow-screen revise, which asked for a different sentence. A `revise` row now records
+  both the wording it left and the wording it asked for, and every event in
+  `show --history` carries the `sequence` number `repeat_of` speaks in, so you can walk
+  from a replay to the row that actually asked for the same thing.
 
 The block below shows the second one on a real library: two reasons, two rows; the same
-reason again, one row and one `.repeat`.
+reason again, one row and one `.repeat` that names a row asking for the same wording.
 
 ```sh
 DEMO=$(mktemp -d)
@@ -143,7 +150,9 @@ python3 -m dojo events --id same-words   # both reasons, plus one row that says 
 
 The two reasons are separate `revise` rows and neither names the other. The repeat is a
 `revise.repeat` naming the row it repeats, and `version` stays at 2 throughout, so no
-finished pipeline pass turns back into pending work. Before/after readings for both
+finished pipeline pass turns back into pending work. Each row carries `to_statement` — the
+wording it asked for — beside `from_statement`, which is why the replay cannot name a row
+that asked for a different sentence. Before/after readings for both
 decisions, and the arms that fail on the old trees, are in
 [`docs/evidence/2026-11-27-repeat-safety/`](docs/evidence/2026-11-27-repeat-safety/).
 

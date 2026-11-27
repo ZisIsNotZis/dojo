@@ -112,6 +112,28 @@ class TheDocsNumbersAreTheProbesNumbers(unittest.TestCase):
         self.assertEqual(2, c['version_after_the_replay'])
 
 
+    def test_one_reason_two_targets_is_not_a_replay(self):
+        """Decision C, second half: the ask is the reason *and* what it asks for.
+
+        Measured, not asserted: `scenario_d` drives the real store through a card
+        taken to one target and then to another for the same reason. It is the
+        shape a re-check found filed as a replay of a request for a different
+        sentence.
+        """
+        d = self.reading['scenario_d']
+        self.assertEqual(['revise', 'revise', 'revise'],
+                         d['rows_for_one_reason_two_targets'])
+        self.assertTrue(d['the_second_target_is_not_a_replay'])
+        self.assertEqual('\u6240\u6709\u89c6\u53e3\u663e\u793a\u72b6\u6001',
+                         d['the_second_target_is_recorded'])
+        self.assertEqual(3, d['version_after_the_two_targets'])
+        self.assertEqual('revise.repeat', d['the_actual_replay_is_marked'])
+        # The pointer is only worth anything if the row it names asked for the same
+        # thing; naming the other target is exactly the bug this arm exists for.
+        self.assertTrue(d['repeat_of_names_the_row_with_the_same_target'])
+        self.assertTrue(d['repeat_of_does_not_name_the_other_target'])
+
+
 class TheFrontPagesPointAtTheEvidence(unittest.TestCase):
     """A reader who starts at the front page must be able to find this slice.
 
@@ -181,6 +203,14 @@ class TheFrontPagesPointAtTheEvidence(unittest.TestCase):
                 self.assertNotIn('repeat_of', events[2]['details'],
                                  'the new reason was filed as a replay')
                 self.assertIn('repeat_of', events[3]['details'])
+                # A pointer a reader cannot follow is not a record of anything:
+                # the row it names must be in the same listing and must have asked
+                # for the same wording.
+                rows = {e['sequence']: e for e in events}
+                named = rows[events[3]['details']['repeat_of']]
+                self.assertEqual('revise', named['event'])
+                self.assertEqual(events[3]['details']['to_statement'],
+                                 named['details']['to_statement'])
 
     def _block(self, page):
         blocks, current = [], None

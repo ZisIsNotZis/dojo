@@ -459,6 +459,13 @@ class Store:
         that every write adds is skipped, because it differs between two runs of the
         same request and says nothing about intent: `version` (where the card was),
         `from_statement` (the wording being left), `effect` and `repeat_of`.
+
+        What a request asked *for* is part of its identity, so each writer records it:
+        `revise` keeps `to_statement` next to the reason. It once kept only
+        `from_statement` -- where the card was coming from -- and that made two
+        requests with one reason and two different targets look identical, so the
+        second was filed as a replay of the first. Where a request asks for nothing
+        the ledger can name, the row is not a candidate for a replay at all.
         """
         if not details:
             return None
@@ -714,7 +721,7 @@ class Store:
         if not snapshots:
             raise DojoError(f"candidate not found: {candidate_id}")
         events = self.connection.execute(
-            "SELECT event,details_json,created_at FROM events WHERE candidate_id=? ORDER BY seq",
+            "SELECT seq,event,details_json,created_at FROM events WHERE candidate_id=? ORDER BY seq",
             (candidate_id,),
         ).fetchall()
         return {
@@ -723,8 +730,11 @@ class Store:
                 {"version": row["version"], "state": json.loads(row["state_json"]), "created_at": row["created_at"]}
                 for row in snapshots
             ],
+            # `sequence` is the same number `repeat_of` carries, so a reader holding a
+            # repeat row can find the row it names without a second command.
             "events": [
-                {"event": row["event"], "details": json.loads(row["details_json"]), "created_at": row["created_at"]}
+                {"sequence": row["seq"], "event": row["event"],
+                 "details": json.loads(row["details_json"]), "created_at": row["created_at"]}
                 for row in events
             ],
         }
@@ -891,7 +901,12 @@ class Store:
                 state["sessions"] = _strings(state.get("sessions", []) + [session], "session")
             state["status"] = "draft"
             state["confirmation"] = self._confirmation_off(state, "candidate revised")
-            details = {"from_statement": old_statement, "reason": reason}
+            # Both ends of the request: the wording being left is bookkeeping (a card
+            # may arrive here from anywhere), the wording being asked for is the ask
+            # itself. Recording only the departure made a second target for one reason
+            # indistinguishable from a replay.
+            details = {"from_statement": old_statement, "to_statement": statement,
+                       "reason": reason}
             changed_fields = [field for field, values in revised_fields.items() if values is not None]
             if kind is not None or changed_fields or session is not None:
                 details["changed_fields"] = ["statement", *changed_fields]
@@ -2038,7 +2053,6 @@ def is_unaccepted_draft(state: dict[str, Any]) -> bool:
 
 ACCEPTANCE_EVENT = "wording_accepted"
 # A repeated request whose effect was already stored writes `<event>.repeat` and names the
-# A repeated request whose effect was already stored writes `<event>.repeat` and names the
 # event it repeats. The version does not move: a repeat must not read as a second action,
 # and `pipeline_marks` compares against versions, so moving one would make finished work
 # pending again. The row exists so a later reader can tell a replay from a real second
@@ -2047,7 +2061,9 @@ ACCEPTANCE_EVENT = "wording_accepted"
 # "The same request" is decided by what was asked for, not by the state it produced:
 # revising to the same sentence for a new reason leaves the card in the same state and is
 # still a new fact, so it is written as its own event (version unchanged, `effect`
-# `unchanged`) with no `repeat_of`. See `_same_request`.
+# `unchanged`) with no `repeat_of`. "Asked for" is the whole ask: for `revise` that is the
+# reason *and* `to_statement`. Comparing only the reason filed a request for a second
+# target under the first one that shared its reason. See `_same_request`.
 REPEAT_EVENT_SUFFIX = ".repeat"
 # Details that every write adds and that differ between two runs of the *same* request,
 # so they cannot be part of "is this the same request": where the card's version was,

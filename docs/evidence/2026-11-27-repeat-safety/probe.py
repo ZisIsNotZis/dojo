@@ -17,7 +17,12 @@ that leave the card in the same state. Revising a card to the sentence it alread
 has, for a second and new reason, must keep the version (the wording did not
 change) and must not file the new reason as a replay of the first.
 
-All three print one JSON object. Nothing here writes outside a temp directory.
+Scenario D is the narrow case a re-check found: one *reason*, two different
+targets. Taking a card to "narrow screens" citing accessibility and later to "all
+viewports" citing the same thing repeats a reason, not a request. It must be its
+own row, and a genuine replay must point at a row that asked for the same target.
+
+All four print one JSON object. Nothing here writes outside a temp directory.
 """
 import io
 import json
@@ -172,9 +177,37 @@ def scenario_c():
     }
 
 
+def scenario_d():
+    """One reason, two targets: the ask is the reason and the wording asked for."""
+    store = Store(str(Path(tempfile.mkdtemp(prefix="probe-d-")) / "lib.sqlite3"))
+    store.add("卡片文案", "abstract_idea", candidate_id="c-one", scope=["探针"])
+    store.revise("c-one", "窄屏显示状态", "无障碍需求")
+    store.revise("c-one", "所有视口显示状态", "布局复核")
+    store.revise("c-one", "所有视口显示状态", "无障碍需求")   # same reason, new target
+    store.revise("c-one", "所有视口显示状态", "无障碍需求")   # the real replay
+    events = store.history("c-one")["events"]
+    revisals = [e for e in events if e["event"].startswith("revise")]
+    repeat = revisals[-1]
+    named = [e for e in events if e.get("sequence") == repeat["details"].get("repeat_of")]
+
+    return {
+        "rows_for_one_reason_two_targets": [e["event"] for e in revisals[:3]],
+        "the_second_target_is_not_a_replay": "repeat_of" not in revisals[2]["details"],
+        "the_second_target_is_recorded": revisals[2]["details"].get("to_statement"),
+        "version_after_the_two_targets": store.show("c-one")["candidate"]["version"],
+        "the_actual_replay_is_marked": repeat["event"],
+        "repeat_of_names_the_row_with_the_same_target": bool(named) and (
+            named[0]["details"].get("to_statement")
+            == repeat["details"].get("to_statement")),
+        "repeat_of_does_not_name_the_other_target": bool(named) and (
+            named[0]["details"].get("to_statement") != "窄屏显示状态"),
+    }
+
+
 if __name__ == "__main__":
     print(json.dumps({
         "scenario_a": scenario_a(),
         "scenario_b": scenario_b(),
         "scenario_c": scenario_c(),
+        "scenario_d": scenario_d(),
     }, ensure_ascii=False, indent=2))

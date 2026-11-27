@@ -236,6 +236,55 @@ class ARepeatIsNotASecondAction(unittest.TestCase):
         self.assertEqual("移动端同伴看不见活动灯",
                          json.loads(row["details_json"])["reason"])
 
+    def test_one_reason_two_targets_is_not_a_replay(self):
+        """The ask is the reason *and* the wording it asks for.
+
+        A card is taken to "narrow screens only" citing accessibility, then to "all
+        viewports" for another reason, then back to "all viewports" citing
+        accessibility again. That last request repeats a *reason* but not a
+        *request*: its target is a sentence the first accessibility revise never
+        asked for. Comparing reasons alone filed it under the first one, so the row
+        it named recorded a different target than the one the reader was looking at.
+        """
+        self.store.revise("c-one", "窄屏显示状态", "无障碍需求")
+        self.store.revise("c-one", "所有视口显示状态", "布局复核")
+        self.store.revise("c-one", "所有视口显示状态", "无障碍需求")
+        events = self.store.history("c-one")["events"]
+        revisals = [e for e in events if e["event"].startswith("revise")]
+        self.assertEqual(["revise", "revise", "revise"],
+                         [e["event"] for e in revisals])
+        self.assertNotIn("repeat_of", revisals[-1]["details"])
+        # The target is recorded, so "asked for" is answerable from the ledger.
+        self.assertEqual("所有视口显示状态", revisals[-1]["details"]["to_statement"])
+        # Wording never changed after the second revise: add=1, first=2, second=3,
+        # third stays at 3.
+        self.assertEqual(3, self.store.show("c-one")["candidate"]["version"])
+
+    def test_a_replay_names_a_row_that_asked_for_the_same_thing(self):
+        """`repeat_of` must be followable to a row with the same ask, not just a seq.
+
+        The pointer is only useful if the row it names answers the same request.
+        Reading the named row back through `history` (not through raw SQL) is also
+        what a reader of `show --history` has to do.
+        """
+        self.store.revise("c-one", "窄屏显示状态", "无障碍需求")
+        self.store.revise("c-one", "所有视口显示状态", "布局复核")
+        self.store.revise("c-one", "所有视口显示状态", "无障碍需求")
+        self.store.revise("c-one", "所有视口显示状态", "无障碍需求")   # the real replay
+        events = self.store.history("c-one")["events"]
+        repeat = events[-1]
+        self.assertEqual("revise.repeat", repeat["event"])
+        # Every event carries the number `repeat_of` speaks in, so no second query.
+        self.assertEqual([e["sequence"] for e in events], sorted(e["sequence"] for e in events))
+        original = [e for e in events if e.get("sequence") == repeat["details"]["repeat_of"]]
+        self.assertEqual(1, len(original), 'repeat_of names no row in this history')
+        self.assertEqual("revise", original[0]["event"])
+        self.assertEqual(repeat["details"]["reason"], original[0]["details"]["reason"])
+        self.assertEqual(repeat["details"]["to_statement"],
+                         original[0]["details"]["to_statement"])
+        self.assertNotEqual("窄屏显示状态", original[0]["details"]["to_statement"],
+                            'the pointer landed on the same-reason row with another target')
+
     def test_a_second_reason_does_not_reopen_the_pipeline(self):
         self.store.revise("c-one", "同一句话", "移动端同伴看不见活动灯")
         version = self.store.show("c-one")["candidate"]["version"]
