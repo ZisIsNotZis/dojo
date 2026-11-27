@@ -319,6 +319,41 @@ def main() -> int:
     check("F2 续跑的请求只带开场那一版措辞",
           opened in text and narrowed not in text, text[-800:])
 
+    print("\nG. a pasted answer is still one line\n")
+
+    # The supervisor's report at d7fbe00: an answer copied from a document carrying
+    # U+2028 went into the trace, and the view refused the session the program had just
+    # written with "第 2 行不是 JSON". `json.dumps` leaves U+0085/U+2028/U+2029 raw
+    # inside a string and `splitlines()` counts all three as line breaks.
+    from dojo.tracefile import LINE_BREAK_CODEPOINTS, encode_record, split_lines
+
+    pasted = "那天我在修数据库\u2028修到一半卡住了\u2029后来我自己翻的日志。"
+    encoded = encode_record({"answer": pasted})
+    check("G1 写下来的一条记录不会含 U+0085/U+2028/U+2029",
+          all(codepoint not in encoded for codepoint in LINE_BREAK_CODEPOINTS)
+          and len(encoded.splitlines()) == 1, repr(encoded))
+    check("G2 写进去的原话逐字读得回来",
+          json.loads(encoded)["answer"] == pasted)
+    legacy = json.dumps({"answer": pasted}, ensure_ascii=False) + "\n"
+    # The pasted sentence carries two separators, so the old shape really does split into
+    # more than one piece; the point is that the new reader still gives back one record.
+    check("G3 修之前写下的轨迹（原字符未转义）仍读得出来",
+          len(legacy.splitlines()) > 1
+          and len(split_lines(legacy)) == 1
+          and json.loads(split_lines(legacy)[0])["answer"] == pasted,
+          repr(legacy[:120]))
+
+    pasted_text, pasted_trace, _pasted_root = run_in_process(
+        ["讲一条做法", "对，就这么定", pasted, "张力那句", "代价那句", "失效那句"])
+    raw = pasted_trace.read_text(encoding="utf-8") if pasted_trace.exists() else ""
+    check("G4 真会话里粘贴带 U+2028 的回答：轨迹每行都是完整 JSON",
+          bool(raw) and all(isinstance(json.loads(line), dict)
+                            for line in raw.splitlines()), raw[:400])
+    pasted_shown = cli("transcript", str(pasted_trace))
+    check("G5 回看这样一场：退出 0，且原话逐字在屏幕上",
+          pasted_shown.returncode == 0 and pasted in pasted_shown.stdout,
+          pasted_shown.stderr or pasted_shown.stdout[-600:])
+
     print()
     if FAILURES:
         print("%d 项不成立。" % len(FAILURES))

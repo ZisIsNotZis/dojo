@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dojo.discuss import run_discuss  # noqa: E402
+from dojo.tracefile import split_lines  # noqa: E402
 from dojo.elicit import QUESTIONS  # noqa: E402
 from dojo.storage import Store  # noqa: E402
 
@@ -87,7 +88,8 @@ def main(argv: list[str]) -> int:
         finally:
             store.close()
         trace_path = next((root / "sessions").glob("*.jsonl"))
-        records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+        records = [json.loads(line)
+                   for line in split_lines(trace_path.read_text(encoding="utf-8"))]
 
     events = [row for row in records if row.get("event") == "elicitation"]
     end = [row for row in records if row.get("event") == "session_end"][-1]

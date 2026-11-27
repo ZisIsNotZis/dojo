@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .elicit import PART_KEYS, PART_ORDER
+from .tracefile import split_lines
 
 
 class TranscriptError(ValueError):
@@ -55,7 +56,11 @@ def load(path: Path) -> dict[str, Any]:
         raise TranscriptError(f"读不出来：{exc}") from None
     except UnicodeDecodeError:
         raise TranscriptError("不是 UTF-8 文本，不是本程序的轨迹") from None
-    lines = raw.splitlines()
+    # `\n` is the record separator, not whatever `str.splitlines()` counts: U+0085,
+    # U+2028 and U+2029 are legal raw inside a JSON string and are written by documents
+    # people paste answers from. This reader used to split on them and refuse a trace
+    # this program had written itself.
+    lines = split_lines(raw)
     rows: list[dict[str, Any]] = []
     partial_tail = False
     for index, line in enumerate(lines, start=1):

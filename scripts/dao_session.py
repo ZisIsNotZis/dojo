@@ -10,7 +10,12 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 
-from dao_life import NoteError, _parse_note
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from dao_life import NoteError, _parse_note  # noqa: E402
+from dojo.tracefile import (  # noqa: E402
+    LINE_BREAK_CODEPOINTS, escape_line_breaks, split_lines,
+)
 
 PARTS = ("情境", "张力", "代价", "失效")
 KEYS = {"情境":"situation", "张力":"tension", "代价":"price", "失效":"off"}
@@ -39,7 +44,10 @@ def load_trace(path: Path, person: str, sample: str):
         raw = trace_bytes.decode("utf-8")
     except (OSError, UnicodeDecodeError) as e: raise Refusal(f"trace: {e}") from None
     if not raw.strip(): raise Refusal("empty trace: 轨迹为空")
-    try: rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    # `\n` ends a record. `splitlines()` also breaks on U+0085/U+2028/U+2029, which
+    # `json.dumps` leaves raw inside a string; this exporter was one of the readers that
+    # cut the program's own trace in half.
+    try: rows = [json.loads(line) for line in split_lines(raw) if line.strip()]
     except json.JSONDecodeError as e: raise Refusal(f"trace JSON: 第 {e.lineno} 行格式错误") from None
     end_rows = [r for r in rows if r.get("event") == "session_end"]
     if not end_rows: raise Refusal("session_end: 缺少会话结束记录")
@@ -86,6 +94,14 @@ def load_trace(path: Path, person: str, sample: str):
             raise Refusal(f"{p}: 晋升回答为空")
         if "\n" in answer or "\r" in answer:
             raise Refusal(f"{p}: 回答含换行，探针笔记无法逐字承载")
+        # U+0085 / U+2028 / U+2029 are line breaks for `str.splitlines()`, which every
+        # note reader uses, and `json.dumps` leaves them raw -- so a pasted answer carrying
+        # one was written into a note that then parsed as fields it does not have (measured:
+        # "张力 p-T1 少了「方向」这一格" about a sentence that was in the file). Same rule as
+        # the trace writer: one record, one line.
+        if any(codepoint in answer for codepoint in LINE_BREAK_CODEPOINTS):
+            raise Refusal(f"{p}: 回答里带 Unicode 行分隔符（U+0085/U+2028/U+2029），"
+                          "探针笔记无法逐字承载")
         if p == "张力" and any(char in answer for char in ('|', '"')):
             raise Refusal('张力: 回答含「|」或引号，原话字段无法逐字承载')
         bypart[p] = last_row
@@ -130,7 +146,7 @@ def load_trace(path: Path, person: str, sample: str):
     note += [f"[{m}] {text}" for m,text in offsets]
     note += ["","## 张力"]
     note.append(f'- [{person}-T1] {sides[0]} ↔ {sides[1]} | 情境: {bypart["情境"]["answer"]} | 方向: {statement} | 原话: "{tension}" | 锚: {anchor}')
-    note_text = "\n".join(note) + "\n"
+    note_text = "\n".join(escape_line_breaks(line) for line in note) + "\n"
     try:
         with tempfile.TemporaryDirectory(prefix="dao-session-check-") as temp_dir:
             note_path = Path(temp_dir) / "note.md"

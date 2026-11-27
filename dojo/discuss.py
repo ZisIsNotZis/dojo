@@ -56,6 +56,7 @@ from .search import SearchError, search as deepseek_search
 from .storage import (
     DojoError, DuplicateContent, KINDS, Store, normalize_wording, wording_digest, wording_equivalent,
 )
+from .tracefile import encode_record, split_lines
 
 MAX_SEARCHES_PER_SESSION = 3
 
@@ -991,7 +992,11 @@ class _SessionTrace:
         if self.file is None:
             return
         try:
-            self.file.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n")
+            # `encode_record` escapes the three code points `splitlines()` counts as line
+            # breaks but `json.dumps` leaves raw (U+0085, U+2028, U+2029). A person pasting
+            # an answer from a document carrying one of them used to get a trace that this
+            # writer wrote correctly and every `splitlines()` reader cut in half.
+            self.file.write(encode_record(value))
             self.file.flush()
             self.written += 1
         except OSError as exc:
@@ -1147,7 +1152,10 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         contents = path.read_text(encoding="utf-8")
         if not contents.endswith("\n"):
             raise ValueError("轨迹末尾记录不完整")
-        lines = contents.splitlines()
+        # `\n` is the only record separator. `splitlines()` also breaks on U+0085/U+2028/
+        # U+2029, which are legal raw inside a JSON string, so it split records this
+        # program had written correctly.
+        lines = split_lines(contents)
     except (OSError, UnicodeError, ValueError) as exc:
         raise ValueError(f"无法续跑轨迹：{exc}") from None
     if not lines:

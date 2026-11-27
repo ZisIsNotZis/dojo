@@ -62,6 +62,30 @@ append-only 轨迹的既有规则，也是回执和 `--resume` 用的同一条�
    词表补上新词、检查加「至少一件数得出」，同时把「你在 X 上说了原话」这种**词在件后面**的
    句式补进计数（原先只数词在件前面的句式）。
 
+## 粘进来的回答：一条记录就是一行
+
+监督者 11-28 在 `d7fbe00` 上量到：从文档粘来的回答带 U+2028（行分隔符），四句原话都写进了
+轨迹，回看却把它当成坏 JSON 拒了——**程序自己写的会话，自己的回看看不了**。
+
+原因在两边：`json.dumps(ensure_ascii=False)` 把 U+0085/U+2028/U+2029 原样留在字符串里
+（JSON 允许），而 `str.splitlines()` 把这三个都当成换行。写对的、读错的。
+
+修法在 `dojo/tracefile.py`，两边一起：
+
+- **写**：这三个码点在落盘前转成 `\uXXXX`，一条记录一定是 `splitlines()`、`readline()`、
+  `grep`、编辑器眼中的一行。
+- **读**：只按 `\n` 切行。修之前写的轨迹（原字符未转义）照样能读——它的 JSON 字符串本来
+  就接受这个字符。
+
+读数落到了每一个读者：`discuss` 写、`--resume` 读、`transcript` 读、`scripts/dao_session.py`
+与 `scripts/dao_live_session.py` 读。导出层另有一层：`note.md` 也是按行切的文本，所以
+`dao_session.py` 现在遇到带这三个字符的回答会**具名拒收**（「情境: 回答里带 Unicode 行分隔符…」），
+不再写出一个字段解析错位的笔记（实测过：同一条回答以前会让 `dao_life.py` 报「张力
+p-T1 少了「方向」这一格」，而那句就在文件里）。
+
+证据 G1–G5；测试 `tests/test_trace_line_breaks.py`（写入、读旧格式、真会话、`--resume`、
+导出脚本五个入口）；臂 L（不转义）与 M（又用 `splitlines()`）各自单独咬住。
+
 ## 没做（别当成已解决）
 
 - 不判「答没答到点上」。本片与上一片一样，只把材料与结论分开说。
@@ -79,12 +103,13 @@ append-only 轨迹的既有规则，也是回执和 `--resume` 用的同一条�
 ## 怎么重跑
 
 ```
-python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 28 项
+python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 33 项
 python3 -B -m unittest tests.test_transcript_view                # 12 项
 python3 -B -m unittest tests.test_one_card_version               # 4 项
 python3 -B -m unittest tests.test_non_answer_words               # 5 项
+python3 -B -m unittest tests.test_trace_line_breaks             # 7 项
 python3 -B -m unittest discover -s tests                         # 全量
-python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 11 条臂，两层见证都红
+python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 13 条臂，两层见证都红
 ```
 
 本片的真入口探针（回执 → 照抄命令 → 截断 → `--no-trace` 全打印）在仓库外的

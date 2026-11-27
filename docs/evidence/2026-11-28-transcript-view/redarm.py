@@ -95,6 +95,21 @@ ARMS: list[tuple[str, str, str, str]] = [
         '"卡片是提问前写下的那句，之后没改过，字这一版仍全算我写的。" + look)',
     ),
     (
+        # The codec has two halves and each has to be watched on its own: a writer that
+        # stops escaping, and a reader that splits on more than `\n`. Fixing only one
+        # leaves the other open, which is how the supervisor's pasted answer got through.
+        "L 写的时候不再转义 U+0085/U+2028/U+2029",
+        "dojo/tracefile.py",
+        "    return escape_line_breaks(\n        json.dumps(value, ensure_ascii=False, separators=(\",\", \":\"))\n    ) + \"\\n\"",
+        "    return json.dumps(value, ensure_ascii=False, separators=(\",\", \":\")) + \"\\n\"",
+    ),
+    (
+        "M 读的时候又用 splitlines()（按 U+2028 断行）",
+        "dojo/tracefile.py",
+        "    lines = text.split(\"\\n\")",
+        "    lines = text.splitlines()",
+    ),
+    (
         "I 不承认最后一行写了一半",
         "dojo/transcript.py",
         '        lines.append("最后一行只写了一半（写的时候断了），这一行没有算进来。")',
@@ -138,7 +153,7 @@ def main() -> int:
             units = subprocess.run(
                 [sys.executable, "-B", "-m", "unittest",
                  "tests.test_transcript_view", "tests.test_one_card_version",
-                 "tests.test_non_answer_words"],
+                 "tests.test_non_answer_words", "tests.test_trace_line_breaks"],
                 cwd=str(work), text=True, capture_output=True, env=clean_env(), timeout=900)
             if done.returncode == 0 and units.returncode == 0:
                 print("GREEN  %s —— 没有人在看这个" % name)
