@@ -127,6 +127,32 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(1, len(self.store.list_candidates()))
         self.assertIn(QUESTIONS["情境"]["ask"], output.getvalue())
 
+    def test_the_person_is_told_the_shape_before_the_first_question(self):
+        """`dojo-d-002`: shape first (including when it stops), then the details.
+
+        Measured at the entry a person actually meets, not asserted about a constant:
+        the block shown immediately before the first question has to say how many
+        parts there are and when the asking stops. Before this, a person met four
+        questions with no statement of either -- leaving was the only way to learn
+        when it ended, which is the cost the lesson names.
+        """
+        code, output = self.run_session(
+            ["讲一条做法", "对", "那天我手上是三件没做完的事", "", "", "", "", ""])
+        self.assertEqual(0, code)
+        text = output
+        first_q = text.find(QUESTIONS["情境"]["ask"])
+        self.assertGreaterEqual(first_q, 0, "the first question was never asked")
+        head = text[:first_q]
+        # `head` ends at the marker that introduces the question, so the block is
+        # what sits between the marker before that one and this one.
+        end = head.rfind("主持人> ")
+        start = head.rfind("主持人> ", 0, end)
+        block = head[start + len("主持人> "):end]
+        self.assertIn("四件事", block, "the shape does not say how many parts there are")
+        self.assertIn("两轮", block, "the shape does not say when the asking stops")
+        self.assertIn("系统补", block,
+                      "the shape does not say what happens to a part he cannot answer")
+
     def test_an_early_end_leaves_exactly_the_parts_it_should(self):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)
