@@ -26,12 +26,6 @@ DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
 DEFAULT_EXPORTS = DEFAULT_HOME / "exports"
 
 
-# Returned by `search` when the screen has already been shown on a terminal and the
-# JSON must not follow it there. A sentinel, not `None`: `None` is a value some command
-# could legitimately return, and the printer must be able to tell the two apart.
-SEARCH_SCREEN_ONLY = object()
-
-
 def _json_argument(value: str, label: str) -> Any:
     try:
         if value.startswith("@"):
@@ -407,6 +401,76 @@ def _reads_payload(
     return payload
 
 
+def _run_search(args: argparse.Namespace, db_path: Path) -> int:
+    """`dojo search`: read the library without touching it, then print screen and JSON.
+
+    Three defects made this a separate entry rather than a branch of `_execute`, all
+    found by the supervisor on the released CLI (2026-11-28):
+
+      mode     the writer path ends in `db_path.chmod(0o600)`, so a search changed the
+               permissions of a library it was only supposed to read (measured: 0444
+               came back 0600).
+      schema   the writer `Store()` runs its `CREATE TABLE IF NOT EXISTS` script, and
+               `_log_reads` then creates the read log. Pointed at another
+               application's SQLite file, a search added four dojo tables to it.
+      absence  a path that did not exist was created as an empty library and then
+               reported as "no words overlap".
+
+    So: a missing file is refused; an existing one is opened `readonly=True`, which is
+    the mode that refuses to create, refuses DDL, refuses another application's file,
+    and never chmods. The read log is the one write this command can make, and only
+    when the caller asked for a reader (`--session`): that is an explicit request to
+    record who read what, not a side effect of looking.
+    """
+    try:
+        # One guard, not two: `readonly=True` is what refuses a missing path, an empty
+        # file and another application's database, and it is the same flag that keeps the
+        # permission and the schema untouched. An extra `exists()` check in front of it
+        # could not be tested on its own (removing it left every reading green), so the
+        # refusal is translated here instead of duplicated above.
+        if not db_path.exists():
+            raise DojoError(
+                str(db_path) + " 这个库不存在。用 --db 指一个已有的库；"
+                "检索不会替你建库（要建卡用 add，那会新建）。"
+            )
+        with closing(Store(db_path, readonly=True)) as store:
+            # `for_reading`: the person's exit also learns what the gate refused and which
+            # wording each row matched. Those are for the screen only -- stdout is a
+            # published contract other tools parse, so it is printed from a copy with the
+            # screen's keys removed, and the screen goes to stderr.
+            result = store.retrieve(args.query or "", args.limit, for_reading=True)
+            for line in search_screen(result, database=store.path):
+                print(line, file=sys.stderr)
+            published = {key: value for key, value in result.items()
+                         if key not in ("withheld", "recent")}
+            published["results"] = [
+                {key: value for key, value in row.items()
+                 if key not in ("matched_on", "matched_wording")}
+                for row in result["results"]
+            ]
+        # `search` is read-only: the writer `Store` runs its CREATE TABLE script and this
+        # path ends in `chmod(0o600)`, so a plain look at a library must not reach it.
+        # The read log, when and only when a reader was named. Opened for writing here,
+        # after the screen was built from the read-only connection: nothing above can be
+        # affected by a failure to log, and a failure is reported rather than hidden.
+        if getattr(args, "session", None) is not None:
+            with closing(Store(db_path)) as writer:
+                _log_reads(writer, result["results"], args.session, "search")
+    except (DojoError, sqlite3.Error, OSError, TypeError, ValueError) as exc:
+        print(f"无法检索：{exc}", file=sys.stderr)
+        return 2
+    # A person at a terminal reads the screen; a script reads stdout. Printing both on a
+    # terminal buried the screen's last line -- the command to run -- under the whole
+    # JSON block (measured: 24 readable lines, then 48 of JSON). The host scripts' entry
+    # is unchanged; they already read stdout.
+    if sys.stdout.isatty():
+        print("（机器可读的 JSON 没有印在终端上；脚本直接读 stdout，或在命令后接"
+              " ` | python3 -m json.tool`。）", file=sys.stderr)
+        return 0
+    print(json.dumps(published, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
 def _execute(args: argparse.Namespace, store: Store) -> Any:
     command = args.command
     if command == "seed":
@@ -453,34 +517,8 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.abstain(args.reason, args.id, args.next_question)
     if command == "withdraw":
         return store.withdraw(args.id, args.reason)
-    if command == "search":
-        # `for_reading`: the person's exit also learns what the gate refused and which
-        # wording each row matched. Those are for the screen only -- stdout is a
-        # published contract that other tools parse, so it is printed from a copy with
-        # the screen's keys removed, and the screen goes to stderr. Measured: a caller
-        # comparing the four top-level keys and each row's keys sees no change (#3436).
-        result = store.retrieve(args.query or "", args.limit, for_reading=True)
-        _log_reads(store, result["results"], getattr(args, "session", None), "search")
-        for line in search_screen(result, database=store.path):
-            print(line, file=sys.stderr)
-        published = {key: value for key, value in result.items()
-                     if key not in ("withheld", "recent")}
-        published["results"] = [
-            {key: value for key, value in row.items()
-             if key not in ("matched_on", "matched_wording")}
-            for row in result["results"]
-        ]
-        # A person at a terminal reads the screen; a script reads stdout. Printing both
-        # on a terminal buried the screen's last line -- the command to run -- under the
-        # whole JSON block, which is what the supervisor measured (24 readable lines,
-        # then 48 of JSON). So stdout is printed only when it is not a terminal. On a
-        # terminal a one-line pointer replaces it, and it names how to get the JSON back:
-        # the host scripts' entry is unchanged, they just have to redirect or pipe.
-        if sys.stdout.isatty():
-            print("（机器可读的 JSON 没有印在终端上；脚本直接读 stdout，或在命令后接"
-                  " ` | python3 -m json.tool`。）", file=sys.stderr)
-            return SEARCH_SCREEN_ONLY
-        return published
+    # `search` is handled in `main`, before the writer `Store` below, because it must
+    # open the library read-only: see `_run_search`.
     if command == "pipeline":
         return run_pipeline(store, args.session, dry_run=args.dry_run)
     if command == "distill":
@@ -837,16 +875,11 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
             return run_chat(store, config=config)
-        # Read-only commands must not conjure the library they were pointed at. `search`
-        # against a path that does not exist used to open (and create) an empty file and
-        # then print "no words overlap" -- a statement about a collection that was never
-        # read. The check sits here, before the generic `Store(...)` below, because that
-        # constructor is what creates the file.
-        if args.command == "search" and not db_path.exists():
-            print("无法检索：" + str(db_path) + " 这个库不存在。"
-                  "用 --db 指一个已有的库；检索不会替你建库（要建卡用 add，那会新建）。",
-                  file=sys.stderr)
-            return 2
+        # `search` never opens the writer `Store` below: it would create a missing file,
+        # run its schema script on somebody else's database, and chmod the library at the
+        # end. Its own entry opens read-only and logs a read only when one was requested.
+        if args.command == "search":
+            return _run_search(args, db_path)
         if args.command == "discuss":
             if args.no_trace and args.resume:
                 print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=sys.stderr)
@@ -941,8 +974,6 @@ def main(argv: list[str] | None = None) -> int:
             db_path.chmod(0o600)
         except OSError:
             pass
-        if result is SEARCH_SCREEN_ONLY:
-            return 0
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     except (DojoError, sqlite3.Error, OSError, TypeError, ValueError) as exc:

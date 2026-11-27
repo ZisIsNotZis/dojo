@@ -10,13 +10,13 @@
 ## 0. 离线整段入口（不需要端点，不需要建库）
 
 ```bash
-python3 docs/evidence/2026-11-28-find-remembered/verify.py     # 46 项读数
-python3 docs/evidence/2026-11-28-find-remembered/redarm.py     # 14 条红臂
+python3 docs/evidence/2026-11-28-find-remembered/verify.py     # 53 项读数
+python3 docs/evidence/2026-11-28-find-remembered/redarm.py     # 17 条红臂
 ```
 
 `verify.py` 在临时目录里自己建库、自己走路：一句话被认可、库里还有一条相反的 →
 有人质疑后再用同样的词找 → 只记得大意时找到入口 → 记得的是改掉之前那句 →
-库里从来没有过的题目 → 机器读的那一面没变。它打印的是真实屏幕，退出码 0 表示 44 项全成立。
+库里从来没有过的题目 → 机器读的那一面没变。它打印的是真实屏幕，退出码 0 表示 53 项全成立。
 
 ## 1. 在你的库里用词去找
 
@@ -124,6 +124,24 @@ python3 -m dojo --db "$DB" search '只有普通日报'
 
 旧句子来自 `revise` 事件的 `from_statement`，逐字照印。**只有人的检索**会匹配旧句子：
 发给模型的那次检索一个字都不变，模型不会看见一张卡「说过」它已经不说的那句话。
+
+## 4b. 看一眼不会改动那个文件
+
+`search` 只读：它用 `Store(..., readonly=True)` 打开库，所以
+
+- 一个 `0444` 的库看完仍是 `0444`，字节和表结构都不变；
+- 指到别的应用的 SQLite 文件会当场拒绝（exit 2），不会往里建 dojo 的表；
+- 指到一个不存在的路径会拒绝，也不会替你建库。
+
+唯一的写是**阅读记录**，而且只在你点名了一个读者时（`--session`）：
+
+```bash
+python3 -m dojo --db "$DB" search '值班' --session reader-1   # 会记一条读
+python3 -m dojo --db "$DB" reads --id <ID>                    # 看记下了什么
+```
+
+没点名时不留记录，屏幕上也不建 `reads` 表。如果库是只读的而你又要记，记录写不进去，
+屏幕会明说「未记下这次读取（search）…attempt to write a readonly database」，不会假装记上了。
 
 ## 5. 机器读的那一面没有变
 

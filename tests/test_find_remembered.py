@@ -224,6 +224,56 @@ class FindRememberedTests(unittest.TestCase):
         self.assertEqual({"query", "method", "matched_terms", "results"},
                          set(json.loads(piped.stdout)))
 
+    def test_looking_does_not_change_the_file_it_looks_at(self):
+        """A read-only library stays 0444 and keeps its bytes and tables."""
+        import sqlite3
+
+        def tables():
+            connection = sqlite3.connect(self.db)
+            try:
+                return {row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+            finally:
+                connection.close()
+
+        self.add("值班通知交系统跑。", candidate_id="d-ro")
+        self.store.confirm("d-ro", "值得讨论")
+        self.store.close()
+        before_tables, before_bytes = tables(), self.db.read_bytes()
+        self.db.chmod(0o444)
+        self.addCleanup(self.db.chmod, 0o644)
+        done = self.cli("search", "值班")
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertEqual(0o444, self.db.stat().st_mode & 0o777, "a look must not rewrite the mode")
+        self.assertEqual(before_bytes, self.db.read_bytes())
+        self.assertNotIn("reads", tables(), "no read log unless a reader was named")
+        self.assertEqual(before_tables, tables())
+
+    def test_another_applications_database_is_refused_and_left_alone(self):
+        import sqlite3
+
+        foreign = self.root / "foreign.sqlite3"
+        connection = sqlite3.connect(foreign)
+        connection.execute("CREATE TABLE stock(id INTEGER)")
+        connection.commit()
+        connection.close()
+        before = foreign.read_bytes()
+        done = subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(foreign), "search", "值班"],
+                              cwd=str(ROOT), env=self.env, text=True, capture_output=True, timeout=180)
+        self.assertEqual(2, done.returncode)
+        self.assertEqual(before, foreign.read_bytes())
+
+    def test_naming_a_reader_is_what_records_the_read(self):
+        self.add("值班通知交系统跑。", candidate_id="d-word")
+        self.store.confirm("d-word", "值得讨论")
+        self.cli("search", "值班")
+        self.assertFalse(self.store.reads("d-word")["holds_table"],
+                         "an unnamed look is not a read to record")
+        self.cli("search", "值班", "--session", "reader-1")
+        screen = json.loads(self.cli("reads", "--id", "d-word").stdout)
+        self.assertEqual(1, len(screen["rows"]))
+        self.assertEqual("search", screen["rows"][0]["surface"])
+
     def test_searching_a_library_that_does_not_exist_refuses_instead_of_creating_it(self):
         """A missing file is not an empty collection, and the screen must not say it is."""
         absent = self.root / "nothing-here.sqlite3"

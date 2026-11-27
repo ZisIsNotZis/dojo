@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -78,6 +79,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *arguments):
         pass
+
+
+def sqlite_tables(path: Path) -> set[str]:
+    """The tables in a file, read by a separate connection so nothing is cached."""
+    connection = sqlite3.connect(path)
+    try:
+        return {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        connection.close()
+
+
+def _reads_rows(done: subprocess.CompletedProcess) -> int:
+    """How many read rows `dojo reads` printed, from its JSON."""
+    try:
+        return len(json.loads(done.stdout).get("rows") or [])
+    except ValueError:
+        return -1
 
 
 def heading(text: str) -> None:
@@ -281,11 +300,79 @@ def main() -> int:
         [sys.executable, "-B", "-m", "dojo", "--db", str(absent_db), "search", "值班"],
         cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180,
     )
+    # The wording itself is asserted, not just "it failed": the read-only store refuses a
+    # missing path too, with a message that recommends `seed` -- a command this screen's
+    # reader did not ask for and should not be sent to. The refusal this slice owns says
+    # search will not create a library.
     reading("不存在的库上检索会拒绝，而不是报成空结果",
             missing.returncode != 0 and absent_db.exists() is False
-            and "不存在" in missing.stderr, missing.stderr[-160:])
+            and "检索不会替你建库" in missing.stderr, missing.stderr[-160:])
     reading("也没有把它说成「没有一张卡的字和这些词重叠」",
             "没有一张卡的字和这些词重叠" not in missing.stderr)
+
+    # ---- B5: reading must not change the file it reads -----------------------------
+    heading("B5. 只想看一眼，不能改动那个文件（权限、别人的库、读记录）")
+    readable = root / "readonly.sqlite3"
+    for command in (("add", "--statement", "值班通知交系统跑。", "--kind", "abstract_idea",
+                     "--id", "d-ro"),
+                    ("confirm", "d-ro", "--basis", "值得讨论")):
+        subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(readable), *command],
+                       cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180)
+    tables_before = sqlite_tables(readable)
+    bytes_before = readable.read_bytes()
+    readable.chmod(0o444)
+    looked = subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(readable),
+                             "search", "值班"], cwd=str(ROOT), env=env, text=True,
+                            capture_output=True, timeout=180)
+    reading("对一个 0444 的库检索仍然成功", looked.returncode == 0, looked.stderr[-160:])
+    reading("检索后文件权限仍是 0444", (readable.stat().st_mode & 0o777) == 0o444,
+            oct(readable.stat().st_mode & 0o777))
+    reading("只读文件的内容一个字节都没变", readable.read_bytes() == bytes_before)
+    readable.chmod(0o644)
+    # Same question on a writable library, where "no permission error" cannot be what
+    # keeps the file unchanged: a search without --session must not create the read log.
+    plain = root / "plain.sqlite3"
+    for command in (("add", "--statement", "值班通知交系统跑。", "--kind", "abstract_idea",
+                     "--id", "d-plain"),
+                    ("confirm", "d-plain", "--basis", "值得讨论")):
+        subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(plain), *command],
+                       cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180)
+    plain_before = sqlite_tables(plain)
+    subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(plain), "search", "值班"],
+                   cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180)
+    reading("没有请求记阅读时，不建读记录表，也不改表结构",
+            sqlite_tables(plain) == plain_before and "reads" not in sqlite_tables(plain),
+            str(sorted(sqlite_tables(plain))))
+
+    foreign = root / "foreign.sqlite3"
+    connection = sqlite3.connect(foreign)
+    connection.execute("CREATE TABLE stock(id INTEGER)")
+    connection.commit()
+    connection.close()
+    before_bytes = foreign.read_bytes()
+    refused = subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(foreign),
+                              "search", "值班"], cwd=str(ROOT), env=env, text=True,
+                             capture_output=True, timeout=180)
+    reading("指到别的应用的 SQLite 库时拒绝，而不是往里建表",
+            refused.returncode == 2 and sqlite_tables(foreign) == {"stock"},
+            str(sorted(sqlite_tables(foreign))))
+    reading("那个文件的内容一个字节都没变", foreign.read_bytes() == before_bytes)
+
+    # The log is the one write this command can make, and only when asked for.
+    logged = root / "logged.sqlite3"
+    for command in (("add", "--statement", "值班通知交系统跑。", "--kind", "abstract_idea",
+                     "--id", "d-word"),
+                    ("confirm", "d-word", "--basis", "值得讨论")):
+        subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(logged), *command],
+                       cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180)
+    subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(logged),
+                    "search", "值班", "--session", "reader-1"],
+                   cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180)
+    logged_reads = subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(logged),
+                                   "reads", "--id", "d-word"], cwd=str(ROOT), env=env,
+                                  text=True, capture_output=True, timeout=180)
+    reading("点名了一个读者时，阅读才被记进账本",
+            _reads_rows(logged_reads) == 1, logged_reads.stderr[-160:])
 
     # ---- C: only the gist ----------------------------------------------------------
     heading("C. 只记得大意，说的词库里一个都没有")

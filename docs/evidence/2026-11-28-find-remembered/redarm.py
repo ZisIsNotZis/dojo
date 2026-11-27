@@ -101,8 +101,8 @@ ARMS = [
     (
         "json-buried-under-the-screen-on-a-terminal",
         "dojo/cli.py",
-        "            return SEARCH_SCREEN_ONLY\n",
-        "            return published\n",
+        "    if sys.stdout.isatty():\n",
+        "    if False:\n",
         "终端上没有把整块 JSON 倒在屏幕上",
     ),
     (
@@ -113,18 +113,41 @@ ARMS = [
         "旧说法那条注不说「上面」「下面」",
     ),
     (
+        "a-read-changes-the-file-it-reads",
+        "dojo/cli.py",
+        "        with closing(Store(db_path, readonly=True)) as store:",
+        "        with closing(Store(db_path)) as store:\n            db_path.chmod(0o600)\n",
+        # Both halves of the old behaviour: the writer `Store` and the chmod it was
+        # followed by. The mode is what a person can see, so that is the reading.
+        "检索后文件权限仍是 0444",
+    ),
+    (
+        "reading-somebody-elses-database",
+        "dojo/cli.py",
+        "        with closing(Store(db_path, readonly=True)) as store:",
+        "        with closing(Store(db_path)) as store:",
+        "指到别的应用的 SQLite 库时拒绝，而不是往里建表",
+    ),
+    (
+        "a-read-is-logged-without-being-asked-for",
+        "dojo/cli.py",
+        '        if getattr(args, "session", None) is not None:\n',
+        '        if True:\n',
+        "没有请求记阅读时，不建读记录表，也不改表结构",
+    ),
+    (
         "a-missing-library-is-reported-as-an-empty-one",
         "dojo/cli.py",
-        '        if args.command == "search" and not db_path.exists():',
-        '        if False:',
+        '        if not db_path.exists():\n            raise DojoError(',
+        '        if False:\n            raise DojoError(',
         "不存在的库上检索会拒绝，而不是报成空结果",
     ),
     (
         "screen-keys-leak-into-stdout",
         "dojo/cli.py",
-        '        published = {key: value for key, value in result.items()\n'
-        '                     if key not in ("withheld", "recent")}\n',
-        '        published = dict(result)\n',
+        '            published = {key: value for key, value in result.items()\n'
+        '                         if key not in ("withheld", "recent")}\n',
+        '            published = dict(result)\n',
         "命令行 stdout 仍是四个旧键（屏幕的键不进 stdout）",
     ),
 ]
