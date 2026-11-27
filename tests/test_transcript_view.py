@@ -277,6 +277,38 @@ class TranscriptTests(unittest.TestCase):
         self.assertEqual(2, missing.returncode)
         self.assertIn("无法回看", missing.stderr)
 
+    def test_an_empty_or_half_written_trace_says_so_in_its_own_words(self):
+        """A trace whose first write died exists and is empty; that is a fact about the
+        session, not a wrong path. The two shapes get different sentences because they
+        are different states: nothing was written, versus one row that never completed."""
+        nothing = self.root / "nothing.jsonl"
+        nothing.write_text("", encoding="utf-8")
+        done = self.run_cli("transcript", str(nothing))
+        self.assertEqual(2, done.returncode)
+        self.assertIn("轨迹是空的", done.stderr)
+
+        half = self.root / "half.jsonl"
+        half.write_text('{"seq": 1, "user": "你', encoding="utf-8")
+        done = self.run_cli("transcript", str(half))
+        self.assertEqual(2, done.returncode)
+        self.assertIn("只有半行", done.stderr)
+
+    def test_a_record_with_no_ending_row_is_not_called_complete(self):
+        self.run_session()
+        trace = self.trace()
+        rows = [line for line in trace.read_text(encoding="utf-8").splitlines()
+                if json.loads(line).get("event") != "session_end"]
+        cut_dir = self.root / "noend"
+        cut_dir.mkdir()
+        cut = cut_dir / trace.name
+        cut.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        view = transcript_module.load(cut)
+        self.assertEqual(4, len(view["parts"]))
+        self.assertFalse(view["complete"])
+        shown = transcript_module.render(view)
+        self.assertIn("没有正常收尾", shown)
+        self.assertNotIn("这一场没有写下卡片", shown)
+
     def test_json_output_carries_the_same_facts(self):
         self.run_session()
         done = self.run_cli("transcript", str(self.trace()), "--json")

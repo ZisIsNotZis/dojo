@@ -76,7 +76,15 @@ def load(path: Path) -> dict[str, Any]:
             raise TranscriptError(f"第 {index} 行不是记录对象")
         rows.append(value)
     if not rows:
-        raise TranscriptError("文件里没有记录")
+        # A real state: the file was created and the very first write died. The receipt
+        # for that session says the words were not kept and names no view, so this is
+        # reached by someone who went looking anyway. Say what the file is, not that
+        # their path was wrong.
+        raise TranscriptError(
+            "这份轨迹是空的：这一场没有写下任何一行（可能轨迹刚开就没写成）"
+            if not partial_tail else
+            "这份轨迹只有半行、没有一条完整记录：这一场没有写成任何一条"
+        )
     if not any(row.get("event") in {"elicitation", "session_end", "handout"}
                or "reason" in row for row in rows):
         raise TranscriptError("记录形状不是本程序的讨论轨迹")
