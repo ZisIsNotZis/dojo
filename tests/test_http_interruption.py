@@ -18,7 +18,10 @@ class HTTPInterruptionTests(unittest.TestCase):
  def test_partial_success_body_is_normalized_and_never_retried_or_captured(self):
   c=self.client();opener=Mock();opener.open.return_value=BrokenBody()
   with patch('dojo.live.urllib.request.build_opener',return_value=opener),self.assertRaises(LiveError) as caught:c.complete([{'role':'user','content':'继续'}])
-  self.assertEqual('connect',caught.exception.kind);self.assertEqual(1,opener.open.call_count)
+  # Was 'connect'. A cut body is not a failed connection: the request was answered
+  # and may have been applied, so `discuss` must not retry it as a transient
+  # network error. The kind is separate now, and this test names the new fact.
+  self.assertEqual('incomplete_response',caught.exception.kind);self.assertEqual(1,opener.open.call_count)
   self.assertEqual('',caught.exception.raw_response);self.assertIsNone(c.last_response_shape)
   self.assertNotIn(PARTIAL.decode(),str(caught.exception))
  def test_partial_http_error_body_preserves_status_without_partial_content(self):
@@ -36,7 +39,7 @@ class HTTPInterruptionTests(unittest.TestCase):
     self.assertEqual(2,q.requests);self.assertEqual(1,opener.open.call_count)
     rows=q.db.execute('SELECT kind,payload FROM inquiry_events').fetchall()
     self.assertEqual(1,sum(k=='user' for k,p in rows));self.assertEqual(0,sum(k=='delivered' for k,p in rows))
-    self.assertEqual('connect',next(json.loads(p)['kind'] for k,p in rows if k=='failure'))
+    self.assertEqual('incomplete_response',next(json.loads(p)['kind'] for k,p in rows if k=='failure'))
     self.assertNotIn(PARTIAL.decode(),json.dumps(rows));self.assertNotIn('KEY_SENTINEL',json.dumps(rows))
    finally:q.close()
 

@@ -394,9 +394,32 @@ class Store:
         return json.loads(row["state_json"])
 
     def _write(self, state: dict[str, Any], event: str, details: dict[str, Any]) -> dict[str, Any]:
+        """Persist a new version, unless this request would change nothing.
+
+        A request whose intended effect is already the stored state -- an identical
+        `confirm`, `challenge` or `revise` sent twice -- must not read as a second
+        action. Version numbers are what the pipeline's "processed to version N"
+        marks compare against, so inflating one on a repeat turns finished work back
+        into pending work. RFC 9110 section 9.2.2 allows a server to log each repeat
+        separately; what it does not allow is leaving the two indistinguishable to a
+        later reader, so the repeat is recorded as its own event naming the original.
+        """
         candidate_id = state["id"]
         current = self._get(candidate_id)
         state = dict(state)
+        unchanged = {key: value for key, value in state.items() if key != "version"} == {
+            key: value for key, value in current.items() if key != "version"}
+        if unchanged:
+            original = self.connection.execute(
+                "SELECT seq FROM events WHERE candidate_id=? AND event=? ORDER BY seq DESC LIMIT 1",
+                (candidate_id, event),
+            ).fetchone()
+            self._event(candidate_id, event + REPEAT_EVENT_SUFFIX, {
+                **details, "version": current["version"],
+                "repeat_of": original["seq"] if original else None,
+                "effect": "unchanged",
+            })
+            return current
         state["version"] = current["version"] + 1
         payload = _json(state)
         now = _now()
@@ -1972,6 +1995,12 @@ def is_unaccepted_draft(state: dict[str, Any]) -> bool:
 
 
 ACCEPTANCE_EVENT = "wording_accepted"
+# A repeated request whose effect was already stored writes `<event>.repeat` and names the
+# event it repeats. The version does not move: a repeat must not read as a second action,
+# and `pipeline_marks` compares against versions, so moving one would make finished work
+# pending again. The row exists so a later reader can tell a replay from a real second
+# action -- RFC 9110 section 9.2.2 permits logging each request, not blurring them.
+REPEAT_EVENT_SUFFIX = ".repeat"
 # A merge the store refused, written on the source card's ledger. A refusal changes no
 # version -- refusing to do something must not look like doing it -- but it does leave a
 # row, so `dojo events --id` can show that the rule fired and on which two cards, instead

@@ -262,6 +262,21 @@ class OpenAICompatibleClient:
             opener = urllib.request.build_opener(_RejectRedirects())
             with opener.open(request, timeout=self.timeout) as response:
                 raw = response.read(self.max_response_bytes + 1)
+                # A body framed by Content-Length that ends early comes back as a
+                # short `read` with no exception, so the shortfall has to be
+                # checked here; otherwise a cut response is decoded as junk JSON
+                # and blamed on the model rather than on the connection.
+                # No header means no framing claim to check: a chunked body ends
+                # by its own terminator, and a double without headers has nothing
+                # to compare. Absence of the fact is not evidence of an incomplete
+                # response, so only a declared length can make one.
+                headers = getattr(response, "headers", None)
+                declared = headers.get("Content-Length") if headers is not None else None
+                try:
+                    declared = int(declared) if declared is not None else None
+                except (TypeError, ValueError):
+                    declared = None
+                incomplete = declared is not None and len(raw) < declared
         except urllib.error.HTTPError as exc:
             status = exc.code
             try:
@@ -292,23 +307,39 @@ class OpenAICompatibleClient:
             ) from None
         except http.client.HTTPException:
             # Chunked bodies may end mid-response. Never treat partial model
-            # content as a candidate or retain it in diagnostics; do not retry.
+            # content as a candidate or retain it in diagnostics. This is a
+            # separate kind from `connect` because the request was answered and
+            # may well have been applied -- only the reading of the answer was
+            # cut -- so the caller must not treat it as safe to repeat blindly.
             raise LiveError(
                 "model HTTP response was interrupted; no candidate was saved",
-                kind="connect",
+                kind="incomplete_response",
             ) from None
         except OSError as exc:
             raise LiveError(
                 "model network I/O failed; no candidate was saved",
                 kind="connect", detail=f"{type(exc).__name__}: {exc}",
             ) from None
-        response_text = raw.decode("utf-8", errors="replace")
+        # Order matters. The size bound below reads one byte past the cap on
+        # purpose, so a body that is merely too large also arrives "short" of its
+        # declared length. Oversize is the stronger and more actionable fact, and
+        # calling it an interruption would send the reader after the wrong problem.
         if len(raw) > self.max_response_bytes:
             raise LiveError(
                 f"model response exceeded {self.max_response_bytes} bytes; no candidate was saved",
-                kind="unknown", raw_response=response_text,
-                raw_response_limit=self.max_raw_response_chars,
+                kind="unknown",
+                raw_response=raw[:self.max_raw_response_chars].decode("utf-8", errors="replace"),
             )
+        if incomplete:
+            # Same fact as the chunked branch above, reached through a shorter
+            # `read`: fewer bytes arrived than the response promised. Report the
+            # framing, not the model's output, and keep no partial body.
+            raise LiveError(
+                f"model HTTP response was incomplete: {len(raw)} of {declared} bytes arrived; "
+                "no candidate was saved",
+                kind="incomplete_response",
+            )
+        response_text = raw.decode("utf-8", errors="replace")
         try:
             response_value = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):

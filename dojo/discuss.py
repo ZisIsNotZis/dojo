@@ -529,6 +529,8 @@ def _error_kind(exc: LiveError) -> str:
         return "timeout"
     if "could not connect" in message or "network I/O failed" in message:
         return "connect"
+    if "response was interrupted" in message or "response was incomplete" in message:
+        return "incomplete_response"
     if "not strict JSON" in message:
         return "not_json"
     if "schema" in message or "conclusion" in message:
@@ -587,6 +589,11 @@ def _user_error_message(
         return "模型请求连续超时，讨论已结束；请检查模型服务后重新运行。"
     if kind == "connect":
         return "连续无法连接模型服务，讨论已结束；请检查模型服务后重新运行。"
+    if kind == "incomplete_response":
+        return (
+            "模型这次已经作出回答，但响应在本机读完整之前中断；这不代表模型输出本身有问题，"
+            "也没有据此重发请求（重发可能让模型再做一次同样的工作）。本轮没有形成结论，你可以继续。"
+        )
     return "模型这次返回的内容无法识别，自动重试仍未成功；这轮没有形成结论，你可以继续。"
 
 
@@ -1527,6 +1534,12 @@ def run_discuss(
                         break
                     continue
                 consecutive_connection_failures = 0
+                if kind == "incomplete_response":
+                    # The request was answered; only the reading of the answer was cut.
+                    # Repeating it is exactly the guess RFC 9110 section 9.2.2 warns
+                    # about, so this round ends without a retry. The session stays open:
+                    # the connection recovered, so the user can put the turn again.
+                    break
                 if kind in {"empty_content", "not_json", "schema_violation", "truncated", "unknown"} and invalid_retries < 2:
                     invalid_retries += 1
                     note(f"输出不合格（{kind}），第 {invalid_retries} 次重试")
@@ -1568,7 +1581,11 @@ def run_discuss(
             )
             stance = "neutral"
             candidate = None
-            reason = "invalid_output"
+            # Name the round for what happened: a cut response is not the model
+            # producing invalid output, and a trace that says so misleads the reader
+            # who comes to it after a failure.
+            reason = ("response_incomplete" if error["kind"] == "incomplete_response"
+                      else "invalid_output")
             decision = "none"
             print("\n主持人> " + answer, file=output)
             note(
