@@ -224,6 +224,17 @@ class FindRememberedTests(unittest.TestCase):
         self.assertEqual({"query", "method", "matched_terms", "results"},
                          set(json.loads(piped.stdout)))
 
+    def test_searching_a_library_that_does_not_exist_refuses_instead_of_creating_it(self):
+        """A missing file is not an empty collection, and the screen must not say it is."""
+        absent = self.root / "nothing-here.sqlite3"
+        done = subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(absent), "search", "值班"],
+                              cwd=str(ROOT), env=self.env, text=True,
+                              capture_output=True, timeout=180)
+        self.assertEqual(2, done.returncode, done.stderr)
+        self.assertFalse(absent.exists(), "search must not create the library it was asked about")
+        self.assertIn("不存在", done.stderr)
+        self.assertNotIn("没有一张卡的字和这些词重叠", done.stderr)
+
     def test_the_published_stdout_shape_is_unchanged(self):
         self.add("值班通知交系统跑。", candidate_id="d-slow")
         self.store.confirm("d-slow", "值得讨论")

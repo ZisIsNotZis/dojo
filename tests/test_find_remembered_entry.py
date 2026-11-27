@@ -126,10 +126,20 @@ class TheFindRememberedEntryPoint(unittest.TestCase):
         """One more place the boundary is checked, because it is the easiest to break."""
         self.assertIn('published = {key: value for key, value in result.items()',
                       (ROOT / "dojo" / "cli.py").read_text(encoding="utf-8"))
-        payload = json.loads(subprocess.run(
-            [sys.executable, "-B", "-m", "dojo", "--db", str(Path(tempfile.mkdtemp()) / "x.sqlite3"),
-             "search", "值班"], cwd=str(ROOT), env=clean_env(), capture_output=True, text=True,
-        ).stdout)
+        # The library is created first: a search against a missing file is refused now, so
+        # this check would otherwise pass by reading an error message's empty stdout.
+        work = Path(tempfile.mkdtemp(prefix="find-json."))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        db = work / "x.sqlite3"
+        subprocess.run([sys.executable, "-B", "-m", "dojo", "--db", str(db), "add",
+                        "--statement", "值班通知交系统跑。", "--kind", "abstract_idea"],
+                       cwd=str(ROOT), env=clean_env(), capture_output=True, text=True)
+        done = subprocess.run(
+            [sys.executable, "-B", "-m", "dojo", "--db", str(db), "search", "值班"],
+            cwd=str(ROOT), env=clean_env(), capture_output=True, text=True,
+        )
+        self.assertEqual(0, done.returncode, done.stderr)
+        payload = json.loads(done.stdout)
         self.assertEqual({"query", "method", "matched_terms", "results"}, set(payload))
 
 

@@ -113,6 +113,13 @@ ARMS = [
         "旧说法那条注不说「上面」「下面」",
     ),
     (
+        "a-missing-library-is-reported-as-an-empty-one",
+        "dojo/cli.py",
+        '        if args.command == "search" and not db_path.exists():',
+        '        if False:',
+        "不存在的库上检索会拒绝，而不是报成空结果",
+    ),
+    (
         "screen-keys-leak-into-stdout",
         "dojo/cli.py",
         '        published = {key: value for key, value in result.items()\n'

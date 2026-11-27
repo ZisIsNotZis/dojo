@@ -837,6 +837,16 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
             return run_chat(store, config=config)
+        # Read-only commands must not conjure the library they were pointed at. `search`
+        # against a path that does not exist used to open (and create) an empty file and
+        # then print "no words overlap" -- a statement about a collection that was never
+        # read. The check sits here, before the generic `Store(...)` below, because that
+        # constructor is what creates the file.
+        if args.command == "search" and not db_path.exists():
+            print("无法检索：" + str(db_path) + " 这个库不存在。"
+                  "用 --db 指一个已有的库；检索不会替你建库（要建卡用 add，那会新建）。",
+                  file=sys.stderr)
+            return 2
         if args.command == "discuss":
             if args.no_trace and args.resume:
                 print("无法续跑：--resume 与 --no-trace 不能同时使用。", file=sys.stderr)

@@ -274,6 +274,19 @@ def main() -> int:
             isinstance(parsed_pipe, dict) and "results" in parsed_pipe,
             piped.stdout[:0])
 
+    # ---- B4: a library that is not there is not an empty library -------------------
+    heading("B4. 指到一个不存在的库")
+    absent_db = root / "missing" / "nope.sqlite3"
+    missing = subprocess.run(
+        [sys.executable, "-B", "-m", "dojo", "--db", str(absent_db), "search", "值班"],
+        cwd=str(ROOT), env=env, text=True, capture_output=True, timeout=180,
+    )
+    reading("不存在的库上检索会拒绝，而不是报成空结果",
+            missing.returncode != 0 and absent_db.exists() is False
+            and "不存在" in missing.stderr, missing.stderr[-160:])
+    reading("也没有把它说成「没有一张卡的字和这些词重叠」",
+            "没有一张卡的字和这些词重叠" not in missing.stderr)
+
     # ---- C: only the gist ----------------------------------------------------------
     heading("C. 只记得大意，说的词库里一个都没有")
     gist_out, gist_err, code = screen(("search", GIST))
