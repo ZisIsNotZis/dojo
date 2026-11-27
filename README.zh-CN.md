@@ -125,6 +125,23 @@ python3 -m dojo discuss --resume sessions/discuss-0123456789abcdef0123456789abcd
 完整走法（屏幕与请求都打出来）见
 [`docs/evidence/2026-11-28-card-handoff/WALK.md`](docs/evidence/2026-11-28-card-handoff/WALK.md)。
 
+### 回看一场已经结束的讨论
+
+`transcript TRACE` 是一场讨论的只读回看：你说了什么、主持人怎么回，然后四件追问逐件列出
+当时问的是哪句、你说的是什么、记录把它记成了什么。它不打开库、不写任何东西、不发请求。
+写到一半断了的轨迹照样能读，屏幕会说哪一行只写了一半；不能续跑时它也会直说，不会印一条
+复制过去必被拒的 `--resume` 命令。
+
+最后那句是关键：这些原话是**材料，不是结论**。一件被收下，只说明系统留下了你当时说的话；
+回看不判它答没答到点上，也不代表你认可了那张卡。
+
+```sh
+python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jsonl
+python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jsonl --json
+```
+
+四件问完时那句回执会点名这条命令，所以「原话留在本场记录里」不需要先学会 JSONL 才用得上。
+
 ## 现在能做什么
 
 - **带出处的候选账本。** 每条记录带表述、类型、前提、范围、替代路线、矛盾、未知和结构化来源——从不保存原始聊天全文。

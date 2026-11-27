@@ -54,7 +54,12 @@ MATERIAL = ("上次是把一套检查交给别人的时候：剩下的流程我�
             "检查的活搬走了，我自己判断少了",
             "第一次觉得亏是没人再复核",
             "有一次我照着做反而漏了")
-OUTCOME_WORDS = ("你答了", "你说跳过", "时你结束了输入", "先不答", "没答出来", "没问到")
+# The word for "his words were kept" changed from 你答了 to 说了原话 (the receipt stopped
+# claiming the question was answered). Left out, this tuple no longer matched any bucket
+# of a real receipt, and `all(count <= 1)` below passed on a receipt that named a part
+# twice -- a check that had gone quiet. Both words are listed so traces written under
+# either wording are still counted.
+OUTCOME_WORDS = ("说了原话", "你答了", "你说跳过", "时你结束了输入", "先不答", "没答出来", "没问到")
 
 
 def result(answer, candidate=None, user_stance="neutral"):
@@ -150,8 +155,25 @@ def named(line, marker):
 
 
 def part_counts(line):
-    return {part: sum(part in named(line, word) for word in OUTCOME_WORDS)
-            for part in PART_ORDER}
+    """How many outcome words name each part. The kept-words bucket reads backwards.
+
+    Every other outcome puts the parts after its word (你说跳过 张力 / 没问到 代价、失效).
+    The word for kept words puts them before it (你在 情境、张力 上说了原话), and the
+    all-four short form names no part at all (四件你都说了原话). Both shapes have to be
+    counted, or the once-per-part check is measuring half a receipt.
+    """
+    counts = {part: 0 for part in PART_ORDER}
+    for part in PART_ORDER:
+        counts[part] += sum(part in named(line, word) for word in OUTCOME_WORDS)
+    if "上说了原话" in line:
+        head = line.split("上说了原话", 1)[0].rsplit("你在 ", 1)[-1]
+        for part in PART_ORDER:
+            if part in head:
+                counts[part] += 1
+    if "四件你都说了原话" in line:
+        for part in PART_ORDER:
+            counts[part] += 1
+    return counts
 
 
 def main() -> int:
@@ -219,9 +241,16 @@ def main() -> int:
             and events_mat[0]["answer"] == MATERIAL[0]
             and "四件你都说了原话" in line_mat
         ),
+        # `all(count <= 1)` alone passes when the vocabulary matches nothing at all, and
+        # that is exactly what happened for one slice (the receipt's word changed and
+        # this tuple did not): the check was green while naming zero outcomes. Each line
+        # now also has to have at least one part with a counted word, so the vocabulary
+        # is proven to still describe this receipt.
         "每件只有一个结局词": all(
-            all(count <= 1 for count in part_counts(line).values())
-            for line in (line_stop, line_rest, line_two, line_mat)
+            any(count == 1 for count in counts.values())
+            and all(count <= 1 for count in counts.values())
+            for counts in (part_counts(line)
+                           for line in (line_stop, line_rest, line_two, line_mat))
         ),
         "问着说跳过也是跳过": (
             end_pol["elicitation"]["skipped"] == ["情境"]

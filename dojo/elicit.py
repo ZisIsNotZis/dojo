@@ -80,6 +80,16 @@ QUESTIONS: dict[str, dict[str, Any]] = {
 }
 
 NON_ANSWERS = ("不知道", "没有", "不清楚", "说不清", "说不好", "不好说", "因人而异", "看情况", "没什么", "想不起来", "忘了")
+# A non-answer with a soft ending is still a non-answer. The review measured four
+# expressions reaching the entry point as `answer` -- 不知道啊 / 说不好吧 / 忘了诶, and the
+# bare 嗯 -- so the receipt said 四件你都说了原话 about a person who had said none of them.
+# The rule stays whole-sentence: only trailing modal particles (and a bare filler on its
+# own) are set aside, and what remains has to be *exactly* one of the listed non-answers.
+# Nothing here trims a clause, so 「具体动作不知道」 and 「我没有别的意思」 keep being answers.
+NON_ANSWER_PARTICLES = "啊呀吧呢哦嘛啦哈诶欸耶哇"
+# Whole replies that carry no material at all. `嗯` was measured; the rest are the same
+# shape and are listed together so the boundary is one place to read.
+NON_ANSWER_FILLERS = ("嗯", "呃", "哦", "啊", "噢", "随便", "无所谓", "都行", "你说呢", "看吧", "都差不多")
 STRUCTURED = {"y", "n", "yes", "no", "是", "否", "q", "1", "2", "3", "4", "ok"}
 
 # 「这一题跳过」是一句决定，不是一句回答。以前它被读成 `answer`：屏幕最后说四件都落在
@@ -392,9 +402,37 @@ def classify_answer(text: str) -> str:
         return "skip"
     if is_stop_statement(value):
         return "stop"
-    if value.strip("。！？…，, ") in NON_ANSWERS:
+    if _is_declared_non_answer(value):
         return "none"
     return "answer"
+
+
+def _is_declared_non_answer(value: str) -> bool:
+    """Whether the whole reply declares that he has nothing to give for this part.
+
+    Two shapes, both whole-sentence: one of the listed non-answers with only modal
+    particles after it (不知道啊 / 说不好吧 / 忘了诶), or a bare filler (嗯 / 随便).
+    Anything with a clause of its own stays an answer, because the person did say
+    something and the receipt's job is to keep what he said, not to grade it.
+    """
+    core = value.strip("。！？…，,、~～!?.；; ")
+    if core in NON_ANSWER_FILLERS:
+        return True
+    if len(set(core)) == 1 and core[:1] in NON_ANSWER_FILLERS:
+        # 「嗯嗯」「哦哦」 -- the same filler twice is still a filler. Bounded to one
+        # repeated character, so a real sentence cannot be reached this way.
+        return True
+    candidate = core
+    # Particles and 「了」 come off the right, one at a time, and the list is consulted
+    # after each step: 「想不起来了吧」 -> 想不起来 ✓, while 「忘了」 is already a listed
+    # non-answer and 「知道了」 stops at 知道 (not listed, so it stays an answer).
+    for _ in range(3):
+        if candidate in NON_ANSWERS:
+            return True
+        if not candidate or candidate[-1] not in NON_ANSWER_PARTICLES + "了":
+            break
+        candidate = candidate[:-1]
+    return candidate in NON_ANSWERS
 
 
 def authorship(part_sources: dict[str, str]) -> str:

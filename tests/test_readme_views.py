@@ -439,7 +439,14 @@ class EveryRegisteredBlockRuns(unittest.TestCase):
     """
 
     DEV_BLOCK = ("unittest discover", "compileall")
-    NET_BLOCK = "dojo discuss"
+    # Blocks that need something this gate cannot provide. `dojo discuss` needs a live
+    # endpoint; `dojo transcript` needs a trace such an endpoint already wrote, and its
+    # page example names a real session id a reader has, not one a demo can invent (a
+    # block that hand-writes a JSONL would teach the format the view exists to replace).
+    # Both are exercised for real elsewhere: the discussion entry by the evidence
+    # packages, the read-back view by `tests/test_transcript_view.py`, which runs the
+    # page's own command against a trace it just produced.
+    NET_BLOCK = ("dojo discuss", "dojo transcript")
     WRITES = ("dojo add", "dojo merge")
 
     def setUp(self):
@@ -464,7 +471,7 @@ class EveryRegisteredBlockRuns(unittest.TestCase):
     def excluded(self, script):
         if any(marker in script for marker in self.DEV_BLOCK):
             return "dev"
-        if self.NET_BLOCK in script:
+        if any(marker in script for marker in self.NET_BLOCK):
             return "network"
         return None
 
@@ -493,8 +500,10 @@ class EveryRegisteredBlockRuns(unittest.TestCase):
                                     for text in texts),
                                 "%s no longer shows a verification recipe; drop the "
                                 "exclusion instead of keeping it silently" % page)
-                self.assertTrue(any(self.NET_BLOCK in text for text in texts),
-                                "%s no longer shows the discussion entry" % page)
+                for marker in self.NET_BLOCK:
+                    self.assertTrue(any(marker in text for text in texts),
+                                    "%s no longer shows `%s`; drop the exclusion instead "
+                                    "of keeping it silently" % (page, marker))
 
     def test_each_page_runs_every_block_it_prints(self):
         for page in PAGES:

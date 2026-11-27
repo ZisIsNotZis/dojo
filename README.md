@@ -128,6 +128,26 @@ read before the endpoint is required, so `无法启动讨论：未配置 DOJO_LL
 means the card was fine. The full run -- screen and payload -- is in
 [`docs/evidence/2026-11-28-card-handoff/WALK.md`](docs/evidence/2026-11-28-card-handoff/WALK.md).
 
+### Reading a finished session back
+
+`transcript TRACE` is the read-only view of one discussion: your lines and the host's replies,
+then each of the four questions with the question that was asked, what you said, and what the
+record made of it. It opens no store, writes nothing, and makes no request. A trace whose write
+died mid-session is still readable, and the screen says which line was cut off; it also says
+when the file cannot be resumed instead of printing a `--resume` command that will be refused.
+
+The last line is the one that matters: these words are **material, not a conclusion**. A part
+that was collected is material even when it misses the question, so reading it back does not
+tell you the question was answered, and nothing here says you endorsed the card.
+
+```sh
+python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jsonl
+python3 -m dojo transcript sessions/discuss-0123456789abcdef0123456789abcdef.jsonl --json
+```
+
+The receipt at the end of the four questions names this command, so the sentence "your words
+stay in this session's record" can be acted on without learning the JSONL format first.
+
 ## What it can do now
 
 - **Candidate ledger with provenance.** Each record carries statement, kind, premises, scope, alternatives, contradictions, unknowns, and structured sources — never a raw chat transcript.

@@ -230,6 +230,14 @@ def _parser() -> argparse.ArgumentParser:
     recheck.add_argument("--auth-file", help="凭据文件路径；默认 ~/.agents/auth.json，只在本地读取一次，不回显内容")
 
     sub.add_parser("chat", help="显式启动真实模型聊天；使用 DOJO_LLM_BASE_URL/MODEL/API_KEY")
+    transcript = sub.add_parser(
+        "transcript", help="只读回看一场讨论的原话：四件各说了什么、记录把每件记成了什么",
+        description="只读：不改库、不写轨迹、不请求模型。轨迹写到一半断了也能读，并会说明断在哪。",
+    )
+    transcript.add_argument("trace", help="一场讨论的轨迹：sessions/discuss-<32 位十六进制>.jsonl")
+    transcript.add_argument(
+        "--json", action="store_true", help="输出同样的内容，机器可读",
+    )
     discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
     discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
     discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
@@ -756,6 +764,29 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(run_maintenance(db_path,args.story,synthetic=args.synthetic,
                 max_requests=args.max_requests,max_tools=args.max_tools,retry_distillation=args.retry_distillation,
                 retry_associations=args.retry_associations),ensure_ascii=False,indent=2))
+            return 0
+        if args.command == "transcript":
+            # Read-only and store-free on purpose: the trace is self-contained (that is
+            # why `--resume` can rebuild a handout without the library), and a person
+            # looking back may be on a machine where the library has moved. Opening a
+            # store here would create one for a question about a file.
+            from .transcript import TranscriptError, load, render
+            try:
+                view = load(Path(args.trace).expanduser())
+            except TranscriptError as exc:
+                print(f"无法回看：{exc}。", file=sys.stderr)
+                return 2
+            if args.json:
+                payload = {key: view[key] for key in
+                           ("session", "records", "partial_tail", "ended", "saved", "turns", "parts")}
+                payload["path"] = str(view["path"])
+                payload["handed"] = (
+                    {key: view["handed"].get(key) for key in ("candidate", "statement", "status")}
+                    if isinstance(view["handed"], dict) else None
+                )
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+            else:
+                sys.stdout.write(render(view))
             return 0
         if args.command == "chat":
             config = LiveConfig.from_environment()
