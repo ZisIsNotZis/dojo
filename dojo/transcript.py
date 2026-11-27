@@ -25,8 +25,13 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from .elicit import PART_KEYS, PART_ORDER
+from .elicit import PART_KEYS, PART_ORDER, classify_answer
 from .tracefile import split_lines
+
+
+def reclassify(said: str) -> str:
+    """What today's rule makes of the same words. Named so a caller can tell why."""
+    return classify_answer(said)
 
 
 class TranscriptError(ValueError):
@@ -117,11 +122,21 @@ def load(path: Path) -> dict[str, Any]:
         last = events[-1]
         said = next((row["answer"] for row in reversed(events)
                      if isinstance(row.get("answer"), str)), None)
+        reading = last.get("reading") if isinstance(last.get("reading"), str) else None
+        # The row records what the session decided at the time. `--resume` and the live
+        # receipt instead replay the answers through `classify_answer` as it is *now*, and a
+        # later slice changed that rule. The review measured the split: on a trace written
+        # before the change, this view said 收作原话 for four parts while `--resume` replayed
+        # the same file into "nothing was collected". Neither is wrong about its own input,
+        # so the screen says both.
+        now = reclassify(said) if said else None
         parts.append({
             "part": part,
             "question": last.get("question") if isinstance(last.get("question"), str) else None,
             "said": said,
-            "reading": last.get("reading") if isinstance(last.get("reading"), str) else None,
+            "reading": reading,
+            "reclassified": now if (now is not None and now != reading) else None,
+            "uncertain": bool(last.get("uncertain")),
             "rewritten": len(events) > 1,
         })
 
@@ -150,6 +165,11 @@ def load(path: Path) -> dict[str, Any]:
         "ended": end.get("reason") if isinstance(end, dict) else None,
         "saved": [item for item in (end.get("saved") or []) if isinstance(item, str)]
         if isinstance(end, dict) else [],
+        # A session that ended with a wording nobody accepted writes it as an unaccepted
+        # draft (`_draft_conclusion`). The row that says so is `draft`, not `saved`; the
+        # review found this view printing "这一场没有写下卡片" while the library held the
+        # very sentence the session had just talked through.
+        "draft": end.get("draft") if isinstance(end, dict) and isinstance(end.get("draft"), str) else None,
         "handed": handouts[0] if handouts else None,
         "turns": [
             {"seq": row.get("seq"), "said": row["user"],
@@ -213,11 +233,26 @@ def render(view: dict[str, Any]) -> str:
                 lines.append("    记录最后记的是：" + label + "（这一件问过不止一轮，上面是最后留下的那句）")
             else:
                 lines.append("    记录里记的是：" + label)
+            # A stored reading is what the rule said *then*. Saying so keeps this screen
+            # from disagreeing silently with `--resume`, which replays the same words
+            # through the rule as it is now (the review found the two diverging on traces
+            # written before the rule changed).
+            if part["reclassified"]:
+                lines.append(
+                    "      这一行是当时的读法；按现在的规则重算，是「"
+                    + PART_READINGS.get(part["reclassified"], part["reclassified"])
+                    + "」。续跑会按后者算。"
+                )
+            if part["uncertain"]:
+                lines.append("      这一句里像在说跳过，但按原话收下了（记录里的 uncertain）。")
         lines.append("")
 
     if view["saved"]:
         lines.append("这一场写下的卡片：" + "、".join(view["saved"]))
-        lines.append("卡片是提问之前写下的那一句，四件回答没有改写它。")
+        lines.append("这几张卡是写下的那几句；四件回答没有改写它们，回看也不说它们已被认可。")
+    elif view["draft"]:
+        lines.append("这一场没有写下被认可的卡片；结束时留了一张未认可的草稿：" + view["draft"] + "。")
+        lines.append("草稿是系统按你的话整理的那一版，没有人认可过它——它恰恰是最该你自己看一眼的那张。")
     elif view["complete"]:
         lines.append("这一场没有写下卡片。")
     else:

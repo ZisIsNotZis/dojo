@@ -309,6 +309,58 @@ class TranscriptTests(unittest.TestCase):
         self.assertIn("没有正常收尾", shown)
         self.assertNotIn("这一场没有写下卡片", shown)
 
+    def test_a_session_that_left_an_unaccepted_draft_says_so(self):
+        """`saved` empty is not "nothing was written": the draft is the part to look at.
+
+        The review measured this: a session ended with a wording nobody accepted, `discuss`
+        wrote it as an unaccepted draft, and this view printed "这一场没有写下卡片" while
+        the library held the very sentence the session had just talked through.
+        """
+        output = io.StringIO()
+        code = run_discuss(
+            self.store,
+            client=FakeClient([PROPOSE]),   # proposed, never accepted, then input ends
+            read_line=read_lines(["讲一条做法"]),
+            output=output,
+        )
+        self.assertEqual(0, code)
+        view = transcript_module.load(self.trace())
+        self.assertEqual([], view["saved"])
+        self.assertIsNotNone(view["draft"], "the draft should be on the ending row")
+        shown = transcript_module.render(view)
+        self.assertIn("未认可的草稿", shown)
+        self.assertIn(view["draft"], shown)
+        self.assertNotIn("这一场没有写下卡片", shown)
+
+    def test_a_stored_reading_that_todays_rule_disagrees_with_is_shown_both_ways(self):
+        """`--resume` replays the words through the rule as it is now; this view shows the
+        row as it was written. On a trace from before a rule change the two disagree, and
+        a reader must not be told one of them silently."""
+        self.run_session()
+        trace = self.trace()
+        rows = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        # Rewrite the first part the way an older rule wrote it: 不知道 was stored as an
+        # answer. Nothing else changes.
+        for row in rows:
+            if row.get("event") == "elicitation" and row.get("part") == "情境":
+                row["answer"] = "我不知道"
+                row["reading"] = "answer"
+                row["collected"] = True
+                break
+        legacy_dir = self.root / "oldrule"
+        legacy_dir.mkdir()
+        old = legacy_dir / trace.name
+        old.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+                       encoding="utf-8")
+        view = transcript_module.load(old)
+        part = next(item for item in view["parts"] if item["part"] == "情境")
+        self.assertEqual("answer", part["reading"])
+        self.assertEqual("none", part["reclassified"])
+        shown = transcript_module.render(view)
+        self.assertIn("收作原话", shown)
+        self.assertIn("按现在的规则重算", shown)
+        self.assertIn("续跑会按后者算", shown)
+
     def test_json_output_carries_the_same_facts(self):
         self.run_session()
         done = self.run_cli("transcript", str(self.trace()), "--json")
@@ -318,6 +370,8 @@ class TranscriptTests(unittest.TestCase):
         self.assertEqual({"情境", "张力", "代价", "失效"},
                          {part["part"] for part in payload["parts"]})
         self.assertIs(False, payload["partial_tail"])
+        self.assertIs(True, payload["complete"])
+        self.assertIsNone(payload["resumable"])
         self.assertEqual("eof", payload["ended"])
         self.assertTrue(payload["saved"])
         for part in payload["parts"]:

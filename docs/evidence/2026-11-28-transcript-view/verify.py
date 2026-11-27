@@ -161,8 +161,8 @@ def main() -> int:
     check("B2 免责之前的每一行都不声称「答了」「答到了」「认可」",
           not any(word in above for word in ("你答了", "答到了", "你认可", "已认可")), above[-800:])
     check("B3 收下的四件都用同一个中性的词", body.count("收作原话") == 4)
-    check("B4 明说卡片是提问前那句、回答没有改写它",
-          "四件回答没有改写它" in body)
+    check("B4 明说卡片是写下的那几句、回答没有改写它们",
+          "四件回答没有改写它们" in body, body[-400:])
     # The independent review's second finding: `之后没改过` spoke for the library. If a
     # second terminal runs `revise` while the four questions are being asked, the library
     # holds a newer version and the sentence is false. The claim is now about this
@@ -353,6 +353,101 @@ def main() -> int:
     check("G5 回看这样一场：退出 0，且原话逐字在屏幕上",
           pasted_shown.returncode == 0 and pasted in pasted_shown.stdout,
           pasted_shown.stderr or pasted_shown.stdout[-600:])
+
+    print("\nH. what the row's reading actually means\n")
+
+    # The review's three findings. Each is a sentence that spoke for something the program
+    # had not checked, or did not check the row it was reading.
+    from dojo.elicit import classify_answer
+
+    measured = ("我不知道", "我也不清楚", "我不太清楚", "我忘了", "我记不清了",
+                "我也说不好", "不太清楚", "说不清楚", "记不清了", "没印象", "说不上来")
+    check("H1 十一种最常见的「我不知道」都不再被收作原话",
+          all(classify_answer(phrase) == "none" for phrase in measured),
+          {phrase: classify_answer(phrase) for phrase in measured})
+    check("H2 带他自己从句的句子仍是回答",
+          classify_answer("我不太清楚别人会怎么做，但上次是我自己盯的") == "answer"
+          and classify_answer("我忘了通知，所以那天没人知道系统跑完了") == "answer")
+
+    no_answer, no_answer_trace, _r = run_in_process(
+        ["讲一条做法", "对，就这么定", "我不知道", "我忘了", "我不太清楚", "我记不清了"])
+    line = receipt_of(no_answer)
+    check("H3 四件都说「我不知道」时，回执不说「说了原话」",
+          "说了原话" not in line and "没答出来" in line, line)
+    no_answer_shown = cli("transcript", str(no_answer_trace))
+    check("H4 回看把它们记成「不是回答，没有收下」",
+          no_answer_shown.returncode == 0
+          and "不是回答，没有收下" in no_answer_shown.stdout
+          and "收作原话" not in no_answer_shown.stdout,
+          no_answer_shown.stdout[-500:])
+
+    # A session that ends with a wording nobody accepted writes an unaccepted draft.
+    # `saved` is empty and `draft` is not; saying "no card was written" would send the
+    # reader past the one card that most needs a human look.
+    draft_dir = Path(tempfile.mkdtemp(prefix="draft."))
+    draft_store = Store(draft_dir / "dojo.sqlite3")
+    draft_one = {
+        "statement": "把持续检查交给系统，人这一侧只保留随时可以推翻的位置。",
+        "kind": "abstract_idea", "scope": ["一个人已经抽身时"],
+        "premises": ["系统能自己跑检查"], "alternatives": ["把检查留给人"],
+        "contradictions": ["检查必须发生在世界里时"], "unknowns": ["他会不会来看回执"],
+    }
+
+    class DraftClient:
+        def __init__(self):
+            self.responses = [{"answer": "那我们把这句当成现在这一版。",
+                               "candidate": draft_one, "user_stance": "neutral"}]
+
+        def complete(self, _messages):
+            return self.responses.pop(0)
+
+    iterator = iter(["讲一条做法"])
+
+    def draft_reader(_prompt):
+        try:
+            return next(iterator)
+        except StopIteration:
+            raise EOFError
+
+    run_discuss(draft_store, client=DraftClient(), read_line=draft_reader,
+                output=io.StringIO(), environ={})
+    draft_store.close()
+    draft_trace = sorted((draft_dir / "sessions").glob("*.jsonl"))[0]
+    draft_shown = cli("transcript", str(draft_trace))
+    check("H5 留下未认可草稿时，回看点名那张草稿、不谎称没写过卡片",
+          draft_shown.returncode == 0
+          and "未认可的草稿" in draft_shown.stdout
+          and "这一场没有写下卡片" not in draft_shown.stdout,
+          draft_shown.stdout[-600:])
+
+    # A trace written under an older rule: the row says 收作原话, today's rule says the
+    # words declare no answer, and `--resume` replays that row through today's rule. The
+    # screen has to say both, or one file has two answers and only one is shown.
+    oldrule_dir = root / "oldrule"
+    oldrule_dir.mkdir()
+    oldrule = oldrule_dir / trace.name
+    rewritten = []
+    for line_text in trace.read_text(encoding="utf-8").splitlines():
+        row = json.loads(line_text)
+        if row.get("event") == "elicitation" and row.get("part") == "情境":
+            row["answer"] = "我不知道"
+            row["reading"] = "answer"
+            row["collected"] = True
+        rewritten.append(json.dumps(row, ensure_ascii=False))
+    oldrule.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+    oldrule_shown = cli("transcript", str(oldrule))
+    check("H6 旧规则写的读数与今天不一致时，屏幕两个都说",
+          oldrule_shown.returncode == 0
+          and "收作原话" in oldrule_shown.stdout
+          and "按现在的规则重算" in oldrule_shown.stdout
+          and "续跑会按后者算" in oldrule_shown.stdout,
+          oldrule_shown.stdout[-700:])
+
+    machine = cli("transcript", str(trace), "--json")
+    payload = json.loads(machine.stdout) if machine.returncode == 0 else {}
+    check("--json 带上「能不能续跑」「记完没有」",
+          "resumable" in payload and "complete" in payload and "draft" in payload,
+          json.dumps(sorted(payload), ensure_ascii=False))
 
     print()
     if FAILURES:

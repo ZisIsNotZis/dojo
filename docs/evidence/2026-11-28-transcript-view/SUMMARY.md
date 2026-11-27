@@ -86,6 +86,27 @@ p-T1 少了「方向」这一格」，而那句就在文件里）。
 证据 G1–G5；测试 `tests/test_trace_line_breaks.py`（写入、读旧格式、真会话、`--resume`、
 导出脚本五个入口）；臂 L（不转义）与 M（又用 `splitlines()`）各自单独咬住。
 
+## 独立复核（`abe7587` 上）判不成立的三处，已修
+
+复核报告：`.scratch/3286/legacy/REVIEW-TRANSCRIPT.md`。
+
+1. **「收作原话」仍等于 `reading == "answer"`。** 上一轮只修了句尾语气词，最普通的
+   `我不知道` / `我忘了` / `我不太清楚` / `记不清了` / `没印象` / `说不上来`（共 11 条）
+   全部穿过去，真入口回执照旧「四件你都说了原话」，`dao_session.py` 还把「我忘了」写进
+   `note.md` 当他的原话。现在剥离开头的主语与程度词（`我` `我也` `不太` `有点` `真的`…）
+   再要求**整句**等于列表里的一条；列表补上 `记不清` / `记不起来` / `没印象` / `说不上来` /
+   `不确定` / `拿不准` / `说不清楚`。带他自己从句的句子仍是回答（证据 H2）。
+2. **留下未认可草稿时说「这一场没有写下卡片」。** `session_end` 同时有 `saved: []` 与
+   `draft: d-…`，回看只读了 `saved`。库里那张卡的句子就是这一场谈出来的，而它恰恰是
+   「没人认可过」的那张，最该被看见。现在单独一句点名草稿（证据 H5）。
+3. **旧轨迹：回看说「收作原话」，`--resume` 的重放说一件都没收。** 行里存的是当时的读数，
+   续跑用今天的规则重算。屏幕现在两个都说，并写明「续跑会按后者算」（证据 H6）。
+   另外 `--json` 补上 `resumable` / `complete` / `draft`。
+
+复核还留了一条方法论上的硬教训：13 条臂两层真红是真的，但**没有一条碰 `dojo/elicit.py`**——
+把分类器换回旧规则，单元测试 18 红而证据脚本照样「全部成立」。现在臂 N 只改 `elicit.py`，
+臂 O/P 分别改草稿行与跨版本提示，16 条臂全部两层红。
+
 ## 没做（别当成已解决）
 
 - 不判「答没答到点上」。本片与上一片一样，只把材料与结论分开说。
@@ -93,23 +114,25 @@ p-T1 少了「方向」这一格」，而那句就在文件里）。
 - 上一片复核提出的 `NON_ANSWERS` 精确匹配洞（`不知道啊`/`忘了诶` 被当成回答）已在本
   切片修掉（`dojo/elicit.py`，测试 `tests/test_non_answer_words.py`），但**仍有边界**：
   只剥句尾语气词与一个「了」，`嗯`/`随便`/`都行` 这类整句填充词单列；带他自己从句的句子
-  一律算回答。没有真人语料，覆盖仍靠我构造的句子。**已知仍漏**：「确实没有」「真的不知道」
-  这种带前加副词的仍算回答（实测）；要收回它们就得允许剥前缀，而「真的不知道怎么办」
-  是材料，所以有意停在整句一侧。右边界同样测过：`知道了`/`明白了`/`没有问题`/`没有通知就
-  没人知道` 都仍是回答。
+  一律算回答。没有真人语料，覆盖仍靠我构造的句子。主语与程度词现在也算前缀（`我`、`我也`、
+  `不太`、`有点`、`真的`、`确实`），剥完仍要整句等于列表里的一条，所以「真的不知道怎么办」
+  这种带从句的仍是回答。右边界同样测过：`知道了`/`明白了`/`没有问题`/`没有通知就没人知道`
+  都仍是回答。**仍可能漏**：真人说法比列表多，例如台语/方言口气、夹杂外语的「我不 sure」。
+  这类不进列表就仍会被收下——屏幕上的「收作原话」始终只是「这行按当时的规则判成了 answer」，
+  不是「他答了」。
 - 真终端（pty）视线仍没量成。`transcript` 的输出是纯文本、无 readline，所以终端与管道
   一致；但这是推理，不是量过的读数。
 
 ## 怎么重跑
 
 ```
-python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 33 项
-python3 -B -m unittest tests.test_transcript_view                # 12 项
+python3 docs/evidence/2026-11-28-transcript-view/verify.py      # 40 项
+python3 -B -m unittest tests.test_transcript_view                # 16 项
 python3 -B -m unittest tests.test_one_card_version               # 4 项
-python3 -B -m unittest tests.test_non_answer_words               # 5 项
+python3 -B -m unittest tests.test_non_answer_words               # 7 项
 python3 -B -m unittest tests.test_trace_line_breaks             # 7 项
 python3 -B -m unittest discover -s tests                         # 全量
-python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 13 条臂，两层见证都红
+python3 docs/evidence/2026-11-28-transcript-view/redarm.py .    # 16 条臂，两层见证都红
 ```
 
 本片的真入口探针（回执 → 照抄命令 → 截断 → `--no-trace` 全打印）在仓库外的

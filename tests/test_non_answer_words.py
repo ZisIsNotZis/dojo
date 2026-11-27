@@ -43,6 +43,29 @@ class SoftEndingsAreStillNonAnswers(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertEqual("answer", classify_answer(phrase), phrase)
 
+    def test_the_ordinary_ways_of_saying_i_dont_know(self):
+        """The review measured eleven of these at the entry point; all came back answers.
+
+        `我不知道` is `不知道` with a subject in front -- more ordinary than the
+        particle-ending forms the last fix covered -- and the receipt said
+        四件你都说了原话 about four of them, while `dao_session.py` wrote them into
+        note.md as his words.
+        """
+        for phrase in ("我不知道", "我也不清楚", "我不太清楚", "我忘了", "我记不清了",
+                       "我也说不好", "不太清楚", "说不清楚", "记不清了", "没印象",
+                       "说不上来", "我不确定", "我拿不准", "我真的不知道", "我有点不清楚"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual("none", classify_answer(phrase), phrase)
+
+    def test_the_subject_and_softener_peel_does_not_reach_a_clause(self):
+        """One comma and a clause of his own, and it is material again."""
+        for phrase in ("我不太清楚别人会怎么做，但上次是我自己盯的",
+                       "我不知道他会不会来看回执",
+                       "我忘了通知，所以那天没人知道系统跑完了",
+                       "我没印象有谁复核过，反正后来是我不放心才翻的日志"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual("answer", classify_answer(phrase), phrase)
+
     def test_the_listed_plain_forms_still_work(self):
         for phrase in ("不知道", "看情况", "因人而异", "忘了"):
             with self.subTest(phrase=phrase):

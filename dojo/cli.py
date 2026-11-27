@@ -777,8 +777,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"无法回看：{exc}。", file=sys.stderr)
                 return 2
             if args.json:
+                # `resumable` and `complete` are in the human screen, so they belong in
+                # the machine view too: a reader writing a check against this JSON should
+                # not have to re-derive "can this be resumed" by running `--resume`.
                 payload = {key: view[key] for key in
-                           ("session", "records", "partial_tail", "ended", "saved", "turns", "parts")}
+                           ("session", "records", "partial_tail", "complete", "resumable",
+                            "ended", "saved", "draft", "turns", "parts")}
                 payload["path"] = str(view["path"])
                 payload["handed"] = (
                     {key: view["handed"].get(key) for key in ("candidate", "statement", "status")}

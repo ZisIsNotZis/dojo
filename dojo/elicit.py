@@ -79,7 +79,26 @@ QUESTIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-NON_ANSWERS = ("不知道", "没有", "不清楚", "说不清", "说不好", "不好说", "因人而异", "看情况", "没什么", "想不起来", "忘了")
+NON_ANSWERS = (
+    "不知道", "没有", "不清楚", "说不清", "说不好", "不好说", "因人而异", "看情况",
+    "没什么", "想不起来", "忘了",
+    # The review's list, measured at the entry point: the same declarations with a
+    # different verb. They are the same fact -- he has nothing for this part -- and adding
+    # them changes no rule, only the vocabulary the rule already means to cover.
+    "记不清", "记不起来", "没印象", "说不上来", "不确定", "拿不准", "说不清楚",
+)
+# A degree softener that leaves the same declaration behind, so it maps to the shorter
+# form instead of vanishing: 不太清楚 is 不清楚, 不很确定 is 不确定.
+NON_ANSWER_SOFTENERS = {"不太": "不", "不很": "不", "不怎么": "不", "有点": "", "有点儿": ""}
+# What may sit in front of a listed non-answer without making it a different sentence:
+# the subject (我 / 我们), a softening of degree (不太 / 不很 / 有点), and connectives that
+# add no material (也 / 都 / 真的 / 确实). Stripped one at a time, and what is left still
+# has to be *exactly* a listed non-answer, so a clause of his own is never reached:
+# 「我不太清楚别人会怎么做，但上次是我自己盯的」 stays an answer.
+NON_ANSWER_PREFIXES = (
+    "我本人", "我自己", "我们", "我", "也", "都", "真的", "确实", "其实", "应该",
+    "没有",
+)
 # A non-answer with a soft ending is still a non-answer. The review measured four
 # expressions reaching the entry point as `answer` -- 不知道啊 / 说不好吧 / 忘了诶, and the
 # bare 嗯 -- so the receipt said 四件你都说了原话 about a person who had said none of them.
@@ -422,16 +441,37 @@ def _is_declared_non_answer(value: str) -> bool:
         # 「嗯嗯」「哦哦」 -- the same filler twice is still a filler. Bounded to one
         # repeated character, so a real sentence cannot be reached this way.
         return True
+    # Peel from both ends, then require the whole remainder to be a listed non-answer.
+    #
+    # Right: particles and 「了」, one at a time, consulting the list after each step --
+    # 「想不起来了吧」 -> 想不起来 ✓, while 「忘了」 is already listed and 「知道了」 stops at
+    # 知道 (not listed, so it stays an answer).
+    #
+    # Left: the subject and a degree softener, in that order or the other (我不太 / 我有点 /
+    # 真的不知道 / 我也忘了). Only these short prefixes, and only when what remains is
+    # still the *whole* sentence, so 「我不太清楚别人会怎么做，但上次是我自己盯的」 cannot
+    # be reached -- there is a comma and a clause in the middle and the remainder is not on
+    # the list. The review measured this list at the entry point: eleven ordinary ways of
+    # saying "I don't know" were coming back as answers, and the receipt then said
+    # 四件你都说了原话 about a person who had said nothing.
     candidate = core
-    # Particles and 「了」 come off the right, one at a time, and the list is consulted
-    # after each step: 「想不起来了吧」 -> 想不起来 ✓, while 「忘了」 is already a listed
-    # non-answer and 「知道了」 stops at 知道 (not listed, so it stays an answer).
-    for _ in range(3):
+    for _ in range(6):
         if candidate in NON_ANSWERS:
             return True
-        if not candidate or candidate[-1] not in NON_ANSWER_PARTICLES + "了":
-            break
-        candidate = candidate[:-1]
+        for softener, replacement in NON_ANSWER_SOFTENERS.items():
+            if candidate.startswith(softener) and len(candidate) > len(softener):
+                candidate = replacement + candidate[len(softener):]
+                break
+        else:
+            for prefix in NON_ANSWER_PREFIXES:
+                if candidate.startswith(prefix) and len(candidate) > len(prefix):
+                    candidate = candidate[len(prefix):]
+                    break
+            else:
+                if candidate and candidate[-1] in NON_ANSWER_PARTICLES + "了":
+                    candidate = candidate[:-1]
+                else:
+                    break
     return candidate in NON_ANSWERS
 
 

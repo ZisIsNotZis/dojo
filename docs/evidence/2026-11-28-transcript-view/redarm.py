@@ -110,6 +110,28 @@ ARMS: list[tuple[str, str, str, str]] = [
         "    lines = text.splitlines()",
     ),
     (
+        # The review's finding about coverage, not about the arms being fake: nothing here
+        # touched `dojo/elicit.py`, so the cheapest way to make the classifier wrong again
+        # (the exact-match list) left this evidence script fully green. This arm edits that
+        # file and nothing else.
+        "N 分类器回到精确匹配（「我不知道」又算回答）",
+        "dojo/elicit.py",
+        "    if _is_declared_non_answer(value):\n        return \"none\"",
+        "    if value.strip(\"。！？…，, \") in NON_ANSWERS:\n        return \"none\"",
+    ),
+    (
+        "O 回看只看 saved，看不见未认可草稿",
+        "dojo/transcript.py",
+        '    elif view["draft"]:',
+        '    elif False:',
+    ),
+    (
+        "P 旧轨迹的读数与今天的规则不一致时不吭声",
+        "dojo/transcript.py",
+        '            if part["reclassified"]:',
+        '            if False:',
+    ),
+    (
         "I 不承认最后一行写了一半",
         "dojo/transcript.py",
         '        lines.append("最后一行只写了一半（写的时候断了），这一行没有算进来。")',
