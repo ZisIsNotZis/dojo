@@ -133,6 +133,17 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
+# The keys `retrieve(for_reading=True)` adds to a *result row*, which the model-facing
+# call does not have and the published stdout must not carry. Named once, here, because
+# the list drifted the moment it was written out twice: `matched_in` was added to the
+# reading payload and `cli.py` kept stripping only the two keys it already knew, so
+# every row on stdout grew a key. The supervisor caught that by piping the output into
+# a program and diffing the rows -- a check on the four top-level keys cannot see it,
+# which is why the readings now compare whole row key sets on a library holding both a
+# sentence-match and a limits-match.
+READING_ROW_KEYS = ("matched_on", "matched_wording", "matched_in")
+
+
 class Store:
     """Single-database storage boundary; all mutations are SQLite transactions."""
 
@@ -2051,25 +2062,65 @@ class Store:
         measured that searching for the sentence he remembers returned nothing at all.
         So the earlier wordings are searched too -- and, when one of them is what
         matched, the row says which sentence and that it is not what the card says now.
+
+        `matched_in` says *which part of the card* the words came from, because the
+        match runs over all of it at once: the sentence, its aliases, its premises, its
+        conditions, its counterexamples and its source claims. #3436's second round
+        measured what saying only `matched_on: current` costs, two ways:
+
+          outside  a card saying "值班通知交系统跑。" whose *scope line* was the whole
+                   searched phrase. The entry read "对上 8 个词：会当、场损…" over an
+                   unrelated quoted sentence, and nothing said the words were in the
+                   condition printed two lines below.
+          alias    a card matched only through an `alias` shared 5 bigrams with the
+                   query while its sentence shared 0. `matched_on` came back `current`,
+                   so the screen printed no note at all -- i.e. "this is what the card
+                   says".
+
+        The values are names of stored fields, never prose; what a reader is told is
+        the screen's decision, and the model-facing call does not ask for this key.
         """
+        # The statement alone, not `wording_text`: an alias is a *different* wording of
+        # the same claim, and folding the two together would report the measured
+        # alias-only match as "the sentence matched", which is exactly the defect.
+        in_sentence = bool(found & lexical_terms(statement_text(state)))
+        in_aliases = bool(found & lexical_terms(aliases_text(state)))
+        in_limits = bool(found & lexical_terms(limits_text(state)))
+        in_sources = bool(found & lexical_terms(sources_text(state)))
+        matched_in: list[str] = []
+        if in_sentence:
+            matched_in.append("sentence")
+        if in_aliases:
+            matched_in.append("alias")
+        if in_limits:
+            matched_in.append("limits")
+        if in_sources:
+            matched_in.append("sources")
+        # `candidate_text` is the whole card, so it is the honest answer to "did the
+        # query overlap this card's own current text" -- which is what `matched_on`
+        # has always meant and what the rewrite note keys on.
         on_current = bool(found & lexical_terms(candidate_text(state)))
         earlier_hit = None
         for earlier in earlier_wordings(state, self._acquisition_events(state["id"])):
             if found & lexical_terms(earlier):
                 earlier_hit = earlier
                 break
+        if earlier_hit is not None:
+            matched_in.append("earlier")
+        payload: dict[str, Any] = {"matched_on": "current", "matched_in": matched_in}
         if earlier_hit is None:
-            return {"matched_on": "current"}
+            return payload
         # Both ends are reported when both matched, because the two facts answer two
         # different questions: "is this the card I mean" and "did it change under me".
         # Saying only `current` here hid the second on a rewritten card whose new
         # sentence shares most of its words with the old one -- measured on the walk
         # library, where the remembered sentence and the current one overlapped on
         # 5 bigrams and the screen then showed no sign of the change.
-        return {
+        payload.update({
             "matched_on": "current_and_earlier" if on_current else "earlier",
             "matched_wording": earlier_hit,
-        }
+        })
+        return payload
 
     def broadcast(self, query: str, limit: int = 10, exclude_session: str | None = None) -> dict[str, Any]:
         """Retrieval as cross-session broadcasting uses it: what other sessions arrived at.
@@ -2833,13 +2884,55 @@ def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = No
     }
 
 
-def candidate_text(state: dict[str, Any]) -> str:
-    values = [state.get("statement", ""), *state.get("aliases", [])]
-    for key in ("premises", "scope", "alternatives", "contradictions", "unknowns"):
+# The card's text, split by the part a person would point at. `candidate_text` is their
+# union and stays the matcher's input, so what a query can reach is unchanged. The
+# pieces exist so the reading screen can say *which* of them the words came from:
+# #3436's second round measured an entry claiming "对上 8 个词" over a sentence that
+# shared none of them, because its condition line was the phrase being searched.
+BOUNDARY_FIELDS = ("premises", "scope", "alternatives", "contradictions", "unknowns")
+
+
+def statement_text(state: dict[str, Any]) -> str:
+    """The one sentence the entry prints and quotes: exactly what the card says now."""
+    return str(state.get("statement") or "")
+
+
+def aliases_text(state: dict[str, Any]) -> str:
+    """The other wordings the library stores for this card.
+
+    Kept apart from the statement because the two answer different questions: an alias
+    match means "this is the card you mean, said another way", and the screen has to
+    say so. Reporting it as the statement is the defect #3436's second round measured:
+    the alias shared 5 bigrams with the query and the sentence 0, and the screen
+    printed no note at all.
+    """
+    return " ".join(str(value) for value in state.get("aliases", []))
+
+
+def wording_text(state: dict[str, Any]) -> str:
+    """Both of the above, which is what "the wordings this card holds" means."""
+    return " ".join(part for part in (statement_text(state), aliases_text(state)) if part)
+
+
+def limits_text(state: dict[str, Any]) -> str:
+    """The card's conditions, counterexamples, premises, alternatives and unknowns."""
+    values: list[Any] = []
+    for key in BOUNDARY_FIELDS:
         values.extend(state.get(key, []))
+    return " ".join(str(value) for value in values)
+
+
+def sources_text(state: dict[str, Any]) -> str:
+    """What the card's provenance records say, which is not what the card says."""
+    values: list[Any] = []
     for source in state.get("sources", []):
         values.extend([source.get("claim", ""), source.get("type", ""), source.get("scope_note", "")])
     return " ".join(str(value) for value in values)
+
+
+def candidate_text(state: dict[str, Any]) -> str:
+    return " ".join(part for part in (
+        wording_text(state), limits_text(state), sources_text(state)) if part)
 
 
 def earlier_wordings(state: dict[str, Any], events: list[dict[str, Any]]) -> list[str]:

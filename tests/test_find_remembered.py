@@ -162,7 +162,76 @@ class FindRememberedTests(unittest.TestCase):
         plain = self.store.retrieve("值班通知")["results"][0]
         self.assertNotIn("matched_wording", plain)
         self.assertNotIn("matched_on", plain)
+        self.assertNotIn("matched_on", plain)
 
+    # ---- where the words were found: not every match is the sentence --------------
+    def test_a_match_in_the_condition_is_not_reported_as_the_sentence_matching(self):
+        """Measured at 560a07d: "对上 8 个词" over a sentence sharing none of them.
+
+        The card's condition was the searched phrase. The count line and the quoted
+        sentence sat two lines apart, and the reader's reasonable reading -- "this is
+        the sentence I remember" -- was false. Every fact was on the screen; the
+        connection between them was not, and the count line is what a reader anchors on.
+        """
+        self.add("值班通知交系统跑。", candidate_id="d-cond",
+                 scope=["越限会当场损坏货物时"])
+        self.store.confirm("d-cond", "值得讨论")
+        text, result = self.screen_of("越限会当场损坏货物")
+        row = result["results"][0]
+        self.assertEqual(["limits"], row["matched_in"],
+                         "the sentence shares no term, so it must not be named")
+        self.assertIn("你记得的字不在本条目开头引的那句里", text)
+        self.assertIn("它写的条件或反例", text)
+        # And the note must not print when the sentence really did match.
+        text, _ = self.screen_of("值班通知交系统跑")
+        self.assertNotIn("你记得的字不在本条目开头引的那句里", text)
+
+    def test_an_alias_match_is_not_reported_as_the_current_sentence(self):
+        """Measured at 560a07d: an alias shared 5 bigrams with the query, the sentence 0.
+
+        `matched_on` came back `current` because the alias is part of `candidate_text`,
+        so no note printed at all -- i.e. "what you remember is what the card says".
+        """
+        self.add("值班通知交系统跑，只在结果会打断他时才叫醒他。", candidate_id="d-alias")
+        self.store.confirm("d-alias", "值得讨论")
+        self.store.alias("d-alias", "冷库越限就立刻打电话叫醒负责人。", "换场景的说法")
+        text, result = self.screen_of("冷库越限打电话")
+        row = result["results"][0]
+        self.assertEqual(["alias"], row["matched_in"])
+        self.assertIn("卡片现在写的那句和这些词没有重叠", text)
+        self.assertIn("冷库越限就立刻打电话叫醒负责人。", text,
+                      "the wording that matched is the one he needs to see")
+
+    def test_the_card_that_says_the_sentence_comes_before_one_that_only_quotes_it(self):
+        """Measured at 560a07d: both scored 16, so id order put the weaker answer first."""
+        self.add("值班通知只在结果会打断他时才叫醒他，其余交系统跑。",
+                 candidate_id="d-says", scope=["他已经抽身时"])
+        self.store.confirm("d-says", "值得讨论")
+        self.add("冷库越限先发消息。", candidate_id="d-quotes",
+                 scope=["值班通知只在结果会打断他时才叫醒他，其余交系统跑，并且失败不会当场伤人"])
+        self.store.confirm("d-quotes", "值得讨论")
+        text, result = self.screen_of("值班通知只在结果会打断他时才叫醒他")
+        self.assertEqual(2, len(result["results"]))
+        # `results` keep the store's order; only the screen's list is reordered.
+        lines = text.splitlines()
+        first = next(line for line in lines if line.startswith("1. "))
+        self.assertIn("d-says", first)
+        self.assertIn("本条目写的那句先排", text)
+
+    def test_one_result_does_not_describe_a_sort_that_never_happened(self):
+        self.add("值班通知交系统跑。", candidate_id="d-one")
+        self.store.confirm("d-one", "值得讨论")
+        text, _ = self.screen_of("值班")
+        self.assertNotIn("先排", text)
+        self.assertIn("不是按意思或可信程度找的", text)
+
+    def test_the_store_still_reports_which_text_matched_without_expanding_the_contract(self):
+        """`matched_in` is a reading key: the model-facing call gains no key at all."""
+        self.add("值班通知交系统跑。", candidate_id="d-m", scope=["半夜时"])
+        self.store.confirm("d-m", "值得讨论")
+        plain = self.store.retrieve("值班")["results"][0]
+        self.assertNotIn("matched_in", plain)
+        self.assertNotIn("matched_on", plain)
     # ---- a drafted card nobody accepted is not an unexplained rejection ------------
     def test_a_card_with_no_acceptance_record_says_so_and_says_what_that_means(self):
         self.add("环境与流程的设计更能稳住重复行为。", candidate_id="d-plain",

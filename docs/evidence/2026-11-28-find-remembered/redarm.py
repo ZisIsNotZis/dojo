@@ -150,6 +150,48 @@ ARMS = [
         '            published = dict(result)\n',
         "命令行 stdout 仍是四个旧键（屏幕的键不进 stdout）",
     ),
+    # ---- where the words were found (#3436's second round) ---------------------------
+    # These restore 560a07d's behaviour, where any overlap anywhere in the card was
+    # reported as the *sentence* matching. The published tree measured it three ways.
+    (
+        "every-match-is-called-the-sentence",
+        "dojo/storage.py",
+        '        in_sentence = bool(found & lexical_terms(statement_text(state)))\n'
+        '        in_aliases = bool(found & lexical_terms(aliases_text(state)))\n',
+        '        in_sentence = bool(found & lexical_terms(candidate_text(state)))\n'
+        '        in_aliases = False\n',
+        "条件里的字对上时，屏幕不把这句当成对上的那句",
+    ),
+    (
+        "alias-match-reported-as-the-current-sentence",
+        "dojo/storage.py",
+        '        if in_aliases:\n            matched_in.append("alias")\n',
+        '        if in_aliases:\n            matched_in.append("sentence")\n',
+        "别名对上时，不谎称卡片现在那句对上",
+    ),
+    (
+        "the-screen-does-not-say-where-the-words-were",
+        "dojo/finding.py",
+        '    location = _where_the_words_are(row)\n    if location:\n        lines.append(location)\n',
+        '',
+        "条件里的字对上时，屏幕不把这句当成对上的那句",
+    ),
+    (
+        # The supervisor's catch, restored exactly: `cli.py` strips only the two keys it
+        # knew about, so the new reading key reaches every published row.
+        "a-new-reading-key-leaks-into-every-published-row",
+        "dojo/cli.py",
+        '                 if key not in READING_ROW_KEYS}\n',
+        '                 if key not in ("matched_on", "matched_wording")}\n',
+        "两条命中的 stdout 每行与给模型的那行逐键相同",
+    ),
+    (
+        "a-card-that-only-quotes-the-sentence-ranks-first",
+        "dojo/finding.py",
+        '        0 if "sentence" in (row.get("matched_in") or []) else 1,\n',
+        '        0,\n',
+        "说这句话的卡排在那张只引用了它的卡前面",
+    ),
 ]
 
 

@@ -71,6 +71,74 @@ def _acceptance(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _where_the_words_are(row: dict[str, Any]) -> str | None:
+    """Say which part of the card the words came from, when it was not its sentence.
+
+    The entry's headline already says how many words overlapped, and the sentence is
+    printed on the very next line. #3436's second round measured what that reads as when
+    the overlap came from somewhere else -- twice:
+
+      outside  a card saying "值班通知交系统跑。" whose *condition* was the searched
+               phrase printed "对上 8 个词：会当、场损…" over a sentence sharing none of
+               them. The reader's reasonable reading -- "this is the sentence I
+               remember" -- was false, and the words were two lines below under a label
+               that does say 什么时候成立, so the facts were on screen and the
+               connection was not.
+      alias    an `alias` match reported itself as `current`, so no note printed at
+               all: the reader was told the sentence matched when the sentence shared
+               zero bigrams with his words.
+
+    So the note names the part, and quotes the alias when an alias is what matched --
+    the same rule as everywhere else here: a stored value, verbatim, or no line.
+    """
+    parts = [part for part in row.get("matched_in") or [] if isinstance(part, str)]
+    if not parts:
+        # An older store or a row from before this key: say nothing rather than guess.
+        return None
+    if "sentence" in parts:
+        return None
+    aliases = [value for value in row.get("aliases") or [] if isinstance(value, str)]
+    if "earlier" in parts:
+        # `_matched_note` owns this case: it quotes the earlier wording and says the
+        # card now says something else. Two notes about the same fact is how a screen
+        # starts contradicting itself.
+        return None
+    where = []
+    if "limits" in parts:
+        where.append("它写的条件或反例")
+    if "sources" in parts:
+        where.append("它的来源记录")
+    alias_part = "alias" in parts
+    if not where and not alias_part:
+        return None
+    if where:
+        line = ("  你记得的字不在本条目开头引的那句里，而在" + "、".join(where) + "里"
+                "（原样印在下面）；卡片本身的那句和这些词没有重叠。")
+    else:
+        line = "  卡片现在写的那句和这些词没有重叠。"
+    if alias_part:
+        # Only the aliases that actually share a term: quoting an unrelated one would be
+        # a new claim about his words. `matched_terms` is the same set the count line
+        # above already printed, so the quote and the count cannot disagree.
+        shared = [value for value in aliases if _shares_a_term(value, row)]
+        if shared:
+            line += "\n  它还有另一种说法，和你记得的字对得上（库里存的原文）：" + _quote(shared[0])
+    return line
+
+
+def _shares_a_term(value: str, row: dict[str, Any]) -> bool:
+    """Whether this alias holds one of the terms the row says matched.
+
+    Read from the row's own `matched_terms`, not from a fresh tokenisation of the card:
+    the terms on the row are what the count line already printed, so the alias quoted
+    here and the count above it cannot disagree.
+    """
+    from .storage import lexical_terms
+
+    terms = {term for term in row.get("matched_terms") or [] if isinstance(term, str)}
+    return bool(terms & lexical_terms(value))
+
+
 def _matched_note(row: dict[str, Any]) -> str | None:
     """Say which wording the words matched, when it was not the one the card holds now."""
     if row.get("matched_on") not in ("earlier", "current_and_earlier"):
@@ -143,6 +211,12 @@ def _entry(index: int, row: dict[str, Any], database: str | Any) -> list[str]:
     head, extra = _refusal(row)
     lines.append(head)
     lines.extend(extra)
+    # Before the rewrite note: "where the words are" answers "did I find the right
+    # card", and the rewrite note answers "did it change under me". The two do not both
+    # print for the same card (the earlier-wording case is that note's own).
+    location = _where_the_words_are(row)
+    if location:
+        lines.append(location)
     earlier = _matched_note(row)
     if earlier:
         lines.append(earlier)
@@ -217,20 +291,30 @@ def search_screen(result: dict[str, Any], *, database: str | Any) -> list[str]:
     query = str(result.get("query") or "")
     hits = [row for row in result.get("results") or [] if isinstance(row, dict)]
     refused = [row for row in result.get("withheld") or [] if isinstance(row, dict)]
-    # One list in one order: by how many words overlapped. Putting the handed-over rows
-    # first would have been a second, undeclared ranking, and it would have buried his
-    # own card under the one that merely shares a word with it.
-    ordered = sorted(hits + refused, key=lambda row: (-int(row.get("score") or 0), str(row.get("id"))))
+    # One list in one order. Wording first, then how many words overlapped, then id:
+    # #3436's second round measured the old order putting a card whose *condition line*
+    # was the searched phrase above the card that actually says the sentence (both at 16
+    # terms, so id order decided). A reader who remembers a sentence is looking for the
+    # sentence, and "the words are in its limits" is the weaker answer -- still worth
+    # printing, but not above the stronger one. This is an order of the screen's list
+    # only: the store's `results` keep the order they came in, so no caller is affected.
+    ordered = sorted(hits + refused, key=lambda row: (
+        0 if "sentence" in (row.get("matched_in") or []) else 1,
+        -int(row.get("score") or 0), str(row.get("id"))))
     lines = ["在这个库里找：" + _quote(query)]
 
     if ordered:
+        # The order sentence only prints when there are two of them: with one card,
+        # "sorted by ..." describes a comparison that never happened.
+        ordering = ("本条目写的那句先排，再按重叠的词数；不是按意思或可信程度排的。"
+                    if len(ordered) > 1 else
+                    "这只是字词的重叠，不是按意思或可信程度找的。")
         if refused:
             lines.append("  " + str(len(ordered)) + " 张卡的字和这些词重叠：" + str(len(hits))
                          + " 张检索会交出去，" + str(len(refused)) + " 张不会"
-                         + "（每张下面都说了为什么）。顺序按重叠的词数，不是按意思或可信程度。")
+                         + "（每张下面都说了为什么）。" + ordering)
         else:
-            lines.append("  " + str(len(ordered)) + " 张卡的字和这些词重叠，按重叠的词数排列；"
-                         "这不是按意思或可信程度排的。")
+            lines.append("  " + str(len(ordered)) + " 张卡的字和这些词重叠：" + ordering)
         for index, row in enumerate(ordered[:SCREEN_LIMIT], start=1):
             lines.extend(_entry(index, row, database))
             lines.append("")

@@ -19,7 +19,7 @@ from .discuss import _load_resume_trace, run_discuss
 from .finding import search_screen
 from .live import LiveConfig, LiveError, run_chat
 from .pipeline import distill, run_pipeline
-from .storage import DojoError, Store, load_simulated_seeds
+from .storage import READING_ROW_KEYS, DojoError, Store, load_simulated_seeds
 
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
 DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
@@ -443,9 +443,12 @@ def _run_search(args: argparse.Namespace, db_path: Path) -> int:
                 print(line, file=sys.stderr)
             published = {key: value for key, value in result.items()
                          if key not in ("withheld", "recent")}
+            # `READING_ROW_KEYS` rather than a literal list: writing the two names out
+            # here is how `matched_in` reached the published rows unnoticed, which the
+            # supervisor measured by piping the output into a program.
             published["results"] = [
                 {key: value for key, value in row.items()
-                 if key not in ("matched_on", "matched_wording")}
+                 if key not in READING_ROW_KEYS}
                 for row in result["results"]
             ]
         # `search` is read-only: the writer `Store` runs its CREATE TABLE script and this

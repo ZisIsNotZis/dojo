@@ -426,7 +426,67 @@ def main() -> int:
     reading("屏幕说这是它以前的说法", "你记得的字对上的是它以前的说法" in err and "只有普通日报" in err)
     reading("同时给出它现在的说法", "值班通知一律先等两次失败" in err)
 
-    # ---- E: a topic the library never held ----------------------------------------
+    reading("同时给出它现在的说法", "值班通知一律先等两次失败" in err)
+
+    # ---- D2: the words were found, but not in the sentence -------------------------
+    # Measured at 560a07d, three ways, all one defect: the screen told the reader the
+    # *sentence* matched when the words came from somewhere else. An entry reading
+    # "对上 8 个词：会当、场损…" over a sentence sharing none of them is the reader's
+    # "this is what I remember" being false with no line saying so.
+    heading("D2. 字对上了，但不在那句话里")
+    out, err, code = screen(("add", "--statement", "值班通知交系统跑。", "--kind", "abstract_idea",
+                             "--id", "d-cond", "--scope", "越限会当场损坏货物时"))
+    reading("写一条句子和条件无关的卡", code == 0, err[-200:])
+    screen(("confirm", "d-cond", "--basis", "值得讨论"))
+    # The query is the card's *condition*, verbatim. The sentence shares no bigram with it.
+    out, cond_err, code = screen(("search", "越限会当场损坏货物"))
+    SCREENS["condition"] = cond_err
+    print(cond_err)
+    # Selected by id, not by position: this library already holds the d-close card from
+    # scene A, whose *own* condition also says 越限会当场损坏货物, so the entry for this
+    # card is not necessarily the first line. The first version of this reading asked for
+    # `1. d-cond` and went red for that reason, not for the defect.
+    cond_entry = cond_err.split("d-cond", 1)[-1]
+    cond_entry = cond_entry.split("\n\n", 1)[0]
+    reading("条件里的字对上时，屏幕不把这句当成对上的那句",
+            "d-cond" in cond_err and "你记得的字不在本条目开头引的那句里" in cond_entry,
+            cond_entry[:200])
+    reading("并说清字在哪个部分（条件或反例）", "它写的条件或反例" in cond_err)
+    out, same_err, code = screen(("search", "值班通知交系统跑"))
+    reading("那句话自己对上时不印这条注", "你记得的字不在本条目开头引的那句里" not in same_err)
+
+    # An alias is another wording of the same claim. At 560a07d it reported itself as
+    # `current`, so the screen printed no note at all -- the reader was told the sentence
+    # matched when it shared 0 bigrams and the alias shared 5 (measured).
+    out, err, code = screen(("add", "--statement", "值班通知交系统跑，只在结果会打断他时才叫醒他。",
+                             "--kind", "abstract_idea", "--id", "d-alias"))
+    screen(("confirm", "d-alias", "--basis", "值得讨论"))
+    out, err, code = screen(("alias", "d-alias", "--wording", "冷库越限就立刻打电话叫醒负责人。",
+                             "--reason", "换场景的说法"))
+    reading("给这张卡加一种说法（alias）", code == 0, err[-200:])
+    out, alias_err, code = screen(("search", "冷库越限打电话"))
+    SCREENS["alias"] = alias_err
+    print(alias_err)
+    reading("别名对上时，不谎称卡片现在那句对上",
+            "卡片现在写的那句和这些词没有重叠" in alias_err)
+    reading("并把对上的那种说法原样印出来",
+            "冷库越限就立刻打电话叫醒负责人。" in alias_err)
+
+    # Ordering: at 560a07d both cards scored 16 and id order put the one that only
+    # *quotes* the sentence above the one that says it.
+    screen(("add", "--statement", "值班通知只在结果会打断他时才叫醒他，其余交系统跑。",
+            "--kind", "abstract_idea", "--id", "d-says", "--scope", "他已经抽身时"))
+    screen(("confirm", "d-says", "--basis", "值得讨论"))
+    screen(("add", "--statement", "冷库越限先发消息。", "--kind", "application", "--id", "d-quotes",
+            "--scope", "值班通知只在结果会打断他时才叫醒他，其余交系统跑，并且失败不会当场伤人"))
+    screen(("confirm", "d-quotes", "--basis", "值得讨论"))
+    out, order_err, code = screen(("search", "值班通知只在结果会打断他时才叫醒他"))
+    SCREENS["order"] = order_err
+    print(order_err)
+    first = next((line for line in order_err.splitlines() if line.startswith(("1. d-", "2. d-"))), "")
+    reading("说这句话的卡排在那张只引用了它的卡前面",
+            first.startswith("1. d-says"), first or order_err[:0])
+    reading("屏幕自己说了这个顺序", "本条目写的那句先排" in order_err)
     heading("E. 库里从来没有过的题目")
     absent_out, absent_err, code = screen(("search", ABSENT))
     SCREENS["absent"] = absent_err
@@ -441,24 +501,43 @@ def main() -> int:
     reading("stdout 仍是 JSON（这次读是在同一命令上的另一次运行）",
             isinstance(payload.get("results"), list))
     model_out, model_err, code = screen(("search", "值班"))
-    parsed = json.loads(model_out)
+    # The row keys have to be compared whole, not by naming the keys we remember adding.
+    # The supervisor caught `matched_in` on stdout by piping the output into a program:
+    # this section checked `set(published) == {four keys}` and then looked for two named
+    # keys per row, so a new reading key sailed through both. Now the published row is
+    # compared to the row the model-facing call returns for the same card -- the
+    # definition of "unchanged", rather than a list that has to be kept in step by hand.
+    hit_out, hit_err, code = screen(("search", "值班通知只在结果会打断他时才叫醒他"))
+    hits = json.loads(hit_out)
+    reading("同一组词同时命中正文和条件两张卡",
+            {row["id"] for row in hits["results"]} >= {"d-says", "d-quotes"},
+            str(sorted(row["id"] for row in hits["results"])))
     reading("命令行 stdout 仍是四个旧键（屏幕的键不进 stdout）",
-            set(parsed) == {"query", "method", "matched_terms", "results"})
-    reading("每行也没多出屏幕用的键",
-            all("matched_on" not in row and "refused" not in row
-                for row in parsed["results"]))
+            set(hits) == {"query", "method", "matched_terms", "results"})
     sys.path.insert(0, str(ROOT))
     from dojo.storage import Store as _Store  # noqa: E402  (proved importable above)
     store = _Store(db, readonly=True)
     try:
+        plain_hits = store.retrieve("值班通知只在结果会打断他时才叫醒他")
         plain = store.retrieve("值班")
         shipped = json.dumps(plain, sort_keys=True)
     finally:
         store.close()
+    model_rows = {row["id"]: row for row in plain_hits["results"]}
+    published_rows = {row["id"]: row for row in hits["results"]}
+    reading("两条命中的 stdout 每行与给模型的那行逐键相同",
+            published_rows.keys() == model_rows.keys()
+            and all(published_rows[key] == model_rows[key] for key in published_rows),
+            "stdout 多出的键：" + str(sorted(
+                set().union(*(set(row) for row in published_rows.values()))
+                - set().union(*(set(row) for row in model_rows.values()))))
+            if published_rows and model_rows else "没有行可比")
+    sys.path.insert(0, str(ROOT))
     reading("给模型的那次检索仍只有四个键",
             set(plain) == {"query", "method", "matched_terms", "results"}, shipped[:0])
     reading("给模型的每一行也没有多出屏幕用的键",
-            all("matched_on" not in row and "refused" not in row for row in plain["results"]))
+            all("matched_on" not in row and "refused" not in row and "matched_in" not in row
+                for row in plain["results"]))
 
     failures = [item for item in READINGS if not item[1]]
     print("\n" + str(len(READINGS)) + " 项读数：" + str(len(READINGS) - len(failures))

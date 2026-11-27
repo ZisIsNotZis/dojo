@@ -62,7 +62,19 @@ class TheFindRememberedEntryPoint(unittest.TestCase):
                        "用换掉之前那句还能找到它",
                        "屏幕说这是它以前的说法",
                        "给出的命令带绝对 --db 和这张卡的 id",
-                       "命令行 stdout 仍是四个旧键（屏幕的键不进 stdout）"):
+                       "命令行 stdout 仍是四个旧键（屏幕的键不进 stdout）",
+                       # #3436's second round: an overlap anywhere in the card was
+                       # reported as the sentence matching.
+                       "条件里的字对上时，屏幕不把这句当成对上的那句",
+                       "并说清字在哪个部分（条件或反例）",
+                       "那句话自己对上时不印这条注",
+                       "别名对上时，不谎称卡片现在那句对上",
+                       "并把对上的那种说法原样印出来",
+                       "说这句话的卡排在那张只引用了它的卡前面",
+                       "屏幕自己说了这个顺序",
+                       # The supervisor's catch: a reading key reached every published row.
+                       "同一组词同时命中正文和条件两张卡",
+                       "两条命中的 stdout 每行与给模型的那行逐键相同"):
             self.assertIn(phrase, done.stdout, phrase)
 
     def test_it_is_not_vacuous(self):
