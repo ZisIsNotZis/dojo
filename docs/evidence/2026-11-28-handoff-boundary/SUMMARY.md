@@ -3,8 +3,16 @@
 2026-11-28。基线 `805281e`（分支 `candidate/reuse-misaligned`）。离线，模型是本地回环桩，
 回答是写死的常量：**这不是真人结果，也不是模型判断**。
 
-入口：`python3 docs/evidence/2026-11-28-handoff-boundary/verify.py`（45 项）、
-`.../redarm.py`（8 条臂）、`docs/evidence/2026-11-28-handoff-boundary/WALK.md`（人走一遍）。
+干净检出即可重跑，四个入口都在这一片里：
+
+| 命令 | 是什么 |
+|---|---|
+| `python3 docs/evidence/2026-11-28-handoff-boundary/story.py` | 三场全程，打印真实屏幕，17 项读数 |
+| `python3 docs/evidence/2026-11-28-handoff-boundary/verify.py` | 标准 CLI 上的严格检查，45 项 |
+| `python3 docs/evidence/2026-11-28-handoff-boundary/redarm.py` | 8 条红臂，每次只退回一处旧行为 |
+| `python3 -B -m unittest discover -s tests -q` | 全量 1313 项 |
+
+`WALK.md` 是照着走一遍的路线（第 0 节就是上面第一行）。
 
 ## 这一片回答的问题
 
@@ -16,8 +24,13 @@
 
 ## 改之前实测
 
-`.scratch/3419/probe_boundary.py .`（一张带 `scope`/`contradictions`/`unknowns` 的卡交给
-第二场），改前读数：
+改之前的读数是在父提交 `805281e` 上量的，用的是我当时留在 `.scratch/3419/` 的探针
+（那两份**不随版本发布**，所以这里不把它们当入口）：`probe_boundary.py` 把一张带
+`scope`/`contradictions`/`unknowns` 的卡交给第二场，`probe_story.py` 把三场连起来走。
+
+要看这两份脚本的可复跑版本，用现在发布在 `docs/evidence/2026-11-28-handoff-boundary/`
+里的 `story.py`：它在**当前树**上跑出改后的读数，`git stash` 或取旧树后跑同一份脚本，
+就能得到改前的读数。改前那三行是：
 
 | 边界 | 第二场屏幕 | 发给模型 |
 |---|---|---|
@@ -25,8 +38,8 @@
 | 反例（什么时候不成立） | **没有** | 有 |
 | 未知（还没定的） | **没有** | 有 |
 
-`.scratch/3419/probe_story.py .` 把三场连起来走（第一场他认可一句带边界的话 → 第二场
-`--card` → `challenge` → 第三场 `--card`），改前还量出两个同类缺陷：
+同一批脚本把三场连起来走（第一场他认可一句带边界的话 → 第二场 `--card` →
+`challenge` → 第三场 `--card`），又量出两个同类缺陷：
 
 1. **状态词的括号是猜的。** 第一场收尾说结论被认可（库里 `time_basis.acceptance_path=
    discuss_conclusion`），第二场开场印的却是 `草稿（这一句还没有人认可）`。
@@ -66,15 +79,17 @@
 
 ## 证据
 
+全部在 `1a4285f` 的 `git archive` 干净导出上重跑过，不是在改过的工作树上：
+
 | 材料 | 读数 |
 |---|---|
+| `story.py`（三场全程，回环桩） | 17 项读数全成立 |
 | `verify.py`（标准 CLI，回环桩） | 45 项全成立 |
 | `redarm.py`（同一入口，每次只退回一处旧行为） | 8 条臂，每条都红在对应检查上 |
 | `tests/test_handoff_boundary.py` | 18 项 |
-| `tests.test_handoff_boundary` 的红臂 `.scratch/3419/redarm_boundary.py` | 12 条臂全红在对应检查上 |
-| 全量 `python3 -B -m unittest discover -s tests` | 1307 项 OK |
-| `.scratch/3419/probe_story.py .` | 边界与质疑：屏幕有、模型有；认可记录不再说没人认可 |
-| 监督者的两条复现（指向本树） | `.scratch/3419/op_natural.py` 五项屏幕全 `true`；`op_wider.py` 不再出现「窄」 |
+| `tests/test_handoff_boundary_entry.py` | 6 项：跑 verify、一条还原边界的红臂，以及文档里的每个路径都存在、每个数字与脚本自己报的一致 |
+| 全量 `python3 -B -m unittest discover -s tests` | 1313 项 OK |
+| 监督者从干净快照复验 | 开场五项信息与旧会话恢复，两条都通过 |
 
 ## 这一片里我自己犯的三个错
 

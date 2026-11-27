@@ -104,6 +104,80 @@ class TheHandoffBoundaryEntryPoint(unittest.TestCase):
         ):
             self.assertTrue(path.is_file(), str(path))
 
+    def test_no_doc_names_a_path_that_is_not_shipped(self):
+        """Measured by the supervisor on the clean export of `1a4285f`: WALK.md sent the
+        reader to two probes under `.scratch/3419/`, which is not part of the repository.
+        A walkthrough that stalls on its first step is worse than no walkthrough, and this
+        is checkable without running anything.
+        """
+        import re
+        for name in ("WALK.md", "SUMMARY.md"):
+            text = (ROOT / "docs" / "evidence" / SLICE / name).read_text(encoding="utf-8")
+            for match in re.finditer(r"(?:^|[`\s])((?:docs|tests|dojo|scripts)/[\w./-]+\.\w+|tests\.\w+)",
+                                     text):
+                target = match.group(1)
+                if target.startswith("tests."):
+                    # A module path: the file has to exist under tests/.
+                    target = "tests/" + target.split(".", 1)[1].replace(".", "/") + ".py"
+                self.assertTrue((ROOT / target).exists(),
+                                name + " names " + target + ", which is not in the repository")
+            # The scratch directory is where *my* probes lived; it is never a reader's
+            # entry, and it is not published. Mentioning it as history is allowed, but
+            # only in prose -- never inside a runnable code block.
+            for block in re.findall(r"```[a-z]*\n(.*?)```", text, re.S):
+                self.assertNotIn(".scratch/", block,
+                                 name + " has a runnable block that needs .scratch/")
+
+    def test_the_counts_in_the_docs_match_the_scripts(self):
+        """The supervisor read 22 项 / 12 条 in one file and 45 项 / 8 条 in another.
+        Both numbers came from me; only one set was current."""
+        import re
+        summary = SUMMARY.read_text(encoding="utf-8")
+        walk = WALK.read_text(encoding="utf-8")
+        # The numbers have to come from the scripts' own footers, not from a static count
+        # of `check(` lines: many items are built inside loops, so counting source lines
+        # under-reports (34 against the 45 the run reports) and would have made this very
+        # test assert a wrong number.
+        def run(path):
+            return subprocess.run([sys.executable, "-B", str(path), str(ROOT)],
+                                  cwd=str(ROOT), capture_output=True, text=True,
+                                  env=clean_env(), timeout=900)
+        verified = run(ENTRY)
+        self.assertEqual(0, verified.returncode, verified.stdout[-2000:])
+        checks = re.search(r"(\d+) 项检查", verified.stdout)
+        self.assertIsNotNone(checks, verified.stdout[-500:])
+        story = run(ROOT / "docs" / "evidence" / SLICE / "story.py")
+        self.assertEqual(0, story.returncode, story.stdout[-2000:])
+        readings = re.search(r"(\d+) 项读数", story.stdout)
+        self.assertIsNotNone(readings, story.stdout[-500:])
+        for number in (checks.group(1) + " 项", readings.group(1) + " 项"):
+            self.assertIn(number, summary, "SUMMARY.md does not state " + number)
+            self.assertIn(number, walk, "WALK.md does not state " + number)
+        # The arms count has no runtime footer; `redarm.py` prints it in its baseline line
+        # and that line is what a reader sees first.
+        armed = subprocess.run([sys.executable, "-B", str(ARMS), str(ROOT)],
+                               cwd=str(ROOT), capture_output=True, text=True,
+                               env=clean_env(), timeout=2400)
+        self.assertEqual(0, armed.returncode, armed.stdout[-2000:])
+        baseline = re.search(r"green \((\d+) arms\)", armed.stdout)
+        self.assertIsNotNone(baseline, armed.stdout[-500:])
+        for text in (summary, walk):
+            self.assertIn(baseline.group(1) + " 条", text)
+        # Numbers from an earlier draft of these docs. Both were mine; only one set was
+        # current when the supervisor read them.
+        for stale in ("22 项", "12 条"):
+            self.assertNotIn(stale, summary, stale)
+            self.assertNotIn(stale, walk, stale)
+        # The full-suite count cannot be measured from here (running the whole suite
+        # inside the suite is not a check, it is a recursion). What is checkable is that
+        # SUMMARY states one, that it agrees with itself, and that it is not a number this
+        # slice has already outgrown. A reader who reruns the command will overwrite the
+        # figure locally; a stale figure is a documentation defect, not a code defect.
+        stated = re.findall(r"全量[^\n]*?(\d{3,5}) 项", summary)
+        self.assertTrue(stated, "SUMMARY.md does not state the full-suite count")
+        self.assertEqual(1, len(set(stated)), "SUMMARY.md states two different suite counts")
+        self.assertGreaterEqual(int(stated[0]), 1300)
+
     def test_the_arms_file_is_runnable_and_reports_a_verdict(self):
         """Not the arms themselves (they take minutes); just that the file is a program
         with arms in it, so a reader who runs it is not met with a syntax error."""
