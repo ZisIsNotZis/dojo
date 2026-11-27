@@ -1,0 +1,224 @@
+{
+ "about": "真实材料的探究账本：一条关于 dojo 自己文档的说法，怎样被追问、被核查、被改掉。每一条正文都逐字来自这个仓库（提交、文件行、命令输出），不是角色扮演，也不是模型回放。",
+ "not": "不是真人用户研究；不是效果证明。'user' 事件是仓库里的原文摘录，'tool_result' 事件是 replay.py 在本机跑出来的真实输出。记录由 agent 离线誊写，audit 字段写明怎么重跑。",
+ "story": "6f1c1d0a9b7e4b2f8d3a5c0e7b91a4d2",
+ "synthetic": false,
+ "record_provenance": {
+  "kind": "authored_transcript_from_committed_inputs",
+  "replay": "python3 docs/evidence/2026-11-27-guide-standalone-loop/replay.py <repo-root>",
+  "builder": "python3 -B docs/evidence/2026-11-27-guide-standalone-loop/build_ledger.py <new-path.sqlite3>",
+  "note": "账本的行是手写的；每行的 claim 与 quote 都能对着提交或重跑输出逐字核对。synthetic=false 说的是「这不是虚构角色扮演」，不是「这是用户研究」。"
+ },
+ "events": [
+  {
+   "seq": 1,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "start",
+   "at": "2026-11-27T01:40:00+00:00",
+   "payload": {
+    "synthetic": false,
+    "story": "6f1c1d0a9b7e4b2f8d3a5c0e7b91a4d2",
+    "continued_from": null,
+    "model": "offline-authored-transcript",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12,
+    "record_provenance": "authored_transcript_from_committed_inputs"
+   }
+  },
+  {
+   "seq": 2,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "user",
+   "at": "2026-11-27T01:40:01+00:00",
+   "payload": {
+    "synthetic": false,
+    "text": "指南里写着「下面每段都自带 DB 和 STORY 的取值，单独复制一段也能跑」。我认为这句话只是描述性说明，不影响任何东西：门（tests/test_doc_cli_flags.py）每次都是绿的，正文说什么不重要。"
+   }
+  },
+  {
+   "seq": 3,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "knowledge_proposal",
+   "at": "2026-11-27T01:40:02+00:00",
+   "payload": {
+    "synthetic": false,
+    "epistemic_status": "model_proposal_not_certified",
+    "proposal": {
+     "statement": "指南里那句「单独复制一段也能跑」只是描述，门已覆盖，不需要为它做任何事。",
+     "kind": "descriptive",
+     "method": "assertion_without_check",
+     "premises": [
+      {"event": 2, "quote": "每次都是绿的，正文说什么不重要", "role": "assumption"}
+     ],
+     "assumptions": ["测试全绿就等于读者能照着跑"],
+     "conditions": ["只在那句描述确实被执行方式支持时成立"],
+     "alternatives": ["门改写了正文路径，所以它测的不是读者拿到的那段话"],
+     "falsifier": "若把某一段单独复制到一个干净 shell 里跑，它失败，则这句描述是错的。",
+     "revises": null
+    }
+   }
+  },
+  {
+   "seq": 4,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "tool_result",
+   "at": "2026-11-27T01:40:03+00:00",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "repo://docs/evidence/2026-11-27-guide-standalone-loop/replay.py",
+     "note": "在干净 HOME/TMPDIR 下，把 docs/cli-guide.md 的每个 sh 块单独复制进一个新 shell，逐字执行，不重写路径"
+    },
+    "status": "executed",
+    "result": {
+     "url": "repo://docs/evidence/2026-11-27-guide-standalone-loop/replay.py",
+     "title": "块 13（--comparison 示例）单独执行的真实输出",
+     "text": "块 13（fence 行 196）在基线 6aac311 上单独执行：退出码 2；stderr 最后一行是「error: --comparison 需要 STORY；请先运行 stories 查找故事标识，再用 stories STORY --comparison EVENT 查看当前提议的比较状态」。原因：STORY=$(... | python3 -c '...') 在库不存在时产出空串并照样退出 0，下一行就带着空 STORY 去读。同一块第二次跑仍然退出码 2。"
+    }
+   }
+  },
+  {
+   "seq": 5,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "tool_result",
+   "at": "2026-11-27T01:40:04+00:00",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "repo://tests/test_doc_cli_flags.py",
+     "note": "读门自己，看它为什么看不见"
+    },
+    "status": "executed",
+    "result": {
+     "url": "repo://tests/test_doc_cli_flags.py",
+     "title": "门在跑正文之前改写了正文",
+     "text": "6aac311 的 tests/test_doc_cli_flags.py 有 LEDGER_ROOT = '/tmp/dojo-ledger' 和 tidy(block)：执行前把块里的这个前缀替换成测试自己的临时目录。因此「固定路径在同机第二次失败」不会在门里发生；又因为块按页序跑在同一个 shell 里，前面造库的块先跑过了，后面 DB=/tmp/... 的块当然能读——「单独复制一段」从未被当作一段测过。"
+    }
+   }
+  },
+  {
+   "seq": 6,
+   "run": "a1f0c3d5e7b90001",
+   "kind": "review_evidence_notice",
+   "at": "2026-11-27T01:40:05+00:00",
+   "payload": {
+    "synthetic": false,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict",
+    "target": 3,
+    "sources": [],
+    "comparison": {"relation": "conflicts", "events": [4, 5]},
+    "reason": "两处独立读取各自否掉提案 #3 的前提：#4 直接照读者方式跑，块 13 退出码 2；#5 显示门的执行方式改写了正文，所以「门绿」不构成支持。这是记录的判断，不是程序认证。"
+   }
+  },
+  {
+   "seq": 7,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "start",
+   "at": "2026-11-27T01:41:00+00:00",
+   "payload": {
+    "synthetic": false,
+    "story": "6f1c1d0a9b7e4b2f8d3a5c0e7b91a4d2",
+    "continued_from": "a1f0c3d5e7b90001",
+    "model": "offline-authored-transcript",
+    "reasoning_effort": "low",
+    "response_format": "json_object",
+    "delivery_mode": "full_rewrite",
+    "tool_budget": 4,
+    "request_budget": 12,
+    "record_provenance": "authored_transcript_from_committed_inputs"
+   }
+  },
+  {
+   "seq": 8,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "user",
+   "at": "2026-11-27T01:41:01+00:00",
+   "payload": {
+    "synthetic": false,
+    "text": "复核的人在复跑脚本里发现一个发布阻断：它会按前缀扫描宿主 /tmp 并删除匹配的旧库。别人的同名库，以及一份并行复跑，都可能被删除。请让复跑的历史基线也彻底隔离，任何情形只清理它自己创建的路径。"
+   }
+  },
+  {
+   "seq": 9,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "tool_result",
+   "at": "2026-11-27T01:41:02+00:00",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "repo://docs/evidence/2026-11-27-guide-standalone-loop/replay.py",
+     "note": "改后重跑：宿主 /tmp 放一个同名库，跑之前之后各取一次 SHA-256"
+    },
+    "status": "executed",
+    "result": {
+     "url": "repo://docs/evidence/2026-11-27-guide-standalone-loop/replay.py",
+     "title": "同名宿主库在整次复跑前后逐字节相同",
+     "text": "复跑前 /tmp/dojo-ledger.sqlite3 的 SHA-256 是 ef7db2cd7e3956f2ec0b382715e9812a4bc84c606df9b1ee208b58f707c2e6a6；整次复跑退出码 0；复跑后同一路径仍是 ef7db2cd7e3956f2ec0b382715e9812a4bc84c606df9b1ee208b58f707c2e6a6，文件内容仍是 colleague-library。做法：每次运行自带私有 TMPDIR，脚本不再删除、扫描或触碰自己临时目录以外的任何路径。"
+    }
+   }
+  },
+  {
+   "seq": 10,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "knowledge_proposal",
+   "at": "2026-11-27T01:41:03+00:00",
+   "payload": {
+    "synthetic": false,
+    "epistemic_status": "model_proposal_not_certified",
+    "proposal": {
+     "statement": "「单独复制一段也能跑」是一条可执行承诺：它要么让每段自己造出所需状态，要么就被删掉；而「只在干净机器上能跑的路径不是路径」这条判据，要落到创建侧（每次运行自带临时目录），不是清理侧（扫描并删除宿主的同名文件）。",
+     "kind": "descriptive",
+     "method": "correction_after_counterexample",
+     "premises": [
+      {"event": 2, "quote": "单独复制一段也能跑", "role": "assumption"},
+      {"event": 4, "quote": "error: --comparison 需要 STORY", "role": "evidence"},
+      {"event": 5, "quote": "把块里的这个前缀替换成测试自己的临时目录", "role": "evidence"},
+      {"event": 8, "quote": "任何情形只清理它自己创建的路径", "role": "evidence"},
+      {"event": 9, "quote": "复跑后同一路径仍是 ef7db2cd7e3956f2ec0b382715e9812a4bc84c606df9b1ee208b58f707c2e6a6", "role": "evidence"}
+     ],
+     "assumptions": ["mktemp -d 在这台机器上可用，且 TMPDIR 被尊重"],
+     "conditions": ["只在本仓的 docs/cli-guide.md 与同一脚本上测得；未测其它平台"],
+     "alternatives": ["继续在门里改写路径：门会绿，读者仍然失败"],
+     "falsifier": "若某块在自己造库之后仍然只有按页序才通过，这条说法要收窄。",
+     "revises": 3
+    }
+   }
+  },
+  {
+   "seq": 11,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "tool_result",
+   "at": "2026-11-27T01:41:04+00:00",
+   "payload": {
+    "action": {
+     "kind": "read_source",
+     "url": "repo://docs/cli-guide.md",
+     "note": "改后再跑同一复跑脚本"
+    },
+    "status": "executed",
+    "result": {
+     "url": "repo://docs/cli-guide.md",
+     "title": "改后：7 个承诺覆盖的块，0 失败",
+     "text": "删掉 tidy()、每段改成 LEDGER=$(mktemp -d) 之后，同一复跑脚本给出 blocks=19 promise-blocks=7 promise-failures=0，退出码 0；把指南换回 6aac311 的正文，同一个脚本给出 promise-failures=4（块 12、13、14、17），退出码 1。门自身：改后 16/16 OK，换回旧正文有 4 条失败；全套 980/980 OK。"
+    }
+   }
+  },
+  {
+   "seq": 12,
+   "run": "b2e1d4f6a8c00002",
+   "kind": "review_evidence_notice",
+   "at": "2026-11-27T01:41:05+00:00",
+   "payload": {
+    "synthetic": false,
+    "epistemic_status": "recorded_source_comparison_not_truth_verdict",
+    "target": 10,
+    "sources": [],
+    "comparison": {"relation": "supports_independently", "events": [9, 11]},
+    "reason": "两处读取各自独立支持修正后的说法：#9 是隔离性（宿主文件逐字节不变）,#11 是承诺本身（7 个块 0 失败，红臂 4 失败）。二者来自不同命令、不同对象，不是同一次运行的两种说法。"
+   }
+  }
+ ]
+}

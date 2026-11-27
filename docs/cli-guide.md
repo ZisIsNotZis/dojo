@@ -188,13 +188,16 @@ python3 -m dojo --db "$DB" compare-sources "$STORY" "$PROPOSAL" "$BASIS_READ" "$
 仓库里只有账本的内容（`fixtures/comparison-ledger.json`），`*.sqlite3` 被忽略规则挡在版本库外，所以检出里没有现成的库文件。第一步先把它造出来：
 
 ```sh
-python3 -B fixtures/build_comparison_ledger.py /tmp/dojo-ledger.sqlite3
+LEDGER=$(mktemp -d)
+python3 -B fixtures/build_comparison_ledger.py "$LEDGER/ledger.sqlite3"
 ```
 
-这个构建器不联网、不调用模型，把场景说明写成一份合成探究库；目标路径已存在就拒绝，换个名字或先删掉。下面每段都自带 `DB` 和 `STORY` 的取值，单独复制一段也能跑。
+这个构建器不联网、不调用模型，把场景说明写成一份合成探究库；目标路径已存在就拒绝，所以每次调用都写到一个新的空目录。下面每段都自带 `DB` 和 `STORY` 的取值，单独复制一段也能跑——代价是每段各造一份自己的库，互不共享。
 
 ```sh
-DB=/tmp/dojo-ledger.sqlite3
+LEDGER=$(mktemp -d)
+DB=$LEDGER/ledger.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
 STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
 python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic
 python3 -m dojo --db "$DB" stories "$STORY" --comparison 23 --synthetic
@@ -203,7 +206,9 @@ python3 -m dojo --db "$DB" stories "$STORY" --comparison 23 --synthetic
 第一段输出里 `comparison_status` 是 `checked`，`comparisons` 的 `source_events` 是两处正文回执号（`[3, 4]`）；第二段的 #23 是 `open`——它引了两处正文，但**没有**比较记录，`next_check` 就是要核的那一件事。`checked` 只说明比较者记下了判断，不是程序认证；`open` 也不是「被证伪」，只是没有人记过这次核对。合成账本必须带 `--synthetic`，否则入口会说「没有可见的故事」——那不是库坏了，是默认视图不列合成记录。`$STORY` 这个 id 变化时不用改命令：上面那行 `python3 -c` 从 `stories --synthetic` 的 `story` 字段里取；`EVENT` 同理，取 `knowledge --synthetic` 的 `event` 字段。
 
 ```sh
-DB=/tmp/dojo-ledger.sqlite3
+LEDGER=$(mktemp -d)
+DB=$LEDGER/ledger.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB"
 STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
 python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
 ```
@@ -213,8 +218,9 @@ python3 -m dojo --db "$DB" stories "$STORY" --context --synthetic
 要看到「已替代」那一态，再造一份带后续版本的库：
 
 ```sh
-python3 -B fixtures/build_comparison_ledger.py /tmp/dojo-ledger-revised.sqlite3 --revision
-DB=/tmp/dojo-ledger-revised.sqlite3
+LEDGER=$(mktemp -d)
+DB=$LEDGER/revised.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB" --revision
 STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
 python3 -m dojo --db "$DB" stories "$STORY" --comparison 5 --synthetic || echo "（退出码 $? 是预期：这一版已被替代）"
 python3 -m dojo --db "$DB" stories "$STORY" --comparison 27 --synthetic
@@ -229,7 +235,8 @@ python3 -m dojo --db "$DB" stories "$STORY" --comparison 27 --synthetic
 `--comparison` 看的是「两份正文比过没有」。往回退一步还有两个只读入口：`--report` 读本故事一条用户报告的原话，`--proposal` 读一条提议的正文。两个都不调用模型，不写库。
 
 ```sh
-DB=/tmp/dojo-ledger-read.sqlite3
+LEDGER=$(mktemp -d)
+DB=$LEDGER/read.sqlite3
 python3 -B fixtures/build_comparison_ledger.py "$DB"
 STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
 python3 -m dojo --db "$DB" stories "$STORY" --report 2 --synthetic
@@ -243,6 +250,9 @@ python3 -m dojo --db "$DB" stories "$STORY" --proposal 5 --synthetic
 `--proposal` 不返回提议引用了哪条报告——它没有 `premises` 字段。要看引用关系，得读 `knowledge` 列表里的 `proposal.premises`，再拿那条报告号去 `--report` 原文：
 
 ```sh
+LEDGER=$(mktemp -d)
+DB=$LEDGER/premises.sqlite3
+python3 -B fixtures/build_comparison_ledger.py "$DB" >/dev/null
 python3 -m dojo --db "$DB" knowledge --synthetic 2>/dev/null \
   | python3 -c 'import json,sys;print(json.dumps([x["proposal"]["premises"] for x in json.load(sys.stdin) if x["event"]==5][0], ensure_ascii=False))'
 ```
@@ -256,7 +266,8 @@ python3 -m dojo --db "$DB" knowledge --synthetic 2>/dev/null \
 ### 从检出照着走一遍：模拟材料与真实材料各自证明什么
 
 ```sh
-DB=/tmp/dojo-ledger-walk.sqlite3
+LEDGER=$(mktemp -d)
+DB=$LEDGER/walk.sqlite3
 python3 -B fixtures/build_comparison_ledger.py "$DB"
 STORY=$(python3 -m dojo --db "$DB" stories --synthetic | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["story"])')
 python3 -m dojo --db "$DB" stories --synthetic

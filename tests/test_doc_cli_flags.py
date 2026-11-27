@@ -108,18 +108,41 @@ def contexts(text):
 def listings(text):
     return [document for document in json_documents(text) if isinstance(document, list)]
 
-# A block belongs to this gate only if it points at the ledger the gate builds.
-LEDGER_MARKER = 'dojo-ledger'
 
-# The guide writes its sample libraries under this prefix. The gate redirects the
-# *prefix*, not a fixed list of names, into a temp dir: #3246 shipped a third path
-# (`-walk.sqlite3`) that a two-name table did not cover, so a second run of the guide
-# failed on a stale file left by the first one -- a route that only works on a clean
-# host is not a route. Any `.sqlite3` the ledger blocks print must live under here;
-# test_every_printed_library_path_is_redirectable enforces that.
-LEDGER_ROOT = '/tmp/dojo-ledger'
+# A block belongs to this gate only if it runs the ledger builder.
+#
+# This used to be the string `dojo-ledger` -- the fixed /tmp prefix the guide named.
+# That made the selector depend on the very path the gate then rewrote, so a block
+# could be "registered" and still be unrunnable for a reader. The builder is what a
+# ledger block actually needs; the path is not.
+LEDGER_MARKER = 'build_comparison_ledger.py'
+
+# Variables a ledger block reads from the shell. `单独复制一段也能跑` is exactly the
+# claim that no block inherits one of these from a block above it.
+BLOCK_VARIABLES = ('DB', 'STORY', 'LEDGER')
+BLOCK_VARIABLES = ('DB', 'STORY', 'LEDGER')
 
 
+def variables_declared(block):
+    """Shell variables a block assigns (optionally exported), by name."""
+    found = set()
+    for line in block:
+        if line.lstrip().startswith('#'):
+            continue
+        match = re.match(r'\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)', line)
+        if match:
+            found.add(match.group(1))
+    return found
+
+
+def variables_read(block):
+    """The variables of interest that a block expands, by name."""
+    found = set()
+    for line in block:
+        if line.lstrip().startswith('#'):
+            continue
+        found.update(re.findall(r'\$\{?([A-Z_][A-Z0-9_]*)', line))
+    return found & set(BLOCK_VARIABLES)
 def stories_option_strings():
     parser = _parser()
     action = next(a for a in parser._actions if a.dest == 'command')
@@ -184,26 +207,50 @@ class GuideMatchesParser(unittest.TestCase):
                          % (sorted(missing - set(UNDOCUMENTED_VIEWS)),
                             sorted(set(UNDOCUMENTED_VIEWS) - missing)))
 
-    def test_every_printed_library_path_is_redirectable(self):
-        """A route that only runs on a clean host is not a route.
 
-        The gate runs the guide's blocks in a temp dir by rewriting LEDGER_ROOT. A
-        block that prints a library somewhere else keeps whatever a previous run
-        left behind -- #3246 shipped `/tmp/dojo-ledger-walk.sqlite3` and failed on
-        its second run for exactly that reason. So: any `.sqlite3` a ledger block
-        names must sit under LEDGER_ROOT, and LEDGER_ROOT must be a prefix of the
-        paths actually used. Nothing is executed here; it is a text invariant.
+    def test_every_ledger_block_sets_the_variables_it_reads(self):
+        """What `单独复制一段也能跑` means, as a text invariant.
+
+        Measured on the published tree: the `--comparison` section set
+        `DB=/tmp/dojo-ledger.sqlite3` and assumed the builder above it had run, so a
+        reader who copied that one section got `error: --comparison 需要 STORY`. The
+        failure was invisible here because the gate rewrote the path and ran the
+        sections in page order, where the builder *had* run.
+
+        A block that expands a variable must assign it. Nothing is executed here.
+        """
+        stray = []
+        for block in guide_scripts(guide_text()):
+            inherited = variables_read(block) - variables_declared(block)
+            if inherited:
+                stray.append('%s (needs %s)' % (block[0].strip(),
+                                                ', '.join(sorted(inherited))))
+        self.assertEqual([], stray,
+                         'a ledger block reads a variable it never sets, so copying '
+                         'that one section fails: %s' % (stray,))
+
+    def test_no_ledger_block_names_a_fixed_library_path(self):
+        """A fixed path cannot run twice, and hides the reader's problem from the gate.
+
+        #3246 shipped `/tmp/dojo-ledger-walk.sqlite3` and failed on its second run;
+        the answer then was to rewrite the path inside the gate, which made the test
+        green and left the page unfollowable. The guide now mints its own directory,
+        so the invariant lives on the page: no absolute `.sqlite3` path in a block.
         """
         stray = []
         for block in guide_scripts(guide_text()):
             for line in block:
-                for path in re.findall(r'/[^\s"\']*\.sqlite3', line):
-                    if not path.startswith(LEDGER_ROOT):
-                        stray.append('%s (block names %s)' % (path, line.strip()))
+                if line.lstrip().startswith('#'):
+                    continue
+                # `$LEDGER/ledger.sqlite3` is relative to a directory minted at
+                # run time -- readable twice and routable. Only a literal absolute
+                # path is the defect this arm is about; the lookbehind keeps
+                # `$LEDGER` from being read as `/ledger`.
+                for path in re.findall(r'(?<![\w$}])/[\w./-]*\.sqlite3', line):
+                    stray.append('%s (block names %s)' % (path, line.strip()))
         self.assertEqual([], stray,
-                         'the guide prints a library path the gate cannot redirect, '
-                         'so the example fails on its second run: %s' % (stray,))
-
+                         'a ledger block names a fixed library path, so it fails on a '
+                         'second run and cannot run alone: %s' % (stray,))
     def test_the_view_this_slice_adopted_keeps_its_example(self):
         self.assertNotIn('--comparison', UNDOCUMENTED_VIEWS)
         examples = example_commands(guide_text())
@@ -241,18 +288,54 @@ class GuideRouteRuns(unittest.TestCase):
         self.env['PYTHONPATH'] = str(ROOT)
         self.env['PYTHONDONTWRITEBYTECODE'] = '1'
 
-    def tidy(self, block):
-        """Point the guide's sample paths at this test's temp directory."""
-        return '\n'.join(block).replace(LEDGER_ROOT, str(self.work / 'dojo-ledger'))
+    def run_block(self, block, label, env=None):
+        """Run the block verbatim.
 
-    def run_block(self, block, label):
-        script = self.tidy(block)
-        proc = subprocess.run(['sh', '-eu', '-c', script], cwd=str(ROOT), capture_output=True,
-                              text=True, env=self.env, timeout=300)
+        No path rewriting: a page that only works after the gate edits it is not a
+        page a reader can paste. The only thing this test changes is the environment
+        it hands over (scratch HOME/TMPDIR/PYTHONPATH), never the text.
+        """
+        script = '\n'.join(block)
+        proc = subprocess.run(['sh', '-eu', '-c', script], cwd=str(ROOT),
+                              capture_output=True, text=True, env=env or self.env,
+                              timeout=300)
         self.assertEqual(0, proc.returncode,
-                         'the guide prints a command that fails (%s):\n%s\n--- stderr ---\n%s'
-                         % (label, script, proc.stderr[-1500:]))
+                         'the guide prints a command that fails (%s):\n%s\n'
+                         '--- stderr ---\n%s' % (label, script, proc.stderr[-1500:]))
         return proc.stdout
+
+    def scratch_env(self):
+        """A reader's environment: no inherited DOJO_*, its own HOME and TMPDIR.
+
+        TMPDIR matters: the guide's blocks mint with `mktemp -d`, which honours it, so
+        each sitting gets its own libraries and the gate never touches the real /tmp.
+        """
+        base = Path(tempfile.mkdtemp(prefix='dojo-guide-sitting.'))
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
+        (base / 'home').mkdir()
+        (base / 'tmp').mkdir()
+        return {
+            'PATH': self.env.get('PATH', '/usr/local/bin:/usr/bin:/bin'),
+            'LANG': 'C.UTF-8', 'TZ': 'UTC',
+            'HOME': str(base / 'home'), 'TMPDIR': str(base / 'tmp'),
+            'PYTHONPATH': str(ROOT), 'PYTHONDONTWRITEBYTECODE': '1',
+        }
+
+    def test_every_ledger_block_runs_alone_and_on_a_second_sitting(self):
+        """The page's promise, taken literally and twice.
+
+        Alone: one fresh shell, nothing exported, no library on disk -- what a reader
+        who copies one section has. Twice: the same machine, the same TMPDIR, a fresh
+        shell -- tomorrow. Both were red on `6aac311` (blocks 13, 14, 17 alone; block
+        12 on the second sitting) while the rest of this file was green.
+        """
+        scripts = guide_scripts(guide_text())
+        self.assertTrue(scripts, 'guide has no runnable ledger block')
+        sitting = self.scratch_env()
+        for index, block in enumerate(scripts):
+            self.run_block(block, 'ledger block %d, copied alone' % index,
+                           env=self.scratch_env())
+            self.run_block(block, 'ledger block %d, second sitting' % index, env=sitting)
 
     def test_every_documented_command_actually_runs(self):
         """A block that cannot run is a route the reader cannot follow."""
@@ -265,8 +348,9 @@ class GuideRouteRuns(unittest.TestCase):
         """Direction D: read the prose claims off the executed output, not off a copy."""
         rows, coverage_blocks = {}, []
         for block in guide_scripts(guide_text()):
-            proc = subprocess.run(['sh', '-eu', '-c', self.tidy(block)], cwd=str(ROOT),
-                                  capture_output=True, text=True, env=self.env, timeout=300)
+            proc = subprocess.run(['sh', '-eu', '-c', '\n'.join(block)], cwd=str(ROOT),
+                                  capture_output=True, text=True, env=self.scratch_env(),
+                                  timeout=300)
             self.assertEqual(0, proc.returncode, proc.stderr[-1200:])
             rows.update(comparisons(proc.stdout))
             coverage_blocks.extend(contexts(proc.stdout))
@@ -285,7 +369,8 @@ class GuideRouteRuns(unittest.TestCase):
         # The guide claims these numbers are readable by `--comparison`, but shows no
         # command that reads them -- so the gate reads them. A claim about a route is
         # checked by taking the route, not by finding the number in some other output.
-        db = self.work / 'dojo-ledger.sqlite3'
+        db = self.work / 'gate-omitted.sqlite3'
+        ledger_fixture.build(db)
         for event in omitted:
             code, out, err = self.cli(db, 'stories', STORY, '--comparison', str(event), '--synthetic')
             self.assertEqual(0, code, 'the guide claims omitted #%d is readable; it refused: %s'
@@ -400,16 +485,19 @@ class GuideRouteRuns(unittest.TestCase):
                    if any('--revision' in line for line in block)
                    and any('--comparison 5' in line for line in block)]
         self.assertTrue(revised, 'guide no longer shows how to reach the replaced state')
-        block = revised[0]
-        script = self.tidy(block)
+        script = '\n'.join(revised[0])
         proc = subprocess.run(['sh', '-c', script], cwd=str(ROOT), capture_output=True,
-                              text=True, env=self.env, timeout=300)
+                              text=True, env=self.scratch_env(), timeout=300)
         # The block is expected to *end* in a refusal; that refusal is the lesson.
         pointer = re.search(r'--comparison (\d+)', proc.stderr + proc.stdout)
         self.assertIsNotNone(pointer,
                              'the replaced-version recipe no longer names a current version: %r'
                              % (proc.stderr[-800:] + proc.stdout[-800:]))
-        code, out, err = self.cli(self.work / 'dojo-ledger-revised.sqlite3', 'stories', STORY,
+        # The block mints its own directory, so rebuild the library it points at
+        # from the same fixture rather than reading the block's scratch dir.
+        revised_db = self.work / 'revised-check.sqlite3'
+        ledger_fixture.build(revised_db, successor=True)
+        code, out, err = self.cli(revised_db, 'stories', STORY,
                                   '--comparison', pointer.group(1), '--synthetic')
         self.assertEqual(0, code, 'the named current version is not readable: %s' % err)
         document = json.loads(out)['comparison']
@@ -421,7 +509,7 @@ class GuideRouteRuns(unittest.TestCase):
         # the reader which version to open next. Reading only the refusal left that
         # command unchecked, so a guide that says "open #27" in one line and "open #15"
         # in the next still passed. The two numbers must be the same number.
-        followups = [int(number) for line in block
+        followups = [int(number) for line in revised[0]
                      for number in re.findall(r'--comparison (\d+)', line)]
         self.assertTrue(followups, 'the recipe names no version to open next')
         self.assertEqual([int(pointer.group(1))], followups[-1:],
