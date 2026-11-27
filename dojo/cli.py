@@ -805,6 +805,20 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     print(f"无法启动讨论：模型端点配置无效（{exc}），未发送网络请求。", file=sys.stderr)
                 return 2
+            # Opened only after every local refusal above, so a command that is going to
+            # fail leaves no library behind -- the two pinned "no database" tests. It is
+            # opened here because `run_discuss` writes (the draft, the read record, the
+            # trace directory) and needs a real store: the branch passed its `store`, which
+            # was still None, and the first `store.show` died with
+            # `'NoneType' object has no attribute 'show'` after 0 requests. Every test up to
+            # this slice supplied its own client and store, so the real CLI's success path
+            # had never been walked end to end.
+            _secure_default_paths(db_path, export_dir)
+            store = Store(db_path)
+            try:
+                db_path.chmod(0o600)
+            except OSError:
+                pass
             return run_discuss(
                 store, config=config, no_trace=args.no_trace, no_profile=args.no_profile,
                 resume=Path(args.resume).expanduser() if args.resume else None,

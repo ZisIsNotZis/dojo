@@ -71,7 +71,9 @@ def last_context(client):
     raise AssertionError("no user message in the last request")
 
 
-class HandoffTests(unittest.TestCase):
+class HandoffCase(unittest.TestCase):
+    """The fixtures both halves share: a narrowed card and the trace it leaves."""
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -111,6 +113,8 @@ class HandoffTests(unittest.TestCase):
                 records.append(json.loads(line))
         return records
 
+
+class HandoffTests(HandoffCase):
     def test_a_new_session_says_nothing_was_carried_over_when_no_card_is_named(self):
         """The default must not change: without `--card` no card goes in, and the old
         note is still printed. This is the control against "fix it by always handing
@@ -406,6 +410,274 @@ class HandoffTests(unittest.TestCase):
         )
         self.assertEqual(0, code, output.getvalue())
         self.assertIn("历史与待处理内容已恢复", output.getvalue())
+
+    def test_the_source_record_reaches_the_model_and_the_trace(self):
+        """The card's provenance used to stop at the library boundary.
+
+        The handout told the model to "照旧区分已核实、推断与未知" and then gave it no
+        verification state at all: `type`, `verification`, `claim` and `scope_note`
+        reached neither the request nor the screen, only the database. A card standing
+        on one unverified first-hand claim and a card standing on a checked observation
+        read the same to the model, so the one evidence instruction had nothing under
+        it. Measured on the real CLI before the fix -- see
+        `.scratch/3363/probe_handoff_facts.py`.
+        """
+        candidate_id = self.narrowed_card()
+        client = FakeClient([
+            {"answer": "接着说。", "candidate": None, "user_stance": "neutral"},
+        ])
+        output = io.StringIO()
+        run_discuss(
+            self.store, client=client, card=candidate_id,
+            read_line=read_lines(["接着那条说"]), output=output, environ={},
+        )
+        context = last_context(client)
+        for piece in ("他这样做过两次", "两次都在同一团队", "claimed_firsthand",
+                      "unverified"):
+            self.assertIn(piece, context, piece)
+        handout = [row for row in self.trace_records() if row.get("event") == "handout"]
+        self.assertEqual(1, len(handout))
+        self.assertEqual("unverified", handout[0]["sources"][0]["verification"])
+        self.assertEqual("他这样做过两次", handout[0]["sources"][0]["claim"])
+
+    def test_the_screen_counts_source_records_rather_than_people(self):
+        """Two stored records are not two people, and an unverified one is said to be.
+
+        #1763 measured that an echo and a genuinely independent second arrival write
+        byte-identical provenance, so the line may count records and must not count
+        persons. The verification state is printed beside the count for the same reason:
+        "2 条来源记录" alone reads as "two things that were checked".
+        """
+        candidate_id = self.narrowed_card()
+        shown = self.store.show(candidate_id)
+        block = handoff_block(shown["candidate"], shown.get("revision_basis"))
+        self.assertIn("1 条来源记录", block)
+        self.assertIn("未经核验", block)
+        self.assertIn("不是人数", block)
+        for word in ("两个人", "两位", "两人"):
+            self.assertNotIn(word, block, word)
+
+    def test_a_card_without_sources_says_nothing_about_sources(self):
+        """An absent fact gets no line -- the same rule the narrowing line follows."""
+        card = self.store.add(
+            statement=STATEMENT, kind="abstract_idea", scope=["他已经抽身的时候"],
+            session="sess-A",
+        )
+        shown = self.store.show(card["id"])
+        block = handoff_block(shown["candidate"], shown.get("revision_basis"))
+        model_text = handoff_for_model(shown["candidate"], shown.get("revision_basis"))
+        for text in (block, model_text):
+            self.assertNotIn("来源记录", text)
+
+    def test_the_real_cli_gets_a_working_store_for_discuss(self):
+        """The crash the supervisor hit, pinned at the entry point it was hit at.
+
+        The handoff slice replaced the discuss branch's `store = Store(db_path)` with a
+        readonly probe and let `run_discuss` keep the branch's `store`, which was still
+        None: the first `store.show` died with `'NoneType' object has no attribute
+        'show'` after zero requests. In-process tests could not see it because every one
+        of them builds a store and passes a client. This test runs the CLI itself into a
+        loopback endpoint, which is the only path where the branch owns the store.
+        """
+        import os
+        import subprocess
+        import sys as _sys
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        candidate_id = self.narrowed_card()
+
+        class Handler(BaseHTTPRequestHandler):
+            received = []
+
+            def do_POST(self):  # noqa: N802
+                Handler.received.append(
+                    self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
+                payload = json.dumps({"choices": [{"message": {
+                    "role": "assistant", "content": json.dumps({
+                        "answer": "接着说。", "candidate": None,
+                        "user_stance": "neutral"}, ensure_ascii=False)},
+                    "finish_reason": "stop"}]}, ensure_ascii=False).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DOJO_")}
+        env.update({
+            "DOJO_DB": str(self.root / "dojo.sqlite3"),
+            "DOJO_LLM_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}/v1",
+            "DOJO_LLM_MODEL": "loopback",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        })
+        done = subprocess.run(
+            [_sys.executable, "-m", "dojo", "discuss", "--card", candidate_id],
+            cwd=str(Path(__file__).resolve().parents[1]), env=env, text=True,
+            input="接着上次那条说\n", capture_output=True, timeout=120,
+        )
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertIn(STATEMENT, done.stdout)
+        self.assertEqual(1, len(Handler.received), "the endpoint got no request")
+        self.assertIn(LEFT, Handler.received[0])
+        self.assertIn(REASON, Handler.received[0])
+        self.assertIn("他这样做过两次", Handler.received[0])
+
+
+class ResumeTests(HandoffCase):
+    """The second half of one session, measured at the wire and not on the screen.
+
+    The supervisor resumed a session that had been handed a card and watched the CLI
+    answer while the outbound request carried none of it: no wording, no narrowing, no
+    reason, no sources. The trace had all four -- `_load_resume_trace` validated the
+    handout row and then dropped it -- and the screen said "历史与待处理内容已恢复",
+    which is true of the turns and was false of the handout.
+
+    Every check here reads `client.calls`, the bytes that would have gone to the model.
+    A resumed run that prints the right opening line over a request missing the card is
+    the same defect this whole slice exists to remove.
+    """
+
+    def first_half(self, candidate_id, lines=("接着上次那条说",)):
+        client = FakeClient([
+            {"answer": "接着这句。", "candidate": None, "user_stance": "neutral"},
+        ])
+        run_discuss(
+            self.store, client=client, card=candidate_id,
+            read_line=read_lines(list(lines)), output=io.StringIO(), environ={},
+        )
+        self.assertEqual(1, len(client.calls))
+        return next((self.root / "sessions").glob("*.jsonl"))
+
+    def test_resume_sends_the_same_handout_the_live_session_sent(self):
+        candidate_id = self.narrowed_card()
+        path = self.first_half(candidate_id)
+        resumed = FakeClient([
+            {"answer": "继续说。", "candidate": None, "user_stance": "neutral"},
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=resumed, resume=path,
+            read_line=read_lines(["继续"]), output=output, environ={},
+        )
+        self.assertEqual(0, code, output.getvalue())
+        self.assertEqual(1, len(resumed.calls), "the resumed session sent nothing")
+        wire = json.dumps(resumed.calls[0], ensure_ascii=False)
+        # The whole card, not just its statement: the trace row has to carry every
+        # content field the live handout sent, or a resumed request is quietly poorer
+        # than the one it continues. `narrowed_card` ends on unknowns="打断多少次会变成
+        # 骚扰" -- the earlier "他会不会来看回执" was replaced by the revise, so asserting
+        # it here would fail on a correct tree (the supervisor caught exactly that).
+        shown = self.store.show(candidate_id)["candidate"]
+        self.assertEqual(["打断多少次会变成骚扰"], shown["unknowns"])
+        for piece in (STATEMENT, LEFT, REASON, *shown["scope"], *shown["premises"],
+                      *shown["alternatives"], *shown["contradictions"], *shown["unknowns"],
+                      "他这样做过两次", "两次都在同一团队",
+                      "claimed_firsthand", "unverified"):
+            self.assertIn(piece, wire, piece)
+
+    def test_resume_keeps_the_version_this_conversation_started_with(self):
+        """The card changes between the two halves. The session must not change with it.
+
+        This is the supervisor's second requirement, and it is the reason the handout is
+        rebuilt from the trace rather than from `store.show`: a conversation that was
+        opened on one sentence, argued about it, and then continues is still about that
+        sentence. Handing the model a newer wording under the same session id would make
+        "这一段说的是哪句" unanswerable from the record.
+        """
+        candidate_id = self.narrowed_card()
+        path = self.first_half(candidate_id)
+        LATER = "持续检查交给系统自己跑，只在他说停的时候才停。"
+        self.store.revise(
+            candidate_id, LATER, "后来觉得叫醒的门槛还是太低。",
+            scope=["他已经抽身的时候"], premises=["系统能自己跑检查"],
+            alternatives=["把检查留给人"], contradictions=[DOUBT],
+            unknowns=["他会不会来看回执"], session="sess-D",
+        )
+        resumed = FakeClient([
+            {"answer": "继续说。", "candidate": None, "user_stance": "neutral"},
+        ])
+        run_discuss(
+            self.store, client=resumed, resume=path,
+            read_line=read_lines(["继续"]), output=io.StringIO(), environ={},
+        )
+        wire = json.dumps(resumed.calls[0], ensure_ascii=False)
+        self.assertIn(STATEMENT, wire, "the resumed session lost the wording it started on")
+        self.assertNotIn(LATER, wire, "a later revision was slipped into an older session")
+
+    def test_resume_does_not_spend_a_second_read_row_on_one_session(self):
+        """The read log counts sessions, and a resume is the same session.
+
+        Without the guard this ending prints "被交付过 2 次" about one conversation, which
+        is a count inflated by the act of continuing -- the same class of claim this
+        project keeps having to remove.
+        """
+        candidate_id = self.narrowed_card()
+        path = self.first_half(candidate_id)
+        resumed = FakeClient([
+            {"answer": "继续说。", "candidate": None, "user_stance": "neutral"},
+        ])
+        run_discuss(
+            self.store, client=resumed, resume=path,
+            read_line=read_lines(["继续"]), output=io.StringIO(), environ={},
+        )
+        rows = self.store.reads(candidate_id)["rows"]
+        self.assertEqual(1, len(rows), [row["reader_session"] for row in rows])
+        self.assertEqual("discuss", rows[0]["surface"])
+
+    def test_a_trace_with_two_handout_rows_is_refused(self):
+        """`--card` is a start-of-session flag, so two rows cannot be one session."""
+        candidate_id = self.narrowed_card()
+        path = self.first_half(candidate_id)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        end = json.loads(lines[-1])
+        handout = next(row for row in map(json.loads, lines) if row.get("event") == "handout")
+        lines.insert(len(lines) - 1, json.dumps(handout, ensure_ascii=False))
+        self.assertEqual("session_end", end["event"])
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        client = FakeClient([])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, resume=path,
+            read_line=read_lines(["继续"]), output=output, environ={},
+        )
+        self.assertEqual(2, code)
+        self.assertEqual([], client.calls)
+        self.assertIn("交付卡片记录重复", output.getvalue())
+
+    def test_a_seed_card_can_be_handed_to_a_session(self):
+        """`dojo seed` is the first thing the README tells a person to run.
+
+        The seed pack writes no `contradictions`, and `_candidate_fields` subscripted it,
+        so `--card seed-m01` died on the first turn with `KeyError: 'contradictions'`.
+        The absent field is omitted, not filled in: telling the model "he ruled nothing
+        out" about a card that never recorded the question is a claim the library never
+        made.
+        """
+        from dojo.storage import load_simulated_seeds
+
+        load_simulated_seeds(self.store)
+        client = FakeClient([
+            {"answer": "这几条是模拟材料。", "candidate": None, "user_stance": "neutral"},
+        ])
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client, card="seed-m01",
+            read_line=read_lines(["我们谈谈这一条"]), output=output, environ={},
+        )
+        self.assertEqual(0, code, output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+        context = last_context(client)
+        self.assertIn("环境与流程的设计", context)
+        self.assertIn("abstract_reasoning", context)
 
 
 if __name__ == "__main__":

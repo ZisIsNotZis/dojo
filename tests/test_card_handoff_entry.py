@@ -58,10 +58,15 @@ class TheCardHandoffEntryPoint(unittest.TestCase):
             shutil.copytree(ROOT / name, work / name)
         source = (work / "dojo" / "discuss.py").read_text(encoding="utf-8")
         stripped = source.replace(
-            '            context += handoff_for_model(handed, handed_basis) + "\\n\\n"',
-            '            context += ""', 1,
+            '                context += block + "\\n\\n"',
+            '                context += ""', 1,
         )
+        # The anchor is whatever line actually puts the handout in the request. It moved
+        # once already (the resume fix wrapped it in `block`), and this control silently
+        # stopped biting when it did -- so it asserts it found the line, and the check
+        # below asserts the entry point goes red, not just that some bytes were edited.
         self.assertNotEqual(source, stripped, "the handout line was not found to remove")
+        self.assertIn("handoff_for_model(handed, handed_basis)", source)
         (work / "dojo" / "discuss.py").write_text(stripped, encoding="utf-8")
         done = self.run_entry(work)
         self.assertEqual(1, done.returncode,

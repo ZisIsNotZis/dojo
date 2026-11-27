@@ -95,6 +95,66 @@ HANDOFF_STATUS_WORDS = {
 }
 
 
+# What each stored source type means, said in the words a person would use. Only the
+# types the store accepts appear here; an unknown one is printed as its stored value
+# rather than dropped, because "a record we cannot name" is still a record.
+SOURCE_TYPE_WORDS = {
+    "claimed_firsthand": "他自称亲历",
+    "artifact_observation": "他直接看到的东西",
+    "secondhand_report": "听别人说的",
+    "abstract_reasoning": "推理出来的",
+    "model_generated": "模型写的",
+    "synthetic_roleplay": "模拟扮演的",
+    "unknown": "来源类型不明",
+}
+SOURCE_VERIFICATION_WORDS = {
+    "unverified": "未经核验",
+    "not_evidence": "本身不算证据",
+    "independently_checked": "有人独立核过",
+    "disputed": "有争议",
+    "unknown": "核验状态不明",
+}
+
+
+def source_records(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    """The card's source records, as stored, with non-dict entries dropped.
+
+    Read, never repaired: this decides what a handout may say about provenance, and
+    inventing a type or a verification state for a record that lacks one would put a
+    claim in the model's context that the library never made.
+    """
+    return [item for item in (candidate.get("sources") or []) if isinstance(item, dict)]
+
+
+def source_summary(candidate: dict[str, Any]) -> str:
+    """One line naming what this card stands on, or "" when it holds no source record.
+
+    Counts records, never people: #1763 measured that an echo and a genuine second
+    arrival write byte-identical provenance, so "two sources" is the strongest true
+    sentence and "two people" is not supported by anything on disk. The verification
+    states are printed as stored -- the count alone would let "2 条来源记录" read as
+    "two things that were checked", which is exactly the mistake this line prevents.
+    """
+    records = source_records(candidate)
+    if not records:
+        return ""
+    counts: dict[tuple[str, str], int] = {}
+    for record in records:
+        kind = str(record.get("type") or "unknown")
+        check = str(record.get("verification") or "unknown")
+        counts[(kind, check)] = counts.get((kind, check), 0) + 1
+    parts = [
+        (f"{count} 条" if len(records) > 1 else "")
+        + f"{SOURCE_TYPE_WORDS.get(kind, kind)}、{SOURCE_VERIFICATION_WORDS.get(check, check)}"
+        for (kind, check), count in sorted(counts.items())
+    ]
+    head = "它有 1 条来源记录：" if len(records) == 1 else f"它有 {len(records)} 条来源记录："
+    return (
+        head + "；".join(parts)
+        + "。这是记录条数，不是人数；核验状态如上，不代表这句是真的。"
+    )
+
+
 def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
     """What the person is owed when this session is handed an earlier card.
 
@@ -114,6 +174,9 @@ def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None
         block += "\n  它比更早那句窄：原来是「" + left + "」"
     if isinstance(reason, str) and reason.strip():
         block += "\n  他后来改主意时说的是：「" + reason + "」"
+    sources = source_summary(candidate)
+    if sources:
+        block += "\n  " + sources
     block += (
         "\n  这场里它是资料，不是你说过的话。你若只是重复它，记录不会把本场算成第二个独立来源；"
         "你若推翻或改窄它，那会是本场新说的话。"
@@ -122,7 +185,16 @@ def handoff_block(candidate: dict[str, Any], basis: dict[str, Any] | None = None
 
 
 def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = None) -> str:
-    """The same handout, shaped for the model: data, with its own provenance rules."""
+    """The same handout, shaped for the model: data, with its own provenance rules.
+
+    The source records go in whole rather than summarised. The closing instruction used
+    to tell the model to "照旧区分已核实、推断与未知" while the handout carried no
+    verification state at all, so the one instruction about evidence had nothing under
+    it: a card standing on one unverified first-hand claim and a card standing on a
+    checked observation read the same to the model. Measured on the real CLI before this
+    line existed -- `type`, `verification`, `claim` and `scope_note` reached neither the
+    request nor the screen, only the library.
+    """
     fields = _candidate_fields(candidate)
     text = (
         "本场开始前，用户把库里的这一张卡交给了这场讨论（资料，不是用户本轮说的话）：\n"
@@ -133,6 +205,16 @@ def handoff_for_model(candidate: dict[str, Any], basis: dict[str, Any] | None = 
         text += "\n这张卡是改过的：被改掉的那句是「" + basis["left_wording"] + "」。"
     if isinstance(basis.get("reason"), str) and basis["reason"].strip():
         text += "\n用户当时改主意的原话是：「" + basis["reason"] + "」。那是他的理由，不是对现在这句的赞同。"
+    records = [
+        {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
+         if key in record}
+        for record in source_records(candidate)
+    ]
+    if records:
+        text += (
+            "\n这张卡立在其上的来源记录（逐条照原样，核验状态没有改写；这是记录条数，不是人数）：\n"
+            + json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+        )
     text += (
         "\n这张卡的来源与内容都是以前留下的；引用它时照旧区分已核实、推断与未知。"
         "用户在本场推翻或改窄它，是新说的话；用户只是重复它，不算本场的新到达。"
@@ -523,10 +605,26 @@ def _candidate_equivalent(first: dict[str, Any], second: dict[str, Any]) -> bool
     return True
 
 
+# The content fields a handout carries. One tuple, because the card out of the library
+# and the card replayed from a trace have to be handed over the same way -- a resume
+# whose payload drifted from the live one would be the same defect as a receipt
+# describing a receipt, one layer further out.
+_HANDOFF_FIELDS = (
+    "statement", "kind", "scope", "premises", "alternatives", "contradictions", "unknowns",
+)
+
+
 def _candidate_fields(candidate: dict[str, Any]) -> dict[str, Any]:
-    return {key: candidate[key] for key in (
-        "statement", "kind", "scope", "premises", "alternatives", "contradictions", "unknowns",
-    )}
+    """The content fields a handout carries, and only the ones the card really holds.
+
+    Absent keys are omitted rather than filled with `[]`. Two readers share this:
+    a card out of the library (where `contradictions` can genuinely be missing -- the
+    simulated seed pack has no such key, and subscripting it crashed the first turn of
+    `--card seed-m01`), and the handout snapshot replayed from a trace. Printing an
+    empty list for a field nobody wrote would tell the model "he ruled nothing out"
+    about a card that simply never recorded the question.
+    """
+    return {key: candidate[key] for key in _HANDOFF_FIELDS if key in candidate}
 
 # #1746: the echo gate's only input. `design.md:489` forbids content that was retrieved
 # out of the library and written back from counting as anything new; `design.md:491`
@@ -1048,6 +1146,16 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
                     raise ValueError("交付卡片记录无效")
                 if not isinstance(value["status"], str):
                     raise ValueError("交付卡片状态无效")
+                # Optional: traces written before this row carried the content fields
+                # are still resumable, with a thinner handout. Present-but-wrong is
+                # refused, because that is the case where rebuilding would invent
+                # fields the session never saw.
+                fields = value.get("fields")
+                if fields is not None:
+                    if not isinstance(fields, dict):
+                        raise ValueError("交付卡片内容字段无效")
+                    if not set(fields) <= set(_HANDOFF_FIELDS) or not isinstance(fields.get("statement"), str):
+                        raise ValueError("交付卡片内容字段无效")
                 if value["revision_basis"] is not None and not isinstance(value["revision_basis"], dict):
                     raise ValueError("交付卡片的改动理由无效")
                 if not isinstance(value["at"], str):
@@ -1129,8 +1237,14 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     ]
     elicitations = [record for record in records if record.get("event") == "elicitation"]
     ends = [record for record in records if record.get("event") == "session_end"]
+    handouts = [record for record in records if record.get("event") == "handout"]
     if not rounds or not ends or records[-1].get("event") != "session_end":
         raise ValueError("无法续跑轨迹：缺少本程序的讨论轮或终止记录")
+    # `--card` is only accepted when a session starts, so a trace with two handout rows
+    # is not a session this program wrote. Resume would have to choose which sentence
+    # the conversation was about, and either choice would be a guess about the record.
+    if len(handouts) > 1:
+        raise ValueError("无法续跑轨迹：交付卡片记录重复")
 
     history: list[dict[str, str]] = []
     for row in rounds:
@@ -1202,8 +1316,31 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     elicitation_supplied = state["supplied"]
     elicitation_turns = len(elicitations)
     elicitation_entry = end_summary.get("entry") if end_summary is not None else None
+    # The handout is rebuilt from the handout row, never from `store.show` at resume
+    # time. Two reasons, and the second is the one that bit: the row is the wording that
+    # was *actually on screen* in this session, so if the card was revised between the two
+    # halves of one conversation, resuming keeps the sentence the conversation was about
+    # instead of quietly handing the model a newer one and letting it look like the same
+    # card. The first is that a trace has to stay readable without the library, the same
+    # rule the round records follow.
+    handed: dict[str, Any] | None = None
+    handed_basis: dict[str, Any] = {}
+    if handouts:
+        row = handouts[0]
+        handed = {
+            "id": row["candidate"], "statement": row["statement"], "status": row["status"],
+        }
+        fields = row.get("fields")
+        if isinstance(fields, dict):
+            handed.update({key: value for key, value in fields.items() if key in _HANDOFF_FIELDS})
+        sources = row.get("sources")
+        if isinstance(sources, list):
+            handed["sources"] = sources
+        if isinstance(row.get("revision_basis"), dict):
+            handed_basis = dict(row["revision_basis"])
     return {
         "session": session, "history": history, "pending": pending,
+        "handed": handed, "handed_basis": handed_basis,
         "saved": saved, "seq": max(row["seq"] for row in rounds),
         "requests_sent": requests_sent, "search_count": search_count,
         "resume_input": resume_input,
@@ -1397,6 +1534,12 @@ def run_discuss(
         saved_ids = resume_state["saved"]
         seq = resume_state["seq"]
         next_text = resume_state["resume_input"]
+        # The second half of a session that was handed a card is still the same session,
+        # so it keeps the same handout -- whichever version this conversation was opened
+        # with, not whichever version the library holds now. Rebuilding it from the
+        # trace instead of `store.show` is what makes that true after a later revision.
+        handed = resume_state.get("handed")
+        handed_basis = dict(resume_state.get("handed_basis") or {})
         print(f"正在续跑会话 {session}；历史与待处理内容已恢复。", file=output)
     # r110: `pending_rejected` is whether the version left on the table is one the
     # user looked at and turned down; `draft_id` is the unconfirmed draft this
@@ -1429,12 +1572,17 @@ def run_discuss(
     else:
         print("会话轨迹不可用，本场原文不会保存在轨迹文件中；结束输入即可结束讨论。\n", file=output)
 
-    if handed is not None:
+    if handed is not None and resume_state is None:
         # The handout is logged at the moment it is made, which is what makes the opening
         # line above true and the echo gate bite. A failure here must not end the session
         # (that is #1746's rule), but it does change what may be claimed later: the line
         # printed above says the session was handed the card, so the count of readers is
         # the only thing that can silently miss. It is reported, not swallowed.
+        #
+        # Not on resume: the first half of this session already wrote that row, and
+        # `record_read` appends rather than upserts, so writing it again would make the
+        # ending say the card was "交付过 2 次" about one conversation -- a count
+        # inflated by the act of continuing it.
         try:
             store.record_read(handed["id"], session, surface="discuss")
         except (DojoError, OSError) as exc:
@@ -1442,12 +1590,24 @@ def run_discuss(
         if trace is not None:
             # The wording that was actually on screen, not just the id: a later reader
             # has to be able to tell which version was handed, next to the read log's
-            # row that says this session was the reader.
+            # row that says this session was the reader. The content fields go in whole,
+            # not just the statement, because resume rebuilds its first request from this
+            # row: a row holding only the statement would resume into a payload poorer
+            # than the one the live session sent. The source records go in for the same
+            # reason: the row is the only place a later reader can check what
+            # this session was told the card stood on, without reopening the library at
+            # a moment it may since have changed.
             trace.append({
                 "event": "handout", "candidate": handed["id"],
                 "statement": handed.get("statement"), "status": handed.get("status"),
                 "at": datetime.now(timezone.utc).isoformat(),
+                "fields": _candidate_fields(handed),
                 "revision_basis": handed_basis or None,
+                "sources": [
+                    {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
+                     if key in record}
+                    for record in source_records(handed)
+                ],
             })
 
     saved_candidate_id = saved_ids[-1] if saved_ids else None
@@ -1822,7 +1982,20 @@ def run_discuss(
             # was given as the user's newest words, the confusion `_session_already_saw`
             # exists for. `handed_sent` is set after the request, not here, so a first
             # turn that fails before the model answers does not quietly lose the card.
-            context += handoff_for_model(handed, handed_basis) + "\n\n"
+            #
+            # A resumed session is the same session: its restored history may already
+            # hold the handout inside the first round's composed context (#1774 measured
+            # that history stores the context, not the raw line). Sending it twice would
+            # spend tokens to say one thing, and the string is identical because both are
+            # built by this function from the row the same session wrote.
+            block = handoff_for_model(handed, handed_basis)
+            if any(block in str(message.get("content") or "") for message in history):
+                # It is already in the restored history, which means it did reach the
+                # model in the first half of this session; the flag stays honest so a
+                # later retry does not re-send it either.
+                handed_sent = True
+            else:
+                context += block + "\n\n"
         context += "用户本轮自然语言输入：\n" + text
         if pending is not None:
             context += "\n\n上一轮已经呈现给用户的当前结论：\n" + json.dumps(pending, ensure_ascii=False, separators=(",", ":"))

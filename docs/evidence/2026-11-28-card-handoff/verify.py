@@ -78,6 +78,65 @@ def last_context(calls):
     return ""
 
 
+def _cli_run(root, args, *, stdin=""):
+    """Run the real `python3 -m dojo` against a loopback endpoint.
+
+    Returns the exit code, both streams, the request bodies the endpoint received, and
+    the first body as text. The endpoint is a thread in this process; nothing leaves the
+    machine, and no model is involved.
+    """
+    import os
+    import subprocess
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    reply = {"choices": [{"message": {
+        "role": "assistant", "content": json.dumps({
+            "answer": "那我们接着这句谈。", "candidate": None,
+            "user_stance": "neutral"}, ensure_ascii=False)},
+        "finish_reason": "stop"}]}
+
+    class Handler(BaseHTTPRequestHandler):
+        bodies: list[str] = []
+
+        def do_POST(self):  # noqa: N802
+            Handler.bodies.append(
+                self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
+            payload = json.dumps(reply, ensure_ascii=False).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *arguments):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        environment = {k: v for k, v in os.environ.items() if not k.startswith("DOJO_")}
+        environment.update({
+            "DOJO_DB": str(root / "dojo.sqlite3"),
+            "DOJO_LLM_BASE_URL": "http://127.0.0.1:%d/v1" % server.server_address[1],
+            "DOJO_LLM_MODEL": "loopback",
+            "PYTHONPATH": str(ROOT),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        })
+        done = subprocess.run(
+            [sys.executable, "-B", "-m", "dojo", *args], cwd=str(ROOT), env=environment,
+            input=stdin, text=True, capture_output=True, timeout=180,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+    return {
+        "code": done.returncode, "stdout": done.stdout, "stderr": done.stderr,
+        "requests": len(Handler.bodies),
+        "request": Handler.bodies[0] if Handler.bodies else "",
+    }
+
+
 def main() -> int:
     temp = tempfile.TemporaryDirectory()
     root = Path(temp.name)
@@ -226,6 +285,101 @@ def main() -> int:
           resumed_out.getvalue())
 
     store.close()
+
+    # C14--C17: the path the supervisor walked and this script had never taken -- the
+    # real CLI process, with a real endpoint configured, on the card-named path. Every
+    # check above runs `run_discuss` in-process with a store and a client handed to it,
+    # so the branch that owns the store was never exercised: it passed a `store` that was
+    # still None and died at the first `store.show` after 0 requests. A verifier that
+    # cannot fail on that is not watching the entry point people use.
+    cli = _cli_run(root, ["discuss", "--card", cid], stdin="接着上次那条说\n")
+    check("C14 真实 CLI + 回环端点：退出 0，端点收到恰好 1 个请求",
+          cli["code"] == 0 and cli["requests"] == 1
+          and "Traceback" not in cli["stderr"],
+          cli["stderr"] or cli["stdout"])
+    check("C15 真实 CLI 屏幕上印的是这张卡的现在这句",
+          cli["code"] == 0 and NARROW in cli["stdout"], cli["stdout"])
+    request = cli["request"]
+    check("C16 模型请求里真有旧措辞、新措辞和改主意的理由",
+          all(piece in request for piece in (LEFT, NARROW, REASON)), request[:800])
+    check("C17 卡的来源记录也到了模型请求里（类型与核验状态都没被改写）",
+          all(piece in request for piece in ("claimed_firsthand", "unverified",
+                                             "他这样做过两次", "两次都在同一团队")),
+          request[:800])
+    typed = _cli_run(root, ["discuss", "--card", "no-such-card"], stdin="")
+    check("C18 真实 CLI 上打错卡号：仍是本地拒绝，0 请求"
+          , typed["code"] == 2 and typed["requests"] == 0
+          and "这张卡读不出来" in typed["stderr"], typed["stderr"])
+
+    # C19--C22: the second half of a session, at the real entry point. The supervisor
+    # resumed a session that had been handed a card and the outbound request carried
+    # none of it: `_load_resume_trace` validated the handout row and dropped it. Every
+    # check above stopped at the live first turn, which is exactly why nothing caught it.
+    #
+    # The card is revised between the halves on purpose. One conversation is about one
+    # sentence; if resume reached into `store.show`, it would hand the model a version
+    # this session never saw and leave "这一段说的是哪句" unanswerable from the record.
+    # Identified by set difference, not by filename sort: session ids are random uuids,
+    # so "the last file" is whichever sorts last, not whichever was just written.
+    before = set((root / "sessions").glob("*.jsonl"))
+    halves = _cli_run(root, ["discuss", "--card", cid], stdin="接着上次那条说\n")
+    new_traces = sorted(set((root / "sessions").glob("*.jsonl")) - before)
+    check("C19a 第一半写下了自己的轨迹",
+          halves["code"] == 0 and len(new_traces) == 1,
+          str([path.name for path in new_traces]))
+    first_half_trace = new_traces[0] if new_traces else sorted(
+        (root / "sessions").glob("*.jsonl"))[-1]
+    LATER = "持续检查交给系统自己跑，只在他说停的时候才停。"
+    store_later = Store(root / "dojo.sqlite3")
+    store_later.revise(cid, LATER, "后来觉得叫醒的门槛还是太低。",
+                       scope=["他已经抽身的时候"], premises=["系统能自己跑检查"],
+                       alternatives=["把检查留给人"], contradictions=[DOUBT],
+                       unknowns=["他会不会来看回执"], session="sess-D")
+    rows_before = len(store_later.reads(cid)["rows"])
+    store_later.close()
+    resumed = _cli_run(root, ["discuss", "--resume", str(first_half_trace)],
+                       stdin="继续\n")
+    resumed_request = resumed["request"]
+    check("C19 真实 CLI 续跑：退出 0，端点收到请求，屏幕说历史已恢复",
+          halves["code"] == 0 and resumed["code"] == 0 and resumed["requests"] >= 1
+          and "历史与待处理内容已恢复" in resumed["stdout"],
+          resumed["stderr"] or resumed["stdout"])
+    check("C20 续跑的请求带着旧措辞、新措辞、改主意的理由",
+          all(piece in resumed_request for piece in (LEFT, NARROW, REASON)),
+          resumed_request[:800])
+    check("C21 续跑的请求带着来源的类型与核验状态",
+          all(piece in resumed_request for piece in (
+              "claimed_firsthand", "unverified", "他这样做过两次", "两次都在同一团队")),
+          resumed_request[:800])
+    check("C22 续跑沿用这一场原先收到的那一版，而不是库里后来改的那一版",
+          NARROW in resumed_request and LATER not in resumed_request,
+          resumed_request[:800])
+    store_after = Store(root / "dojo.sqlite3")
+    check("C22b 续跑没有为同一场再记一次读卡",
+          len(store_after.reads(cid)["rows"]) == rows_before,
+          json.dumps(store_after.reads(cid)["rows"], ensure_ascii=False)[:400])
+    store_after.close()
+
+    # C23: `dojo seed` is the first command the README gives a person. The seed pack
+    # writes no `contradictions`, and `_candidate_fields` subscripted it, so handing one
+    # of those cards over died on the first turn with `KeyError: 'contradictions'`.
+    seed_root = Path(tempfile.mkdtemp(dir=str(root)))
+    from dojo.storage import load_simulated_seeds  # noqa: E402
+    seed_store = Store(seed_root / "dojo.sqlite3")
+    load_simulated_seeds(seed_store)
+    seed_client = FakeClient([{"answer": "这几条是模拟材料。", "candidate": None,
+                               "user_stance": "neutral"}])
+    seed_out = io.StringIO()
+    seed_code = run_discuss(seed_store, client=seed_client, card="seed-m01",
+                            read_line=read_lines(["我们谈谈这一条"]),
+                            output=seed_out, environ={})
+    seed_context = last_context(seed_client.calls) if seed_client.calls else ""
+    check("C23 种子卡（没有 contradictions 字段）也能交给一场讨论",
+          seed_code == 0 and "环境与流程的设计" in seed_context
+          and "abstract_reasoning" in seed_context,
+          seed_out.getvalue() or "no request sent")
+    seed_store.close()
+
     temp.cleanup()
     print()
     if failures:

@@ -55,6 +55,36 @@
    回声门 `_session_already_saw` 唯一读的东西。所以「本场只是重新说了一遍」这句话是
    由记录支撑的，不是礼貌用语。
 
+### 监督者退回的第二条：续跑把这一场收到的资料丢了
+
+第一半好好的，`--resume` 之后 CLI 能收到模型回答，但端点拿到的请求里**旧措辞、新措辞、
+改动理由、来源四件全没了**。人的感受是「我以为还在聊同一张卡」。
+
+根因：`_load_resume_trace` 已经有 `handout` 分支在**校验**那一行，校验完却没有放进返回的
+状态。于是 `run_discuss` 的续跑分支里 `handed` 永远是 `None`，开场不印、请求不带、
+`handed_sent` 也永远不置位。改前改后的实测由 `.scratch/3363/probe_resume_handout.py`
+打表（见 WALK.md 第 4c 节）：续跑请求那四行由 `False` 全部变 `True`。
+
+修法与三条边界：
+
+- **从轨迹重建，不查库。** `handed` 用 `handout` 行里的措辞、理由、来源还原。若改从
+  `store.show` 读，一场对话中被改过的卡会让续跑把**较新的一版**递给模型，这一场到底
+  在说哪句就无从回答了。探针第三列专门测这条：改前改后都是 `False`。
+- **轨迹行要带上内容字段。** 原来只记 `statement`，续跑重建出来的 payload 比第一半穷
+  （少了 `scope`/`premises`/`alternatives`/`contradictions`/`unknowns`）。现在写整组
+  `fields`，和 `_candidate_fields` 共用同一个 `_HANDOFF_FIELDS`。
+- **续跑不再写第二次读记录。** `record_read` 是 append 不是 upsert，续跑再写一次会让
+  收尾说「被交付过 2 次」——一次会话被续跑这件事本身撞大了计数。
+- **一条轨迹里出现两条 `handout` 行就拒绝续跑。** `--card` 只能在开场给，两条不是本程序
+  写的；挑哪一条都是猜。
+
+### 同时修掉的：种子卡交不进讨论（复核 #3383 发现）
+
+`dojo seed` 是 README 教人建库的第一步，而那四张卡**没有 `contradictions` 字段**；
+`_candidate_fields` 用 `candidate[key]` 下标，`--card seed-m01` 在第一轮就
+`KeyError: 'contradictions'`。改成只取卡上真有的字段：缺的字段**省略**，不填 `[]`——
+对一张从没记过这个问题的卡说「他什么都没排除」，是库从没做过的断言。
+
 另外两件顺带修掉的：
 
 - **本地错误先说本地的话。** 在**真实 CLI** 上走出来的：`--card c9` 打错 id 时，先报的
@@ -64,15 +94,97 @@
   `redirect_chain` 永远以被请求的 id 开头，用真值判断会把普通卡也印成「已被合并到…」。
   现在只有长度大于 1 才算合并。
 
+## 监督者退回的一条：真实入口的**成功**路径一次都没走过
+
+把 `1413770` 从隔离检出、配上回环端点、跑 `discuss --card <正确 id>`，它崩了：
+
+```
+File "dojo/discuss.py", line 1320, in run_discuss
+    shown = store.show(card)
+AttributeError: 'NoneType' object has no attribute 'show'
+```
+
+端点收到 **0 个请求**。而同一条路径上「正确卡 + 没端点」是好的——那条只走到配置拒绝，
+碰不到 `store`。**两个都报「本地说本地的话」，所以之前那条修复看起来是完整的。**
+
+### 根因：是我在 `1413770` 里弄坏的，不是老毛病
+
+`git show a4b16b7:dojo/cli.py` 里 discuss 分支本来有 `store = Store(db_path)`：
+我把卡号预检提进这个分支时，用 `Store(db_path, readonly=True)` 探针**替换**了它，
+以为 `main` 会把 `store` 建好——但 `main` 的 `store = Store(db_path)` 在下面几行，
+到不了这里，所以传进 `run_discuss` 的是 `None`。**不是 `card` 为 None，是 `store` 为 None。**
+
+### 为什么所有测试都没看见
+
+片内 14 项测试、`verify.py` 的 16 项，都是**在进程内自己建 store、自己传 client** 调
+`run_discuss`。唯一由 CLI 分支持有 store 的那条路径，谁都没走过。这和我这一整个系列
+修的缺陷是同一类：**屏幕上说的事要能在真实入口上重放**，而证据脚本自己不是那个入口。
+
+### 修法
+
+`cli.py`：所有本地拒绝之后、调用 `run_discuss` 之前，重新 `_secure_default_paths` + `Store(db_path)`
+（保留 `chmod 0o600` 和两条「失败不建库」的不变量）。顺序不变：打错卡号仍然在开库前就
+拒绝，所以 `test_a_bad_card_id_on_a_fresh_path_creates_no_library` 仍然成立。
+
+### 顺手核到的第二条：来源根本没出库
+
+监督者要求「核对旧措辞、新措辞、理由和来源各自到了哪里」。之前没人逐格量过。
+用 `.scratch/3363/probe_handoff_facts.py` 在真实 CLI 上打表：
+
+| 事实 | 改前屏幕 | 改前模型请求 | 改前轨迹 | 改后三处 |
+|---|---|---|---|---|
+| 旧措辞 | 有 | 有 | 有 | 有 |
+| 新措辞 | 有 | 有 | 有 | 有 |
+| 改主意的理由 | 有 | 有 | 有 | 有 |
+| 来源类型 / 核验状态 / claim / scope_note | **—** | **—** | **—** | 有 |
+
+来源**只留在库里**。更糟的是那句收尾指令：
+
+> 这张卡的来源与内容都是以前留下的；引用它时照旧区分**已核实、推断与未知**。
+
+要求模型区分三件事，却一样都没给它。一条建立在「他自称亲历、未经核验」上的卡，
+和一条建立在「有人独立核过」上的卡，在模型那里**读起来一样**。
+
+现在屏幕多一行（照 `#1774` 的规矩，只数记录、不数人）：
+
+```
+它有 1 条来源记录：他自称亲历、未经核验。这是记录条数，不是人数；核验状态如上，不代表这句是真的。
+```
+
+模型请求里给的是**逐条原样**的 `id/type/verification/claim/scope_note`，不改写核验状态；
+轨迹的 `handout` 行也带上同样的 `sources`，后来的人不必在库已经变过之后再去猜这一场
+当初被告知了什么。没来源的卡**不印这一行**（与「没改过的卡不说原来是」同一条规矩）。
+
 ## 证据
 
 ```
-python3 docs/evidence/2026-11-28-card-handoff/verify.py   # 16 项全 OK，退 0
-python3 -B -m unittest tests.test_card_handoff            # 14 项 OK（新增）
+python3 docs/evidence/2026-11-28-card-handoff/verify.py   # 25 项全 OK，退 0
+python3 -B -m unittest tests.test_card_handoff            # 23 项 OK（新增 9 项）
 python3 -B -m unittest tests.test_card_handoff_entry      # 3 项 OK（证据脚本自己的门）
-python3 -B -m unittest discover -s tests                  # Ran 1188 / OK
-sh .scratch/3363/walk_card.sh .                               # 真实 CLI 走一遍（见 WALK.md）
+python3 -B -m unittest discover -s tests                  # Ran 1197 / OK
+python3 .scratch/3363/redarm_handoff_fix.py .             # 6 条臂全红
+python3 .scratch/3363/redarm_resume.py .                  # 7 条臂全红（本片新增）
+python3 .scratch/3363/probe_handoff_facts.py .            # 逐格打表（上表）
+python3 .scratch/3363/probe_resume_handout.py . /tmp/base1413770   # 续跑改前/改后打表
+sh .scratch/3363/walk_card.sh .                             # 真实 CLI 走一遍（见 WALK.md）
 ```
+
+`verify.py` 新增 C14–C18，走的是**监督者走过的同一条路**：真起一个子进程跑
+`python3 -m dojo discuss --card`，对着本机回环端点。它现在会咬住那个崩溃（臂 A 把
+`Store(db_path)` 删掉，C14 红），也会咬住来源没出库（臂 B）。
+
+C19–C22b 是**续跑**那条，也就是监督者退回的第二条：真子进程跑第一半、改库里的卡、
+再 `--resume` 跑第二半，然后读**续跑那一次**的请求。C23 是种子卡那条。
+
+`.scratch/3363/redarm_resume.py` 的七条臂分别拆掉：续跑状态忘记它刚校验过的 handout、
+改成从库里找卡、行里不带内容字段、把交付重发进历史、续跑多写一行读记录、允许两条
+handout 行、`_candidate_fields` 用下标。每一条都让指定的测试变红。
+
+**记一次自己的错：** 臂 C 最初指向 `test_resume_keeps_the_version_this_conversation_
+started_with`，它只要 statement 就能通过，于是臂 C 是绿的。而那条声明里还断言了
+`他会不会来看回执` —— 但 `narrowed_card` 早把它改成了 `打断多少次会变成骚扰`，
+这个断言在正确树上也会红（监督者在 65 项定向测试里抽到了这两处）。现在那条测试
+从 `store.show` 读出实际持的字段再逐项断言，臂 C 改指它。
 
 `verify.py` 的每一项都同时读屏幕、模型请求和轨迹。C4/C5 是**防过度收紧**的对照：
 不带 `--card` 时既不能印「已带上」，也不能自己挑一张卡塞进去。这一条最初没咬住——我的
@@ -103,6 +215,22 @@ python3 .scratch/3363/redarm_card.py <worktree>
 
 **F 和 L 第一次都是绿的**：F 改的那一处本来就没破坏无卡路径；L 的对照组跑在空库上。
 两条都改到真能触发才红。绿色红臂不是在说「这里没问题」，是在说「这条测试没咬住它」。
+
+### 续跑的红臂（`.scratch/3363/redarm_resume.py`）
+
+```
+python3 .scratch/3363/redarm_resume.py <worktree>
+```
+
+| 改回去什么 | 红的是 |
+|---|---|
+| A 续跑状态忘掉它刚校验过的 handout | 续跑请求带着这一版 |
+| B 续跑时改从库里找卡 | 续跑请求带着这一版 |
+| C `handout` 行不带内容字段 | 续跑请求带着这一版 |
+| D 交付重发进整段恢复的历史 | 续跑请求带着这一版 |
+| E 续跑再写一行读记录 | 一场只算一行 |
+| F 接受两条 `handout` 行 | 重复行被拒 |
+| G `_candidate_fields` 用下标 | 种子卡能被交付 |
 
 ## 复核改了什么（第 4 片 `a4b16b7`，`.scratch/3286/legacy` 只读）
 
@@ -147,10 +275,15 @@ python3 .scratch/3363/redarm_card.py <worktree>
    不是自然语言。要用检索，得先决定「检索到什么程度算同一件事」，那是产品决定。
 2. **只影响这一场，不改卡。** 新一场里他推翻或改窄，走的是原来就有的 `revise` 路径；
    `--card` 自己一个字节都不写卡，只写读记录与轨迹。
-3. **`load_resume_trace` 现在认识 `handout` 行**，但旧轨迹里没有它，续跑旧轨迹读不到
-   「这一场当初被交给了哪一版」——只能从读记录倒推，而读记录只记 id 与时刻。
-4. **交付给模型的只有七个内容字段加理由**，不含 `time_basis` / `source_basis`。
-   一张卡是谁、什么时候、以什么来源立起来的，模型这轮仍然看不见。
+3. **旧轨迹仍然读不到「这一场当初被交给了哪一版」。** `_load_resume_trace` 现在会把
+   `handout` 行还原成 `handed`，但**本片之前**写的轨迹里没有这一行（`fields` 字段更是
+   本片才加的）。旧轨迹续跑时仍然是「没有交付」，与当时的实际行为一致；从读记录
+   只能倒推到 id 与时刻。`fields` 缺失时是宽容的（重建出更薄的一版），存在但字段不对
+   则拒绝——后者是重建会凭空编字段的那种情况。
+4. **来源记录已经出库（上面那一轮修复），时间还没有。** 模型这轮看得到每条来源的
+   `type` / `verification` / `claim` / `scope_note`，但看不到 `time_basis`
+   （这句什么时候写的）和 `source_basis`（每条来源什么时候进来的）。「他先说的这句、
+   后来才补的证据」这件事，模型仍然分不出来。
 5. `--card` 与 `--no-trace` 可以一起用：卡会交给这一场并写读记录，但轨迹里没有
    `handout` 行。这是有意的（`--no-trace` 就是不存原文轨迹），但**读记录的 `reader_session`
    仍然指向一个没有轨迹的会话 id**，读的人要能接受这一点。
