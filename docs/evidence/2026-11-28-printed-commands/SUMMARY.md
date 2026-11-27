@@ -89,8 +89,11 @@ Ran 17 tests — OK
 
 ```
 python3 -B -m unittest discover -s tests -p 'test_*.py'
-Ran 1290 tests — OK
+Ran 1289 tests — OK
 ```
+
+在 `git archive` 导出的干净副本上重跑时，同一个命令会报 `OK (skipped=6)`：那六个是拿当前
+代码与旧提交/历史对照的测试，而归档里没有 `.git`。工作树里没有这个跳过条件。
 
 ## 红臂
 
