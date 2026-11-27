@@ -80,14 +80,20 @@ def session_output():
 
 
 def shape_block(text):
-    """The block printed immediately before the first elicitation question."""
+    """The block printed immediately before the first elicitation question.
+
+    Returned with its trailing blank lines stripped, because that is the ruler the
+    SUMMARY table uses: 11 chars before, 154 after. Counting the newlines the
+    printer adds would report 13 / 156 for the same two blocks and make the table
+    look unreproducible from this script.
+    """
     first_q = text.find(QUESTIONS["情境"]["ask"])
     if first_q < 0:
         return None
     head = text[:first_q]
     end = head.rfind("主持人> ")
     start = head.rfind("主持人> ", 0, end)
-    return head[start + len("主持人> "):end] if end >= 0 and start >= 0 else None
+    return head[start + len("主持人> "):end].strip() if end >= 0 and start >= 0 else None
 
 
 def main() -> int:
