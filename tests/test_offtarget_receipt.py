@@ -151,8 +151,12 @@ class OffTargetAnswerTests(unittest.TestCase):
         self.assertEqual(0, code)
         line = self.closing_line(text)
         self.assertIn("答没答到点上，这句不判", line)
-        # And it points at where the words actually are, so the person can judge.
-        self.assertIn("原话在上面", line)
+        # It must not send him looking at the screen. A piped session never echoes what
+        # he typed, so "原话在上面" pointed at a line that was never printed (the
+        # supervisor's re-run found this on 11ba996). Where the words are is the `use`
+        # sentence's job, and that one follows the trace setting.
+        self.assertNotIn("在上面", line)
+        self.assertNotIn("你自己看", line)
 
     def test_the_words_do_not_reach_the_card(self):
         code, text = self.run_session([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
@@ -199,6 +203,7 @@ class OffTargetAnswerTests(unittest.TestCase):
         self.assertIn("你在 情境、失效 上说了原话", line)
         self.assertIn("答没答到点上", line)
         self.assertNotIn("你答了", line)
+        self.assertNotIn("在上面", line)
 
     def test_the_all_four_short_form_does_not_say_answered(self):
         line = closing_text(list(("情境", "张力", "代价", "失效")), [], [])
@@ -216,11 +221,37 @@ class OffTargetAnswerTests(unittest.TestCase):
             no_trace=True,
         )
         self.assertEqual(0, code)
-        line = self.closing_line(output.getvalue())
+        text = output.getvalue()
+        line = self.closing_line(text)
         self.assertIn("这场不留原文", line)
         self.assertNotIn("留在本场记录", line)
-        # Saying "look at the words above" is still true -- they were in this dialogue.
+        # Nothing was kept, so the receipt must not point anywhere that does not exist.
+        self.assertNotIn("在上面", line)
         self.assertIn("答没答到点上", line)
+        # And the transcript really was not written, which is what the line claims.
+        self.assertEqual([], sorted((self.root / "sessions").glob("*.jsonl")))
+
+    def test_a_piped_transcript_does_not_claim_the_words_are_on_screen(self):
+        """The supervisor's finding on 11ba996, pinned at the real program.
+
+        Piping the answers in means stdout holds the host's lines only -- none of his
+        four answers ever appear. The old receipt said "原话在上面，你自己看", which
+        pointed out of the only transcript the reader has. Either the words are printed
+        back, or the receipt must not send him looking.
+        """
+        code, text = self.run_session([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
+        self.assertEqual(0, code)
+        line = self.closing_line(text)
+        shown_above = all(words in text.split(line)[0] for words in
+                          (OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF))
+        if not shown_above:
+            self.assertNotIn("在上面", line)
+            # Where they did go is still said, and it is a place that exists.
+            self.assertIn("留在本场记录里", line)
+            records = sorted((self.root / "sessions").glob("*.jsonl"))
+            self.assertTrue(records, "receipt says the record kept them")
+            kept = records[-1].read_text(encoding="utf-8")
+            self.assertIn(OFF_PRICE, kept)
 
 
 if __name__ == "__main__":

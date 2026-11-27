@@ -27,6 +27,8 @@
 四件问完了：四件你都答了。这些回答留在本场记录里，没有写进卡片。…
 ```
 
+（这是**改之前**的屏幕原文。改后同一场的回执见下面的「改了什么」。）
+
 轨迹四行全是 `reading=answer collected=True`；`session_end.elicitation.collected`
 是 `["情境","张力","代价","失效"]`。
 
@@ -56,10 +58,19 @@ note.md：     - [probe-T1] … | 情境: 我觉得这里关键是通知得做�
 `四件你都说了原话`）。并在回执里补一句，只要他说过话就印：
 
 ```
-答没答到点上，这句不判——原话在上面，你自己看。
+答没答到点上，这句不判——判断留给你。
 ```
 
-「原话在上面」是字面事实：原话就在同一块屏幕上的提问与回答里，他抬头就能核对。
+**2026-11-28，复核后改了这一句。** 第一版的结尾是「原话在上面，你自己看」。这句话在
+真终端里对（回显就在提问下方），但在管道里不成立：`printf ... | python3 -m dojo discuss`
+的 stdout 只有主持人说的话，他打的四句一次也不回显；`--no-trace` 时更是哪里都没写。
+审核者在 `11ba996` 上用真入口量到这一点：回执把他指向一段不存在的话。
+
+改法不是把所有原话重印一遍（那会把回执变成长篇），而是**去掉指向**：判语只说「不判」；
+原话在哪，由紧邻的那句 `use` 负责，而它已经跟着轨迹设置分岔——留轨迹时说「留在本场记录
+里」（路径在开场和结尾各印了一次），不留时说「这场不留原文」。两句话现在在两份运行里
+都逐字成立。`tests/test_offtarget_receipt.py` 与 `verify.py` C5b/C5c 钉住这三件事：
+不留轨迹时不指向屏幕、留轨迹时那句原话真在文件里、开头若没回显就不能说「在上面」。
 
 其余四件（跳过 / 结束输入 / 搁下 / 没答出来 / 没问到）的词一个没动。**这是刻意的**：那片
 记录里已经写明，每件只有一个结局词，且必须是真发生的那一个。这一片只修第一个词的语义。
@@ -76,12 +87,12 @@ note.md：     - [probe-T1] … | 情境: 我觉得这里关键是通知得做�
 ## 证据
 
 ```
-python3 docs/evidence/2026-11-28-offtarget-receipt/verify.py   # 13 项全 OK，退 0
-python3 -B -m unittest tests.test_offtarget_receipt              # 9 项 OK
+python3 docs/evidence/2026-11-28-offtarget-receipt/verify.py   # 15 项全 OK，退 0
+python3 -B -m unittest tests.test_offtarget_receipt              # 10 项 OK
 python3 -B -m unittest tests.test_readme_card_entry              # 4 项 OK
-python3 -B -m unittest discover -s tests                         # Ran 1210 / OK（基线 1197 + 13）
-python3 .scratch/3389/redarm_offtarget.py .                       # 6 条臂全红
-python3 .scratch/3389/probe_offtarget.py .                        # 改前/改后的屏幕、轨迹、导出
+python3 -B -m unittest discover -s tests                         # Ran 1214 / OK
+python3 .scratch/3389/redarm_offtarget.py .                       # 8 条臂全红
+python3 .scratch/3389/probe_offtarget.py .                        # 真实 CLI 的屏幕、轨迹、导出
 ```
 
 `verify.py` 的每一项同时读屏幕、轨迹和库。C8–C11 是**防过度收紧**的对照：说跳过、没答出来、
@@ -99,6 +110,11 @@ python3 .scratch/3389/probe_offtarget.py .                        # 改前/改�
 | D 把跳过也说成「说了原话」 | 跳过那件不被打上这个词 |
 | E 一句没说时也印判语 | 没说话时不印判语 |
 | F 说原话写进了卡片 | 原话不进卡片 |
+| G 回执又指向屏幕上不存在的原话 | 管道里不往上看 |
+| H 不留轨迹时也说原话留在记录里 | 关掉轨迹时不提记录 |
+
+臂 G、H 是复核之后加的：`11ba996` 的回执说「原话在上面，你自己看」，而管道里跑的会话
+从不回显他打的字（`--no-trace` 时更是哪里都没写）。详见下面「改了什么」。
 
 **臂 A 第一次是绿的。** 那条测试只跑了「四件全答」这一种形状，走的是短句分支，
 `pieces.append("你在 … 上说了原话")` 那行根本没被执行。绿臂不是「这里没问题」，是

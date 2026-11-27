@@ -73,6 +73,12 @@ def read_lines(lines):
     return read_line
 
 
+def last_trace(root: Path) -> str:
+    """The most recent session trace under a library root, as text ("" if none)."""
+    paths = sorted((root / "sessions").glob("*.jsonl"))
+    return paths[-1].read_text(encoding="utf-8") if paths else ""
+
+
 class Library:
     def __init__(self, root: Path):
         self.root = root
@@ -142,7 +148,18 @@ def main() -> int:
     print("  " + (line or "（没有回执）"))
     print()
     check("C5 回执在屏幕上明说它不判有没有答到点上",
-          "答没答到点上，这句不判" in line and "原话在上面" in line, line)
+          "答没答到点上，这句不判" in line, line)
+    # The supervisor's finding on 11ba996: these sessions pipe the answers in, so stdout
+    # holds the host's lines only and none of the four answers is ever echoed. A receipt
+    # that says "原话在上面，你自己看" points out of the only transcript the reader has.
+    above = text.split(line)[0]
+    check("C5b 回执不把读者指向屏幕上不存在的原话",
+          ("在上面" not in line) or all(
+              words in above for words in (OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF)),
+          line)
+    check("C5c 回执说原话在本场记录里，而那记录真有这几句",
+          "留在本场记录里" in line and OFF_PRICE in last_trace(root / "a"),
+          line)
     check("C6 回执说这些原话没有写进卡片",
           "没有写进卡片" in line, line)
     check("C7 卡片仍是提问前那句，回答一个字都没进去",
