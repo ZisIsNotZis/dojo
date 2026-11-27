@@ -585,5 +585,130 @@ class ClosingLineTests(unittest.TestCase):
             self.assertEqual("answer", classify_answer(phrase), phrase)
 
 
+    # ---- saying "I am done" in words, instead of ending the input -------------------
+
+    def test_saying_he_is_done_ends_the_session_and_is_not_his_answer(self):
+        """"先到这吧" is neither an answer nor a failure to answer.
+
+        It used to be read as an answer to the part on screen: the words were kept as
+        material for 张力, the receipt said "你答了 张力", and the asking went on. Three
+        of these phrasings were worse -- they also matched the skip-mention detector, so
+        the receipt said "你提到跳过的那句我按原话收在 张力 里" about a sentence that
+        mentions no skipping at all.
+        """
+        for phrase in ("算了，先不说了", "先到这吧", "不想聊了", "就说这么多吧",
+                       "我没什么要补充的", "就这样吧"):
+            code, text = self.run_session(
+                ("上次是把一套检查交给别人的时候", phrase))
+            self.assertEqual(0, code, phrase)
+            end = self.recorded()
+            self.assertEqual(["情境"], end["collected"], phrase)
+            self.assertEqual([], end["skipped"], phrase)
+            self.assertEqual([], end["supplied"], phrase)
+            events = [row for row in self.trace() if row.get("event") == "elicitation"]
+            self.assertEqual("stop", events[-1]["reading"], phrase)
+            self.assertEqual("张力", events[-1]["part"], phrase)
+            line = self.closing_line(text)
+            self.assertIn("问到 张力 时你说到这儿为止", line, phrase)
+            self.assertNotIn("你结束了输入", line, phrase)
+            self.assertNotIn("你答了 情境、张力", line, phrase)
+            # The lie that made this slice: it never mentioned skipping.
+            self.assertNotIn("你提到跳过", line, phrase)
+            self.assertNotIn("四件问完了", line, phrase)
+            # The question after it was never put to him.
+            self.assertNotIn(QUESTIONS["代价"]["ask"], self.host_lines(text), phrase)
+
+    def test_saying_he_is_done_keeps_the_draft_and_agrees_with_a_resume(self):
+        """Ending in words is the same ending as end-of-input: draft kept, one story."""
+        from dojo.discuss import _load_resume_trace
+
+        code, text = self.run_session(
+            ("上次是把一套检查交给别人的时候", "先到这吧"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        path = sorted((self.root / "sessions").glob("*.jsonl"))[-1]
+        resumed = _load_resume_trace(path)
+        self.assertEqual(end["collected"], resumed["elicitation_collected"])
+        self.assertEqual(end["skipped"], resumed["elicitation_skipped"])
+        self.assertEqual(end["supplied"], resumed["elicitation_supplied"])
+        self.assertEqual(["情境"], resumed["elicitation_collected"])
+        self.assertIn("讨论已结束。", text)
+
+    def test_a_sentence_with_a_wind_down_word_in_it_is_still_material(self):
+        """The wind-down reading has to stay narrow or it eats real answers.
+
+        "说到这儿我想起来，那次是周三" begins with the same three characters as
+        "说到这儿吧". A whole-sentence match is what keeps them apart, and these are the
+        sentences that prove the boundary is where it is.
+        """
+        for phrase in ("说到这儿我想起来，那次是周三",
+                       "就这样吧，我们当时是这么定的",
+                       "我算了吧，这事我后来没再提",
+                       "剩下的流程我都不讲给新人听",
+                       "上一次为了做到它，我推掉了两个会"):
+            self.assertEqual("answer", classify_answer(phrase), phrase)
+        # Short ones, which the length gate cannot protect: only the whole-sentence
+        # match stands between them and being read as "I am done". A prefix matcher
+        # swallows every one of these (measured -- the first version of this test used
+        # only the long sentences above and stayed green under that red arm).
+        for phrase in ("算了，没谈拢", "算了，那次没成", "到这儿为止都顺利",
+                       "就这样吧，后来改了", "先到这的人少", "说到这儿就够了",
+                       "先撤的人是他"):
+            self.assertEqual("answer", classify_answer(phrase), phrase)
+
+    def test_a_spoken_stop_never_becomes_an_empty_answer(self):
+        """"stop" must not fall through to "没答出来", which is the other wrong word."""
+        code, text = self.run_session(("先到这吧",))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual([], end["collected"])
+        self.assertEqual([], end["supplied"], "说到这儿为止不是“问了两轮没答出来”")
+        line = self.closing_line(text)
+        self.assertIn("问到 情境 时你说到这儿为止", line)
+        self.assertNotIn("没答出来", line)
+        self.assertIn("没问到 张力、代价、失效", line)
+
+    # ---- the number he said vs. the number there was ---------------------------
+
+    def test_asking_for_more_questions_than_remain_says_what_really_happened(self):
+        """"接下来五题都先不答" with two left is two set aside, not five.
+
+        `declined_count` used to hold the number he spoke, so a field named "count"
+        said 5 about two parts. The receipt avoided the lie by falling back to "剩下的",
+        which also dropped the fact that he had named a number at all.
+        """
+        code, text = self.run_session(
+            ("上次是把一套检查交给别人的时候", "接下来五题都先不答"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(["代价", "失效"], end["declined"])
+        self.assertEqual(2, end["declined_count"], "这个字段要说实际搁下了几件")
+        self.assertEqual(5, end["declined_stated"], "他说的是五题，这句也要留下")
+        line = self.closing_line(text)
+        self.assertIn("你说接下来 5 题先不答，剩下只有 代价、失效", line)
+
+    def test_a_count_that_matches_what_is_left_is_reported_once(self):
+        code, text = self.run_session(
+            ("上次是把一套检查交给别人的时候", "接下来两题先不答"))
+        self.assertEqual(0, code)
+        end = self.recorded()
+        self.assertEqual(2, end["declined_count"])
+        self.assertEqual(2, end["declined_stated"])
+        line = self.closing_line(text)
+        self.assertIn("你说接下来 2 题先不答 代价、失效", line)
+        self.assertNotIn("剩下只有", line)
+
+    def test_a_resume_keeps_both_numbers(self):
+        from dojo.discuss import _load_resume_trace
+
+        code, _ = self.run_session(
+            ("上次是把一套检查交给别人的时候", "接下来五题都先不答"))
+        self.assertEqual(0, code)
+        path = sorted((self.root / "sessions").glob("*.jsonl"))[-1]
+        resumed = _load_resume_trace(path)
+        self.assertEqual(2, resumed["elicitation_declined_count"])
+        self.assertEqual(5, resumed["elicitation_declined_stated"])
+
+
 if __name__ == "__main__":
     unittest.main()

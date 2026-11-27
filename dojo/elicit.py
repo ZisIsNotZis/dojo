@@ -102,6 +102,36 @@ SKIP_PATTERNS = (
     r"^(?:这|那|这一|这一个)?(?:一)?(?:题|件|个|步|条)?(?:就|先)?(?:跳过|略过)"
     r"(?:吧|了|一下)?，?(?:下一|换一|另|下)(?:题|个|件|条|步|问)(?:吧|了|啊)?$",
 )
+# 「算了，先不说了」「先到这吧」「就说这么多吧」不是回答，也不是「答不出来」：他是
+# 在说他不想再聊了。以前这类句子被读成 `answer` 存进材料，屏幕还说「你答了 张力」，
+# 于是回执描述了一件没发生的事——这不是跳过某一题，也不该被记成他答不出。所以它
+# 单列一种结局：`stop`，会话到此为止，回执说「说到这儿为止」，而不是「没答出来」。
+#
+# 边界必须窄到只认整句。收场话的词很少（到这儿、算了、就这样、这么多），而这些词在
+# 真材料里也常出现：「说到这儿我想起来，那次是周三」「就这样吧，我们当时是这么定的」
+# 「我算了吧，这事我后来没再提」。所以一律整句匹配，且只允许收场词加语气词，句子里
+# 还有别的内容（时间、谁、结果）就不算。
+#
+# 与 `skip` 的分界：`不想说`「不说了」是这一题不答（已有的跳过），而 `不想聊了`
+# 「先到这吧」是这场不聊了。前者说的是问题，后者说的是谈话。
+STOP_PATTERNS = (
+    # 算了／算了，先不说了／算了不聊了
+    r"^(?:那|好|还是)?算了(?:，?(?:就|先|也)?(?:别|不)?(?:说|聊|讲|谈|问)(?:了|吧|啦)?)?$",
+    # 先到这吧／就到这儿／到这里为止／说到这儿吧
+    r"^(?:那|就|先|我)?(?:先|就)?(?:说)?(?:到|至)这(?:里|儿|块)?(?:为止|就|吧|了|啦)*$",
+    r"^(?:那|就|先)?(?:先|就)?(?:说)?到这(?:里|儿)?(?:为止|吧|了|啦)+$",
+    # 就说这么多吧／就说这些／就聊到这儿
+    r"^(?:那|就|先)?(?:就|先|不)?(?:说|聊|讲)(?:这|那|这么|那么)?(?:多|些|点)(?:吧|了|啦|就行|就好)?$",
+    # 先这样吧／就这样吧／今天先这样
+    r"^(?:那|好|今天|今晚|现在)?(?:就|先)(?:这样|这么着)(?:吧|了|啦)?$",
+    # 我没什么要补充的／没什么可说的了
+    r"^(?:我)?(?:也)?(?:没什么|没有)(?:要|可|想)?(?:补充|说|讲|聊|问)的(?:了|吧|啦)?$",
+    # 先撤了／我得走了／我先走了／先走一步
+    r"^(?:那|好|我|今天|今晚)?(?:先|就)?(?:撤了|撤|走了|走一步|得走|要走了|得走了)(?:吧|了)?$",
+    # 不想聊了／先不聊了／不聊了：他说的是谈话，不是这一题
+    r"^(?:那|好|我)?(?:先|就|今天|今晚)?(?:不|别)想?(?:再)?聊(?:了|吧|啦)?$",
+)
+
 # "用不着" plus a verb is a skip written as a lack of need, e.g. "这题用不着答了".
 SKIP_NEEDLESS = "用不着"
 # "这题先跳过吧，然后我们下一个" -- the move-on may carry a particle in between.
@@ -308,12 +338,25 @@ def reads_like_a_skip_request(text: str) -> bool:
     return any(verb in core for verb in mentions)
 
 
+def is_stop_statement(text: str) -> bool:
+    """Whether he said the conversation was over, rather than answering or failing.
+
+    Whole-sentence only, and only the few forms in `STOP_PATTERNS`. Nothing that carries a
+    time, a person or a result is a wind-down: that is material (see the corpus test).
+    """
+    core = _normalize_skip(text)
+    if not core or len(core) > 12:
+        return False
+    return any(re.fullmatch(pattern, core) for pattern in STOP_PATTERNS)
+
+
 def classify_answer(text: str) -> str:
     """A crude, declared reading: does this answer count as an answer at all?
 
     It does not judge whether the answer *fills* the part (that is `to_fill`, judged by a reader);
     it only separates a real attempt from an empty one, a declared non-answer, a request to
-    skip this one, a request to skip the next few, or a form-like reply.
+    skip this one, a request to skip the next few, a wind-down that ends the conversation, or
+    a form-like reply.
     """
     value = (text or "").strip()
     if not value:
@@ -325,6 +368,8 @@ def classify_answer(text: str) -> str:
         return "skip_rest"
     if is_skip_request(value):
         return "skip"
+    if is_stop_statement(value):
+        return "stop"
     if value.strip("。！？…，, ") in NON_ANSWERS:
         return "none"
     return "answer"

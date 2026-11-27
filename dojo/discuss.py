@@ -132,7 +132,8 @@ def closing_text(
     collected: list[str], skipped: list[str], supplied: list[str], *,
     kept: bool = True, unfinished: list[str] | None = None,
     stopped_at: str | None = None, declined: list[str] | None = None,
-    declined_count: int | None = None, uncertain: list[str] | None = None,
+    uncertain: list[str] | None = None,
+    declined_stated: int | None = None, spoken_stop: bool = False,
 ) -> str:
     """What the person is owed after the four questions: what each one became, and
     what the answers are actually used for.
@@ -152,6 +153,8 @@ def closing_text(
         你说跳过       he was asked it and asked to skip it
         问到…时你结束了输入   the question was on screen when the input ended (#3363: this
                         used to be reported as "没答出来", i.e. "you could not answer")
+        问到…时你说到这儿为止  same position, but he said so in words ("先到这吧"); his
+                        words ended the conversation, so the input did not end
         你说剩下的先不答     he asked for the remaining questions to be dropped; they were
                         never put to him, so they are not something he failed at
         没答出来       it was asked (twice) and nothing usable came back
@@ -188,12 +191,26 @@ def closing_text(
         if left:
             pieces.append("你说跳过 " + "、".join(left))
         if halted:
-            pieces.append("问到 " + "、".join(halted) + " 时你结束了输入")
+            # Two different facts: the input ended under him, or he said he was done.
+            # Saying "你结束了输入" to someone who typed "先到这吧" describes something
+            # that did not happen, which is the whole defect this line exists to avoid.
+            pieces.append(
+                "问到 " + "、".join(halted)
+                + (" 时你说到这儿为止" if spoken_stop else " 时你结束了输入")
+            )
         if rested:
             # He may have named a number ("接下来两题") or pointed at the remainder. Repeating
             # his own scope keeps the receipt from claiming a wider decision than he made.
-            if declined_count is not None and declined_count == len(rested):
-                pieces.append(f"你说接下来 {declined_count} 题先不答 " + "、".join(rested))
+            # The number he *said* and the number that were actually left are two facts:
+            # "接下来五题" with only two still to ask is neither "five not asked" nor a
+            # silent drop of his words, so both are reported as they stand.
+            if declined_stated is not None and declined_stated > len(rested):
+                pieces.append(
+                    f"你说接下来 {declined_stated} 题先不答，剩下只有 "
+                    + "、".join(rested) + "，就没再问"
+                )
+            elif declined_stated is not None and declined_stated == len(rested):
+                pieces.append(f"你说接下来 {declined_stated} 题先不答 " + "、".join(rested))
             else:
                 pieces.append("你说剩下的先不答 " + "、".join(rested))
         if missed:
@@ -835,7 +852,10 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
     supplied: list[str] = []
     declined: list[str] = []
     uncertain: list[str] = []
-    declined_count: int | None = None
+    # The number he *named* ("接下来五题"), kept as spoken. How many questions that actually
+    # covered is `len(declined)` and can be smaller: he may ask for five while two remain.
+    # Storing only the spoken number made a field named "count" say 5 about two parts.
+    declined_stated: int | None = None
 
     def drop(part: str) -> None:
         for bucket in (collected, skipped, supplied, declined, uncertain):
@@ -851,13 +871,13 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
             # Take back everything that part became -- including a group decline whose
             # number is no longer true once one of its parts comes back.
             drop(part)
-            declined_count = None
+            declined_stated = None
             continue
         if part in declined:
             # He reached a part he had put aside, so it is not set aside any more, and the
             # number he named no longer describes this session. Both the live receipt and
             # resume read this, so they stay one conclusion (#3363).
-            declined_count = None
+            declined_stated = None
             if reading is not None:
                 declined.remove(part)
         if reading == "answer" and isinstance(row.get("answer"), str):
@@ -876,7 +896,7 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
             remaining = PART_ORDER[index + 1:]
             covered = remaining if scope in (None, SKIP_REST_ALL) else remaining[:scope]
             if scope not in (None, SKIP_REST_ALL):
-                declined_count = scope
+                declined_stated = scope
             for other in covered:
                 if other not in declined:
                     declined.append(other)
@@ -895,7 +915,7 @@ def elicitation_state(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "collected": collected, "skipped": skipped, "supplied": supplied,
         "declined": declined, "uncertain": uncertain,
-        "declined_count": declined_count,
+        "declined_count": len(declined), "declined_stated": declined_stated,
     }
 
 
@@ -1108,6 +1128,7 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         "elicitation_skipped": elicitation_skipped,
         "elicitation_declined": elicitation_declined,
         "elicitation_declined_count": state["declined_count"],
+        "elicitation_declined_stated": state["declined_stated"],
         "elicitation_uncertain": state["uncertain"],
         "elicitation_supplied": elicitation_supplied,
         "elicitation_turns": elicitation_turns,
@@ -1333,6 +1354,7 @@ def run_discuss(
         "skipped": list((resume_state or {}).get("elicitation_skipped", [])),
         "declined": list((resume_state or {}).get("elicitation_declined", [])),
         "declined_count": (resume_state or {}).get("elicitation_declined_count"),
+        "declined_stated": (resume_state or {}).get("elicitation_declined_stated"),
         "uncertain": list((resume_state or {}).get("elicitation_uncertain", [])),
         "events": [],
     }
@@ -1353,7 +1375,10 @@ def run_discuss(
             # Parts he put down as a group ("这几题我想先跳过"): never asked, never his
             # material, and not something he failed to answer.
             "declined": list(elicitation["declined"]),
-            "declined_count": elicitation["declined_count"],
+            # How many were actually set aside, and how many he said. They differ when he
+            # named more than were left ("接下来五题" with two to go).
+            "declined_count": len(elicitation["declined"]),
+            "declined_stated": elicitation["declined_stated"],
             # Parts kept as his words although the sentence mentioned skipping.
             "uncertain": list(elicitation["uncertain"]),
             "unanchored": list(part_sources),
@@ -1367,8 +1392,7 @@ def run_discuss(
         """Ask the four parts, one at a time, in the conversation. Two turns each at most."""
 
         def print_closing(*, stopped_at: str | None = None,
-                          declined: list[str] | None = None,
-                          declined_count: int | None = None) -> None:
+                          spoken_stop: bool = False) -> None:
             # Never-asked is read off the trace, not assumed from the lists. "Asked" means
             # a question was actually put on screen: the EOF event for the question being
             # asked is recorded, so it is "stopped here", and a part whose ask was never
@@ -1390,8 +1414,9 @@ def run_discuss(
                     state["collected"], state["skipped"], missed,
                     kept=trace_is_open, unfinished=never or None,
                     stopped_at=stopped_at, declined=state["declined"] or None,
-                    declined_count=state["declined_count"],
+                    declined_stated=state["declined_stated"],
                     uncertain=state["uncertain"],
+                    spoken_stop=spoken_stop,
                 ),
                 file=output,
             )
@@ -1456,7 +1481,7 @@ def run_discuss(
                     for bucket in ("collected", "skipped", "supplied", "declined", "uncertain"):
                         if undoing in elicitation[bucket]:
                             elicitation[bucket].remove(undoing)
-                    elicitation["declined_count"] = None
+                    elicitation["declined_stated"] = None
                     drop = 0
                     # A part that was set aside by "next N" comes back into the asking:
                     # without this the loop ends again the moment he answers it.
@@ -1508,6 +1533,15 @@ def run_discuss(
                             print("这句我按你的原话收下了。想重来就说「改回上一题」。", file=output)
                         last_collected = part_name
                         break
+                    if reading == "stop":
+                        # "先到这吧" / "算了，先不说了" / "就说这么多吧": he ended the
+                        # conversation, not this question. Recorded under its own reading
+                        # so no part of his words becomes material and the receipt can say
+                        # what happened. Before this it was `answer`: the words went into
+                        # 张力, the screen said "你答了 张力", and the asking went on.
+                        print("好，就到这儿。", file=output)
+                        print_closing(stopped_at=part_name, spoken_stop=True)
+                        return "stopped"
                     if reading in {"skip", "skip_rest"}:
                         # He asked to skip. Re-asking would ignore what he just said, so
                         # the part ends here -- recorded as skipped, which the closing
@@ -1524,13 +1558,13 @@ def run_discuss(
                             scope = skip_scope(raw)
                             counted = scope if scope not in (None, SKIP_REST_ALL) else None
                             if counted is not None:
-                                elicitation["declined_count"] = counted
+                                elicitation["declined_stated"] = counted
                             covered = remaining if scope in (None, SKIP_REST_ALL) else remaining[:scope]
                             elicitation["declined"].extend(covered)
                             last_collected = part_name
                             if covered and len(covered) == len(remaining):
                                 print("好，剩下的先不问；已经问过的照旧留在本场记录里。", file=output)
-                                print_closing(declined=covered, declined_count=counted)
+                                print_closing()
                                 return "declined"
                             # A counted request leaves questions after it, so the asking
                             # continues -- he may correct himself, and the receipt is
@@ -1554,7 +1588,7 @@ def run_discuss(
         # reads. Store it as an unconfirmed draft: it is not a conclusion, it does not
         # claim agreement, and it stays out of `discussable` retrieval.
         nonlocal pending, pending_rejected, draft_id
-        if reason in {"eof", "limit", "declined"} and pending is not None and not pending_rejected:
+        if reason in {"eof", "limit", "declined", "stopped"} and pending is not None and not pending_rejected:
             draft_candidate = pending
             pending = None
             if saved_candidate is not None and _candidate_equivalent(saved_candidate, draft_candidate):
@@ -2045,6 +2079,13 @@ def run_discuss(
                 # already been printed, and nothing else is asked.
                 print("讨论已结束。", file=output)
                 return finish("declined")
+            if outcome == "stopped":
+                # He said, in words, that he was done talking. Same handling as the end of
+                # input, and the same trace reason `eof`: the distinction the person sees
+                # is on the receipt, and a reader of the trace should not have to learn a
+                # second vocabulary for "the session ended with a draft on the table".
+                print("讨论已结束。", file=output)
+                return finish("eof")
         history.extend([{"role": "user", "content": context}, *tool_messages, {"role": "assistant", "content": answer}])
         if len(history) > MAX_DISCUSS_HISTORY_MESSAGES:
             history = history[-MAX_DISCUSS_HISTORY_MESSAGES:]
