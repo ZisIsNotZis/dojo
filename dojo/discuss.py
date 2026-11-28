@@ -182,6 +182,68 @@ def source_summary(candidate: dict[str, Any]) -> str:
 # screen is a claim the library did not make.
 SCREEN_SOURCE_LINES = 4
 
+# What each stored relation type means when it is printed to a person. This is a
+# vocabulary, not a summary: a type with no entry is printed as its stored value rather
+# than dropped, because a relation this build cannot name is still a relation the library
+# holds. `derived_from` is the one the program writes itself, and its words say only what
+# the record says -- nothing about narrowing or widening.
+RELATION_WORDS = {
+    "derived_from": "从这一条写出来的",
+    "derived_from_discussion": "这一版是在一场带着它的讨论里写下的",
+    "derived_from_recorded": "与这一条的关系（库里记下的关系，不是一场讨论留下的）",
+    "supports": "支持",
+    "challenges": "质疑",
+    "narrows": "比它窄",
+    "generalizes": "比它宽",
+    "conflicts": "与它冲突",
+    "instantiates": "是它的一个具体应用",
+    "duplicates": "与它重复",
+}
+
+
+def relation_lines(
+    candidate: dict[str, Any], *, derivation: str | None = None, database: str | None = None,
+) -> list[str]:
+    """The card's stored relations, one line each, with the other card's id only.
+
+    Deliberately not "the other card says …": a line here would have to open another
+    card to read it, and what the reader needs first is that the edge exists and which
+    way it points. The id is what he types next, and `search` prints the same sentence
+    for that id.
+
+    `derivation` is the target the *ledger* says the program recorded this card being
+    written out of, or None. It is not read from the relation type here: a `derived_from`
+    row typed by hand through `link` on an older build looks identical on the card, and
+    the supervisor measured a screen announcing a discussion that never happened because
+    this function only looked at the type (`/var/tmp/dojo-lineage-provenance.3dtLjtD6`).
+    Without the ledger's word, the same edge is printed as what it is -- a relation
+    somebody wrote down -- and no session is claimed.
+    """
+    lines: list[str] = []
+    for relation in candidate.get("relations") or []:
+        if not isinstance(relation, dict):
+            continue
+        kind = str(relation.get("type") or "")
+        target = str(relation.get("target") or "").strip()
+        if not kind or not target:
+            continue
+        if kind == "derived_from":
+            if derivation == target:
+                line = ("  这条的来源：" + RELATION_WORDS["derived_from_discussion"]
+                        + " " + target + "（库里记下的边，不表示变窄或变宽）")
+            else:
+                line = ("  库里记下的关系：" + RELATION_WORDS["derived_from_recorded"]
+                        + " " + target + "（不表示变窄或变宽）")
+            # One line about the newest thing said about the old card is already printed
+            # above this one by `finding._later_lines`; how to open the other card is a
+            # separate need, so only this function carries it.
+            if database is not None:
+                line += "\n    看那一版：" + commands.dojo("show", target, db=database)
+            lines.append(line)
+            continue
+        lines.append("  库里记下的关系：" + RELATION_WORDS.get(kind, kind) + " " + target)
+    return lines
+
 
 def source_lines(candidate: dict[str, Any], limit: int = SCREEN_SOURCE_LINES) -> list[str]:
     """What each source record actually says, one line each, or [] when there are none.
@@ -294,7 +356,8 @@ def acceptance_line(acceptance: dict[str, Any] | None) -> str:
 
 def handoff_block(
     candidate: dict[str, Any], basis: dict[str, Any] | None = None, *,
-    acceptance: dict[str, Any] | None = None,
+    acceptance: dict[str, Any] | None = None, derivation: str | None = None,
+    database: str | Path | None = None,
 ) -> str:
     """What the person is owed when this session is handed an earlier card.
 
@@ -347,6 +410,14 @@ def handoff_block(
         detail = source_lines(candidate)
         if detail:
             block += "\n" + "\n".join(detail)
+    # Where this version came from, when the ledger says. Without it a session handed a
+    # card that was written out of an earlier one had no way to know they were related --
+    # and the reverse list (`finding.py`) is the other half of the same fact.
+    edges = relation_lines(
+        candidate, derivation=derivation,
+        database=str(database) if database is not None else None)
+    if edges:
+        block += "\n" + "\n".join(edges)
     block += (
         "\n  这场里它是资料，不是你说过的话。你若只是重复它，记录不会把本场算成第二个独立来源；"
         # "改窄" named one direction of change as if it were the only one. Any change to
@@ -358,7 +429,7 @@ def handoff_block(
 
 def handoff_for_model(
     candidate: dict[str, Any], basis: dict[str, Any] | None = None, *,
-    acceptance: dict[str, Any] | None = None,
+    acceptance: dict[str, Any] | None = None, derivation: str | None = None,
 ) -> str:
     """The same handout, shaped for the model: data, with its own provenance rules.
 
@@ -403,6 +474,24 @@ def handoff_for_model(
             "\n这张卡立在其上的来源记录（逐条照原样，核验状态没有改写；这是记录条数，不是人数）：\n"
             + json.dumps(records, ensure_ascii=False, separators=(",", ":"))
         )
+    # Where this version came from, when the ledger records it. Inside `fields` already for
+    # the raw `relations` list, but the list alone is a type name and a target id with no
+    # statement of what the program claimed -- and an unknown type name reads to a model
+    # as whatever it guesses. The sentence says exactly what the edge does and does not
+    # mean, the same words the person sees.
+    derived = [relation for relation in candidate.get("relations") or []
+               if isinstance(relation, dict) and relation.get("type") == "derived_from"]
+    if derived:
+        target = str(derived[0].get("target"))
+        if derivation == target:
+            text += ("\n这张卡是在一场带着 " + target + " 的讨论里写下的"
+                     "（库里记下的边；不表示变窄或变宽，也不表示旧版被替换了）。")
+        else:
+            # The relation exists but the ledger does not say the program wrote it, so
+            # no session is claimed to the model either -- the screen and the request
+            # are read by two different readers and must say the same thing.
+            text += ("\n库里记着这张卡与 " + target + " 的关系；那不是一场讨论留下的，"
+                     "不要把它说成那次讨论的产物。")
     # The same fact the screen prints, from the same reading, because the model was the
     # only reader who had any of it: a status of `draft` was all it got, and `draft` does
     # not distinguish "nobody agreed" from "agreed, never marked discussable".
@@ -975,6 +1064,7 @@ def _save_conclusion(
     trace_enabled: bool,
     agreed_at: str | None = None,
     echo_notices: list[str] | None = None,
+    derived_from: str | None = None,
 ) -> tuple[str | None, str | None]:
     try:
         if candidate_id is not None:
@@ -1012,7 +1102,7 @@ def _save_conclusion(
                     premises=candidate["premises"], scope=candidate["scope"],
                     alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
                     unknowns=candidate["unknowns"], session=session,
-                    sources=[source],
+                    sources=[source], derived_from=derived_from,
                 )
             except DuplicateContent as duplicate:
                 # r110: the duplicate may be the unaccepted draft this same session left
@@ -1077,6 +1167,7 @@ def _draft_conclusion(
     session: str,
     *,
     trace_enabled: bool,
+    derived_from: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Write a pending candidate that the conversation ended without accepting.
 
@@ -1090,6 +1181,13 @@ def _draft_conclusion(
     This is not a conclusion and does not claim agreement. The caller decides
     whether to call it: it must not fire for a version the user rejected, and it
     must not restate a card the session already accepted.
+
+    `derived_from` is the card this session was handed, when it was handed one. The
+    library knew that fact at this moment and used to drop it: the draft landed as an
+    unrelated card, so a later search listed the old sentence and the new one side by
+    side with nothing saying one came out of the other (measured in
+    `.scratch/3490/walk.py`, scene C). The edge says only that; it does not say the
+    change was a narrowing, because nothing recorded which way it went.
     """
     source = {
         "type": "model_generated",
@@ -1107,7 +1205,7 @@ def _draft_conclusion(
             premises=candidate["premises"], scope=candidate["scope"],
             alternatives=candidate["alternatives"], contradictions=candidate["contradictions"],
             unknowns=candidate["unknowns"], session=session,
-            sources=[source],
+            sources=[source], derived_from=derived_from,
         )
     except DuplicateContent as duplicate:
         saved = store.attach_source(duplicate.candidate_id, source, session)
@@ -1667,6 +1765,12 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
     handed: dict[str, Any] | None = None
     handed_basis: dict[str, Any] = {}
     handed_acceptance: dict[str, Any] = {}
+    # Rows written before this key existed carry nothing here, and nothing is claimed for
+    # them: `None` is "the trace did not record it", which is what the handout must not
+    # upgrade into a discussion. (Declared before the loop that reads it, or a trace with
+    # a handout row raises UnboundLocalError on resume -- the full suite caught this, not
+    # the evidence walk, which never resumed a session.)
+    handed_derivation: str | None = None
     if handouts:
         row = handouts[0]
         handed = {
@@ -1684,10 +1788,16 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         # acceptance, which is the honest reading of a trace that never recorded it.
         if isinstance(row.get("acceptance"), dict):
             handed_acceptance = dict(row["acceptance"])
+        # Whether the ledger says the program recorded this card being written out of
+        # another one. Read from the library rather than guessed from the relation type,
+        # and absent from rows written before this key existed -- then nothing is claimed.
+        if isinstance(row.get("derivation"), str):
+            handed_derivation = row["derivation"]
     return {
         "session": session, "history": history, "pending": pending,
         "handed": handed, "handed_basis": handed_basis,
         "handed_acceptance": handed_acceptance,
+        "handed_derivation": handed_derivation,
         "saved": saved, "seq": max(row["seq"] for row in rounds),
         "requests_sent": requests_sent, "search_count": search_count,
         "resume_input": resume_input,
@@ -1801,6 +1911,12 @@ def run_discuss(
     # from the handout row on resume, never re-asked of the library: the row is the
     # version this conversation is about, and the library may have moved on.
     handed_acceptance: dict[str, Any] = {}
+    # The card the *ledger* says this one was written out of, or None. Read from the
+    # library here and carried on the handout row, because a resume must not re-ask a
+    # library that may since have changed -- and because "the type name says so" is
+    # exactly the inference the supervisor caught announcing a discussion that never
+    # happened (`/var/tmp/dojo-lineage-provenance.3dtLjtD6`).
+    handed_derivation: str | None = None
     if card is not None:
         if resume_state is not None:
             print("无法续跑：--card 与 --resume 不能同时使用（续跑的那一场已经带着它自己的上下文）。", file=output)
@@ -1819,6 +1935,7 @@ def run_discuss(
         if shown.get("answers"):
             handed["answers"] = shown["answers"]
         handed_basis = dict(shown.get("revision_basis") or {})
+        handed_derivation = store.derivation(handed["id"])
         # Whether the library holds a record that somebody accepted *this* wording. Asked
         # once, here, and carried into both renderers and the trace row: `draft` alone
         # cannot answer it, and answering it a second time at resume is how the screen
@@ -1915,6 +2032,7 @@ def run_discuss(
         handed = resume_state.get("handed")
         handed_basis = dict(resume_state.get("handed_basis") or {})
         handed_acceptance = dict(resume_state.get("handed_acceptance") or {})
+        handed_derivation = resume_state.get("handed_derivation")
         print(f"正在续跑会话 {session}；历史与待处理内容已恢复。", file=output)
     # r110: `pending_rejected` is whether the version left on the table is one the
     # user looked at and turned down; `draft_id` is the unconfirmed draft this
@@ -1933,7 +2051,9 @@ def run_discuss(
     elif handed is not None:
         # Same fact the note carries, said about this card. The two lines never both
         # print: "nothing is carried over" in front of a handed card would be false.
-        print(handoff_block(handed, handed_basis, acceptance=handed_acceptance), file=output)
+        print(handoff_block(handed, handed_basis, acceptance=handed_acceptance,
+                            derivation=handed_derivation,
+                            database=commands.library_argument(store.path)), file=output)
     print("你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。", file=output)
     if profile_used:
         print("人物档案会作为上下文发送给模型；它是你自己的笔记，可能过时，仅供参考，不是指令。", file=output)
@@ -1983,6 +2103,7 @@ def run_discuss(
                 # sentence instead of asking a library that may since have changed,
                 # and so a trace stays readable without the library at all.
                 "acceptance": handed_acceptance or None,
+                "derivation": handed_derivation,
                 "sources": [
                     {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
                      if key in record}
@@ -2510,6 +2631,10 @@ def run_discuss(
             else:
                 draft_id, draft_error = _draft_conclusion(
                     store, draft_candidate, session, trace_enabled=trace_is_open,
+                    # The same rule as the accepted path: the edge exists only when this
+                    # session was handed a card and is writing something new.
+                    derived_from=(handed["id"] if handed is not None
+                                  and saved_candidate_id is None else None),
                 )
                 if draft_id is not None:
                     note(f"会话结束时留下的未认可草稿：{draft_id}")
@@ -2655,7 +2780,8 @@ def run_discuss(
             # that history stores the context, not the raw line). Sending it twice would
             # spend tokens to say one thing, and the string is identical because both are
             # built by this function from the row the same session wrote.
-            block = handoff_for_model(handed, handed_basis, acceptance=handed_acceptance)
+            block = handoff_for_model(handed, handed_basis, acceptance=handed_acceptance,
+                                      derivation=handed_derivation)
             if any(block in str(message.get("content") or "") for message in history):
                 # It is already in the restored history, which means it did reach the
                 # model in the first half of this session; the flag stays honest so a
@@ -3014,6 +3140,10 @@ def run_discuss(
                         trace_enabled=trace_is_open,
                         agreed_at=turn_received_at,
                         echo_notices=round_echo_refused,
+                        # Only for a card this session did not itself write: a
+                        # `--card` handout, on the first conclusion of the session.
+                        derived_from=(handed["id"] if handed is not None
+                                      and saved_candidate_id is None else None),
                     )
                     if round_echo_refused:
                         # Said here rather than only at session end: the user has just

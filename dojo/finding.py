@@ -44,6 +44,7 @@ from .discuss import (
     HANDOFF_STATUS_WORDS,
     acceptance_line,
     boundary_lines,
+    relation_lines,
     source_lines,
     source_summary,
 )
@@ -242,6 +243,20 @@ def _entry(index: int, row: dict[str, Any], database: str | Any) -> list[str]:
     if sources:
         lines.append("  " + sources)
         lines.extend(source_lines(row))
+    # What the ledger says about this card's place among the others: the version it was
+    # written out of, and the versions written out of it. Both are stored edges; neither
+    # says which direction the wording moved, because nothing recorded that. Without
+    # them two near-identical cards sat side by side with no way to tell that one came
+    # from a session holding the other (measured in `.scratch/3490/walk.py`, scene C).
+    # `derivation` is the target the ledger says the program recorded this card being
+    # written out of; without it the edge is printed as the relation it is and no
+    # discussion is claimed on its behalf.
+    relation = relation_lines(row, derivation=row.get("derivation"), database=database)
+    if relation:
+        lines.extend(relation)
+    later = _later_lines(row, database)
+    if later:
+        lines.extend(later)
     # The refusal line already states the acceptance fact when that is why it was refused;
     # printing `acceptance_line` under it said the same thing twice on one card (measured on
     # a terminal: "这个库里没有这套说法的认可记录" appeared twice, two lines apart).
@@ -256,6 +271,61 @@ def _entry(index: int, row: dict[str, Any], database: str | Any) -> list[str]:
     # model speaks. The command is printed for every entry because it is also the way to
     # look again -- and a person who cannot even open the card is being told to leave.
     lines.append("  带进一场新讨论：" + commands.dojo("discuss", "--card", row.get("id"), db=database))
+    return lines
+
+
+def _later_lines(row: dict[str, Any], database: str | Any) -> list[str]:
+    """Cards joining to this one through a `derived_from` edge, grouped by what made them.
+
+    The forward edge is printed on the newer card; this is the same fact from the older
+    card, which is the one a reader starts from -- he found the sentence he remembered, and
+    the thing he does not know is that something else is joined to it.
+
+    **Two headings, because the library knows two different things.** A row with
+    `basis: discussion` was written by a session that was holding this card, and the
+    ledger's `add` row says so. A row with `basis: recorded_relation` is a `derived_from`
+    edge somebody typed (through `link` on a build that allowed it, or by hand); the
+    cards are related, but no discussion put them together, and saying one did is a fact
+    invented on screen. The supervisor measured exactly that on a library of two
+    hand-written cards (`/var/tmp/dojo-lineage-provenance.3dtLjtD6`).
+
+    Each line carries that card's own status and its own acceptance record, both read from
+    the library at print time. Nothing here calls the newer card an improvement or the
+    current version: which one he wants is his to decide.
+    """
+    later = [item for item in row.get("derived_later") or [] if isinstance(item, dict)]
+    if not later:
+        return []
+    discussed = [item for item in later if item.get("basis") == "discussion"]
+    recorded = [item for item in later if item.get("basis") != "discussion"]
+    lines: list[str] = []
+    if discussed:
+        # "不是替换" alone left the reader free to hear "and therefore better, or at least
+        # narrower" -- and nothing recorded which way the wording moved (`revise`'s own
+        # comment records the last time this code claimed a direction it had not stored).
+        # The caveat travels with this heading exactly as it does on the newer card.
+        lines.append("  后来有一场带着这条继续谈，写下了另一版（不是替换，也不说明变窄还是变宽；"
+                     "两版都在库里）：")
+        lines.extend(_later_card_lines(discussed, database, indent="    "))
+    if recorded:
+        lines.append("  库里记着与这条有关的关系（不是一场讨论留下的，也不表示谁写下了谁）：")
+        lines.extend(_later_card_lines(recorded, database, indent="    "))
+    return lines
+
+
+def _later_card_lines(items: list[dict[str, Any]], database: str | Any, *,
+                      indent: str) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        status = HANDOFF_STATUS_WORDS.get(str(item.get("status")), str(item.get("status")))
+        lines.append(indent + str(item.get("id")) + "  " + status)
+        statement = item.get("statement")
+        if isinstance(statement, str) and statement.strip():
+            lines.append(indent + "  " + _quote(statement))
+        acceptance = item.get("acceptance")
+        if isinstance(acceptance, dict) and "accepted" in acceptance:
+            lines.append(indent + acceptance_line(acceptance).strip())
+        lines.append(indent + "看这一版：" + commands.dojo("show", item.get("id"), db=database))
     return lines
 
 
@@ -277,6 +347,8 @@ def _recent(result: dict[str, Any], database: str | Any) -> list[str]:
         lines.append("  " + head.strip())
         lines.extend(extra)
         for line in boundary_lines(row):
+            lines.append("  " + line)
+        for line in relation_lines(row, derivation=row.get("derivation")):
             lines.append("  " + line)
         for line in answers_module.screen_lines(row, database=database):
             lines.append("  " + line)

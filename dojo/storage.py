@@ -19,10 +19,29 @@ from .commands import quote
 
 KINDS = {"abstract_idea", "experience_claim", "application", "question", "counterexample"}
 STATUSES = {"draft", "discussable", "challenged", "withdrawn", "superseded"}
+# `derived_from` is the edge the *program* writes, and it says less than the others on
+# purpose. When a session is handed a card and ends by writing a different version of it,
+# the library knew that fact at that moment and threw it away: `discuss` wrote the new
+# draft as an unrelated card, so a later search listed two nearly identical sentences with
+# nothing saying one came out of the other (`.scratch/3490/walk.py`, scene C). The program
+# does not know which way the wording changed -- `narrows` and `generalizes` are the
+# reader's judgement -- so the edge says only "this version was written in a discussion
+# that was holding that card".
+#
+# It is NOT a `link`: nothing here is the person's assertion that two cards are related.
+# The supervisor measured what letting the two share a name cost on a hand-tended
+# library -- two cards written and confirmed separately, joined by `link`, and the reader
+# screen announced "后来有一场带着这条继续谈" about a discussion that never happened
+# (`/var/tmp/dojo-lineage-provenance.3dtLjtD6`). So the type name is the *only*
+# evidence a discussion put these two together, and `link` refuses it.
 RELATIONS = {
     "supports", "challenges", "narrows", "generalizes", "conflicts",
     "instantiates", "duplicates",
 }
+# What a card wrote about itself: written by the program in the same transaction as the
+# card, never by a person through `link`. Separate from `RELATIONS` so no surface can
+# mistake one for the other -- see the comment above.
+PROGRAM_RELATIONS = {"derived_from"}
 SOURCE_TYPES = {
     "abstract_reasoning", "claimed_firsthand", "artifact_observation",
     "secondhand_report", "model_generated", "synthetic_roleplay", "unknown",
@@ -141,7 +160,19 @@ def _new_id(prefix: str) -> str:
 # a program and diffing the rows -- a check on the four top-level keys cannot see it,
 # which is why the readings now compare whole row key sets on a library holding both a
 # sentence-match and a limits-match.
-READING_ROW_KEYS = ("matched_on", "matched_wording", "matched_in", "answers")
+# `derived_later` is the same kind of key: the cards the ledger says were written out of
+# a discussion holding this one (see `Store.later_versions`). The model gets the edge on
+# the new card (it is inside `relations`, which every row already carried) but not this
+# reverse list, because it is the person's way back to what came after.
+# `derived_later` and `derivation` are the same kind of key: which card the ledger says
+# this one was written out of, and which cards it says were written out of this one (see
+# `Store.derivation` / `Store.later_versions`). The model gets the edge on the newer card
+# (it is inside `relations`, which every row already carried) but not either basis, because
+# the two facts it adds are how to *read* the edge, and that wording belongs to the
+# screen -- `handoff_for_model` says the same thing in the session where it matters.
+READING_ROW_KEYS = (
+    "matched_on", "matched_wording", "matched_in", "answers", "derived_later", "derivation",
+)
 # The four parts `discuss` asks, by the field key the card stores. Declared beside the
 # reading keys because three layers have to agree on the vocabulary: `discuss` writes the
 # answers, `storage` orders and searches them, and `finding`/`discuss` print them. The
@@ -582,7 +613,20 @@ class Store:
         unknowns: list[str] | None = None,
         sources: list[dict[str, Any]] | None = None,
         session: str | None = None,
+        derived_from: str | None = None,
     ) -> dict[str, Any]:
+        """Write a new card, optionally recording which card it came out of.
+
+        `derived_from` exists because one fact was known and dropped: a discussion opened
+        with `--card X` that ends on a different wording wrote that wording as an
+        unrelated card, so `search` later listed both with nothing joining them. The edge
+        is written into the new card's own `relations` in the same transaction and the
+        same version as the card, so there is no moment where one exists without the
+        other. It adds no source, moves no status and changes no wording digest.
+
+        Deliberately not a direction: see `RELATIONS`. The target must exist, and a card
+        cannot come out of itself.
+        """
         statement = _text(statement, "statement")
         if kind not in KINDS:
             raise DojoError(f"kind must be one of: {', '.join(sorted(KINDS))}")
@@ -609,6 +653,20 @@ class Store:
             if self.connection.execute("SELECT 1 FROM candidates WHERE id=?", (candidate_id,)).fetchone():
                 raise DojoError(f"candidate ID already exists: {candidate_id}")
             self._source_ids_available(source_values)
+            relations: list[dict[str, Any]] = []
+            if derived_from is not None:
+                # Resolved, not stored as given: a card that was merged into another is
+                # reachable only through its redirect, and an edge pointing at the merged
+                # id would stop resolving the moment the redirect chain grew.
+                origin, _ = self.resolve(derived_from)
+                if origin["id"] == candidate_id:
+                    raise DojoError("a card cannot be derived from itself")
+                relations.append({
+                    "type": "derived_from",
+                    "target": origin["id"],
+                    "note": ("写在这一场讨论里；那一场开始前带着 " + origin["id"]
+                             + "（不表示变窄或变宽）"),
+                })
             state = {
                 "id": candidate_id,
                 "version": 1,
@@ -618,7 +676,7 @@ class Store:
                 **fields,
                 "sources": source_values,
                 "aliases": [],
-                "relations": [],
+                "relations": relations,
                 "sessions": [_text(session, "session")] if session else [],
                 "confirmation": {"active": False},
             }
@@ -629,10 +687,15 @@ class Store:
             # `unidentified` and was admitted -- absence passing as a pass. The key is
             # absent from events written before this change, and nothing backfills it:
             # those cards keep the answer they had rather than getting a guessed one.
-            self._insert_candidate(state, "add", {
+            details: dict[str, Any] = {
                 "session": session,
                 "sources": [source["id"] for source in source_values],
-            })
+            }
+            if relations:
+                # On the creating row so a reader of the ledger sees the edge without
+                # having to diff two card states.
+                details["derived_from"] = relations[0]["target"]
+            self._insert_candidate(state, "add", details)
         return state
 
     def attach_source(self, candidate_id: str, source: dict[str, Any], session: str | None = None) -> dict[str, Any]:
@@ -1332,6 +1395,11 @@ class Store:
 
     def link(self, candidate_id: str, relation: str, target_id: str, reason: str) -> dict[str, Any]:
         if relation not in RELATIONS:
+            # `derived_from` is deliberately not in this set: it is the program's record
+            # that a discussion produced one card while holding the other, and only
+            # `add()` can make that true. Accepting it here let a hand-made link be read
+            # as a discussion that never happened (the supervisor's repro on a library
+            # with two confirmed cards).
             raise DojoError(f"relation must be one of: {', '.join(sorted(RELATIONS))}")
         reason = _text(reason, "link reason")
         with self.transaction():
@@ -2145,10 +2213,13 @@ class Store:
         the doubt. The reason is returned as a code plus counts, never as a sentence:
         what a refusal is called on screen is the screen's decision.
         """
-        rows = self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()
+        # Read once, and kept so `retrieve` can search the same snapshot for reverse
+        # edges instead of asking the table again per row (the supervisor measured 601
+        # full-table reads for one search over 600 cards).
+        self.last_scan = [json.loads(row["state_json"]) for row in
+                          self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()]
         matches: dict[str, tuple[int, set[str], dict[str, Any], dict[str, Any] | None]] = {}
-        for row in rows:
-            state = json.loads(row["state_json"])
+        for state in self.last_scan:
             try:
                 canonical, _chain = self.resolve(state["id"])
             except DojoError:
@@ -2304,6 +2375,14 @@ class Store:
             return empty
         ordered = self._matches(terms, include_withheld=for_reading,
                                 include_answers=for_reading)
+        # The reverse edges are read once for the whole screen, out of the snapshot the
+        # matcher just loaded: `later_versions` used to query the whole candidate table
+        # per row (601 reads for one search over 600 cards, supervisor's reproducer).
+        everything = getattr(self, "last_scan", []) if for_reading else []
+        # One event-log read for the whole screen, not one per row: `derivation` asks the
+        # `add` event, and the per-row version was the same repeated-full-table shape the
+        # supervisor measured on the reverse lookup.
+        bases = self.derivations() if for_reading else {}
         results = []
         for score, found, state, withheld in ordered:
             if withheld is not None or len(results) >= limit:
@@ -2313,7 +2392,13 @@ class Store:
                 row.update(self._matched_wording(state, found))
                 # His own words are already on the row (`_card_row` reads the table).
                 # This block used to add them from the state; nothing is left to add.
-                pass
+                later = self.later_versions(state["id"], states=everything)
+                if later:
+                    # Only when there is one, so every other row keeps its bytes.
+                    row["derived_later"] = later
+                derivation = bases.get(state["id"])
+                if derivation:
+                    row["derivation"] = derivation
             results.append(row)
         payload: dict[str, Any] = {
             "query": query,
@@ -2324,8 +2409,11 @@ class Store:
         if for_reading:
             # Same score order as the results, so the one he half-remembers is not
             # buried under the ones he does not.
-            payload["withheld"] = [
-                {
+            refused_rows: list[dict[str, Any]] = []
+            for score, found, state, withheld in ordered:
+                if withheld is None:
+                    continue
+                row = {
                     **self._card_row(state, score, found),
                     **self._matched_wording(state, found),
                     **({"answers": {key: dict(item) for key, item in _stored_answers(state).items()}}
@@ -2334,8 +2422,16 @@ class Store:
                     # screen is `finding.py`'s decision, not this method's.
                     "refused": withheld,
                 }
-                for score, found, state, withheld in ordered if withheld is not None
-            ]
+                # Read once, and only for a card that has one, so every other refused
+                # row keeps the bytes it had.
+                later = self.later_versions(state["id"], states=everything)
+                if later:
+                    row["derived_later"] = later
+                derivation = bases.get(state["id"])
+                if derivation:
+                    row["derivation"] = derivation
+                refused_rows.append(row)
+            payload["withheld"] = refused_rows
             if not ordered:
                 # No words overlapped at all, so this is the one case where a list is
                 # still the useful thing to print: recent cards by ledger entry time,
@@ -2347,16 +2443,24 @@ class Store:
 
     def _recent_rows(self, limit: int) -> list[dict[str, Any]]:
         """Recent cards with the gate's verdict on each, for the screen's fallback."""
-        return [
-            {
+        recent = self.recently_written(limit)
+        bases = self.derivations([state["id"] for state in recent]) if recent else {}
+        rows: list[dict[str, Any]] = []
+        for state in recent:
+            row: dict[str, Any] = {
                 **self._card_row(state, 0, set()),
                 "refused": self._withheld_basis(
                     state, self._acquisition_events(state["id"])
                 ) if state["status"] != "discussable" and not self.has_acceptance(state["id"], state)
                 else None,
             }
-            for state in self.recently_written(limit)
-        ]
+            # Same basis the result rows carry, so the way-in does not describe a
+            # discussed card as a hand-written relation (or the reverse).
+            derivation = bases.get(state["id"])
+            if derivation:
+                row["derivation"] = derivation
+            rows.append(row)
+        return rows
 
     def _card_row(self, state: dict[str, Any], score: int, found: set[str]) -> dict[str, Any]:
         """Everything a reader (or the model) is told about one matched card.
@@ -2408,6 +2512,124 @@ class Store:
         # the bytes it had.
         row.update(self.time_basis(state["id"], state))
         return row
+
+    def derivation(self, candidate_id: str) -> str | None:
+        """The card the *program* recorded this one being written out of, or None.
+
+        The relation type alone is not the evidence. `derived_from` means "a discussion
+        held that card when this one was written", and only `add()` can make that true —
+        it writes the edge into the card's own state in the same transaction and records
+        it on the `add` event. A library can still hold a `derived_from` row typed by
+        hand through `link` on an older build, and the supervisor measured exactly that:
+        two confirmed cards joined by hand, and the reader screen announced a discussion
+        that never happened (`/var/tmp/dojo-lineage-provenance.3dtLjtD6`).
+
+        So this reads the ledger, which is where "the program did it" is recorded, and
+        the screens say "库里记下的关系" rather than "讨论里写下的" when it is absent.
+        """
+        try:
+            events = self.history(candidate_id)["events"]
+        except DojoError:
+            return None
+        for event in events:
+            if event.get("event") != "add":
+                continue
+            # `history` nests the row's payload under `details`; reading the key off the
+            # event itself returned None for every real card, and the first version of
+            # this method then told a genuinely discussed card it was a hand-written
+            # relation (caught by `.scratch/3490/repro.py`, scene C).
+            details = event.get("details") if isinstance(event.get("details"), dict) else {}
+            value = details.get("derived_from")
+            if isinstance(value, str) and value.strip():
+                return value
+        return None
+
+    def derivations(
+        self, candidate_ids: list[str] | None = None,
+    ) -> dict[str, str]:
+        """`derivation` for many cards in one query, so a screen is not one read per row.
+
+        The same reason `later_versions` takes the states it was handed: `derivation`
+        per row is a full event-log read per result, which is the defect the supervisor
+        measured on the reverse lookup (601 candidate reads for one search). This reads
+        the `add` rows once and keeps the ones carrying a `derived_from`.
+
+        Passing ids narrows it; passing none answers for the whole library, which is what
+        the screen wants. A card absent from the result has no recorded derivation -- the
+        distinction from "the library has no events" is `history`, not this.
+        """
+        sql = ("SELECT candidate_id, details_json FROM events WHERE event='add' "
+               "AND details_json LIKE '%\"derived_from\"%'")
+        params: tuple[Any, ...] = ()
+        if candidate_ids is not None:
+            ids = [_id(value) for value in candidate_ids]
+            if not ids:
+                return {}
+            sql += " AND candidate_id IN (" + ",".join("?" for _ in ids) + ")"
+            params = tuple(ids)
+        found: dict[str, str] = {}
+        for row in self.connection.execute(sql + " ORDER BY seq", params):
+            try:
+                details = json.loads(row["details_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            value = details.get("derived_from") if isinstance(details, dict) else None
+            if isinstance(value, str) and value.strip():
+                found[row["candidate_id"]] = value
+        return found
+
+    def later_versions(
+        self, candidate_id: str, *, states: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Cards the ledger records as written out of a discussion that held this one.
+
+        The reverse of the `derived_from` edge, and the half a reader needs when the card
+        he is looking at stopped being the newest thing said about it: `search` printed
+        two nearly identical cards side by side and neither said the second came out of a
+        session holding the first (measured in `.scratch/3490/walk.py`, scene C).
+
+        Read by scanning card states, because relations live inside the card state and a
+        relation index would be a second copy of the same fact. **The caller passes the
+        states it already read**, and `search` does: the first version of this method ran
+        its own `SELECT … FROM candidates` per result row, which took a 600-card search
+        from ~63 ms to ~636 ms by reading the whole table 601 times over a library that
+        held no such edge at all (supervisor's reproducer,
+        `/var/tmp/dojo-search-lineage-scale.WmglSP`). With `states` given it touches no
+        table and walks the list it was handed.
+
+        Only what is stored: the id, that card's own wording, its status, and whether the
+        library holds an acceptance record for *that* wording. Which way the sentence
+        changed is not recorded, so it is not said.
+        """
+        target = _id(candidate_id)
+        found: list[dict[str, Any]] = []
+        if states is None:
+            states = [json.loads(row["state_json"]) for row in
+                      self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()]
+        for state in states:
+            if state.get("redirect_to"):
+                continue
+            for relation in state.get("relations") or []:
+                if not isinstance(relation, dict) or relation.get("type") != "derived_from":
+                    continue
+                if self.resolve(relation.get("target"))[0]["id"] != target:
+                    continue
+                # `basis` is the fact the sentence on screen has to hang on: the
+                # ledger's add row says the program wrote this edge, or it does not.
+                # A hand-typed relation is still a relation, and still shown -- but as
+                # what it is, not as a discussion.
+                found.append({
+                    "id": state["id"],
+                    "statement": state.get("statement"),
+                    "status": state.get("status"),
+                    "version": state.get("version"),
+                    "sources": state.get("sources") or [],
+                    "acceptance": self.time_basis(state["id"], state),
+                    "basis": ("discussion" if self.derivation(state["id"]) == target
+                              else "recorded_relation"),
+                })
+                break
+        return found
 
     def _matched_wording(self, state: dict[str, Any], found: set[str]) -> dict[str, Any]:
         """Which of this card's wordings the query actually overlapped.

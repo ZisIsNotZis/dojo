@@ -66,10 +66,12 @@ class TheCardHandoffEntryPoint(unittest.TestCase):
         # stopped biting when it did -- so it asserts it found the line, and the check
         # below asserts the entry point goes red, not just that some bytes were edited.
         self.assertNotEqual(source, stripped, "the handout line was not found to remove")
-        # Moved again by the boundary slice: the call now carries the ledger's
-        # acceptance fact beside the card. The guard is on the line that puts the
-        # handout in the request, not on any particular spelling of its arguments.
-        self.assertIn("handoff_for_model(handed, handed_basis, acceptance=handed_acceptance)",
+        # Moved twice since: the boundary slice added the ledger's acceptance fact, and
+        # the derivation-edge slice added the ledger's `derivation`. Asserting one exact
+        # spelling of the argument list makes this control fail for a reason that is not
+        # the handout disappearing, so it checks the call itself.
+        self.assertIn("handoff_for_model(handed, handed_basis, acceptance=handed_acceptance,\n"
+                      "                                      derivation=handed_derivation)",
                       source)
         (work / "dojo" / "discuss.py").write_text(stripped, encoding="utf-8")
         done = self.run_entry(work)
