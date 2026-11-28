@@ -116,7 +116,7 @@ class TheExitLines(unittest.TestCase):
     def printed(self, text, marker):
         """The command a reader copies off the line carrying `marker`, shell-parsed.
 
-        The line carries prose before it ("...先看它：python3 -m dojo ..."), so the
+        The line carries prose before it ("...回看库里的记录：python3 -m dojo ..."), so the
         command starts at `python3`, not after the first colon -- splitting on a colon
         kept the draft id and dropped the command, which is the kind of test bug that
         makes a red result say the wrong thing.
@@ -129,7 +129,7 @@ class TheExitLines(unittest.TestCase):
     def test_with_a_trace_the_card_command_names_the_draft_and_the_library(self):
         code, text = self.run_session()
         self.assertEqual(0, code)
-        tokens = self.printed(text, "草稿")
+        tokens = self.printed(text, "回看库里的记录：")
         self.assertIn("show", tokens)
         self.assertIn("--db", tokens)
         self.assertEqual(str(self.store.path), tokens[tokens.index("--db") + 1])
@@ -142,7 +142,7 @@ class TheExitLines(unittest.TestCase):
         code, text = self.run_session(no_trace=True)
         self.assertEqual(0, code)
         self.assertNotIn("transcript", text, "no record was written, so name no view")
-        tokens = self.printed(text, "草稿")
+        tokens = self.printed(text, "回看库里的记录：")
         self.assertIn("--db", tokens)
         self.assertEqual(str(self.store.path), tokens[tokens.index("--db") + 1])
 
@@ -191,7 +191,7 @@ class AlwaysNamed(unittest.TestCase):
 
     def test_the_draft_line_names_the_library_even_when_it_is_the_default(self):
         text = self.run_session()
-        draft_line = next(line for line in text.splitlines() if "草稿" in line)
+        draft_line = next(line for line in text.splitlines() if "回看库里的记录：" in line)
         self.assertIn(" show ", draft_line)
         self.assertIn("--db", draft_line, draft_line)
         self.assertIn(str(self.store.path), draft_line)

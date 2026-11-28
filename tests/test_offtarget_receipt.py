@@ -75,7 +75,6 @@ def read_lines(lines):
 
 
 PROPOSE = result("那我们把这句当成现在这一版。", CONCLUSION)
-ACCEPT = result("好，就这句。", CONCLUSION, user_stance="accept")
 
 
 class OffTargetAnswerTests(unittest.TestCase):
@@ -92,8 +91,8 @@ class OffTargetAnswerTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient([PROPOSE, ACCEPT]),
-            read_line=read_lines(["讲一条做法", "对，就这么定", *answers]),
+            client=FakeClient([PROPOSE]),
+            read_line=read_lines(["讲一条做法", "/认可", *answers]),
             output=output,
         )
         return code, output.getvalue()
@@ -228,8 +227,8 @@ class OffTargetAnswerTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient([PROPOSE, ACCEPT]),
-            read_line=read_lines(["讲一条做法", "对，就这么定", OFF_SITUATION,
+            client=FakeClient([PROPOSE]),
+            read_line=read_lines(["讲一条做法", "/认可", OFF_SITUATION,
                                   ON_TENSION, OFF_PRICE, OFF_OFF]),
             output=output,
             no_trace=True,
@@ -294,8 +293,8 @@ class OffTargetAnswerTests(unittest.TestCase):
         try:
             code = run_discuss(
                 self.store,
-                client=FakeClient([PROPOSE, ACCEPT]),
-                read_line=read_lines(["讲一条做法", "对，就这么定", OFF_SITUATION,
+                client=FakeClient([PROPOSE]),
+                read_line=read_lines(["讲一条做法", "/认可", OFF_SITUATION,
                                       ON_TENSION, OFF_PRICE, OFF_OFF]),
                 output=output,
             )

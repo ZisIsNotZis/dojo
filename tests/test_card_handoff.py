@@ -222,12 +222,11 @@ class HandoffTests(HandoffCase):
         candidate_id = self.echo_card()
         client = FakeClient([
             {"answer": "你就是这个意思。", "candidate": conclusion(), "user_stance": "neutral"},
-            {"answer": "那我记成你同意。", "candidate": conclusion(), "user_stance": "accept"},
         ])
         output = io.StringIO()
         code = run_discuss(
             self.store, client=client, card=candidate_id,
-            read_line=read_lines(["就是以前那条，我同意", "对"]),
+            read_line=read_lines(["就是以前那条，我同意", "/认可"]),
             output=output, environ={},
         )
         self.assertEqual(0, code)

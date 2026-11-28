@@ -90,10 +90,12 @@ Live chat/discussion, inquiry tools and bounded knowledge rechecks are explicit 
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # must match the endpoint's registered id
 # then set DOJO_LLM_API_KEY in this shell from your endpoint's key store; the repo never holds it
-python3 -m dojo discuss            # zero forms, zero y/n prompts; on agreement it writes the conclusion
+python3 -m dojo discuss            # discuss, then review the printed proposal; type /认可 to accept that version
 python3 -m dojo discuss --verbose  # live request/retrieval progress on stderr
-python3 -m dojo list               # a version nobody accepted is kept as `unaccepted_draft: true`
+python3 -m dojo list               # a new unapproved proposal can be kept as `unaccepted_draft: true`
 ```
+
+When the proposal appears, compare your verbatim opening and the turn that produced this version with the moderator's proposed wording, premises, limits, and unknowns. Correct it in ordinary language. To approve just the displayed version, type `/认可` by itself; this is local and makes no model request. Approval is not verification. Ending without approval can keep a new proposal as an unapproved draft, but does not add another source to an older card that says the same thing. The same statement with a different scope does not approve the older scope, and resuming shows the pending version again before you approve it. See the [offline checks and live evidence](docs/evidence/2026-11-28-review-before-accept/EXACT-VERSION.md).
 
 ### Opening a session on an earlier card, and continuing one
 
@@ -313,7 +315,7 @@ inbox/, mail/    working notes kept as history
 idea.md          the original draft, preserved unchanged
 ```
 
-How the pieces talk: `cli.py` parses a command and hands it to `Store` (`storage.py`), which is the only writer to SQLite and the only reader for retrieval. `discuss.py` composes the host prompt, calls `live.py`, writes the turn to a local JSONL trace, and writes a card only when the model reports the user accepted. `pipeline.py` is a reader/writer over the same store, run after the session. `scripts/dao_life.py` touches no database at all: it reads and writes the JSON library under `docs/dao/` and is reproducible byte for byte for a given `--at`.
+How the pieces talk: `cli.py` parses a command and hands it to `Store` (`storage.py`), which is the only writer to SQLite and the only reader for retrieval. `discuss.py` composes the host prompt, calls `live.py`, writes the turn to a local JSONL trace, and records approval only after the program has printed the exact proposal and you type `/认可`; the model cannot approve it on your behalf. `pipeline.py` is a reader/writer over the same store, run after the session. `scripts/dao_life.py` touches no database at all: it reads and writes the JSON library under `docs/dao/` and is reproducible byte for byte for a given `--at`.
 
 State and privacy, stated plainly:
 
@@ -355,7 +357,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md). In short: this is a scope-disciplined
 - Candidate lifecycle with provenance, immutable versions, reversible merge and split; lexical retrieval with merge redirects; duplicate refusal.
 - Broadcast independence guard, session-end `classify → locate → challenge` pipeline, bounded B/C prompt export.
 - Three-act offline demo, offline comparison replay, frozen-material generator.
-- `discuss`: zero-structure natural-language loop; the accepted version becomes the card, and a version nobody accepted is kept as an `unaccepted_draft` (source `model_generated`/`unverified`, not `discussable`, so no other session receives it as material). Local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
+- `discuss`: natural-language discussion with a local approval step; a new proposal left unapproved can be kept as an `unaccepted_draft` (source `model_generated`/`unverified`, not `discussable`, so no other session receives it as material). Local traces, `--resume`, `person.md` profile, compute handoff file when an answer needs a real calculation.
 - K1 "the life of one dao": the loop runs over one real person's record (13 daos, 9 materials that could not be written into a dao, 1 candidate, 1 self-contradicting pair, 26 record checks, 0 promotions), plus a second library that is synthetic by construction and says so.
 - A completed `discuss` session can be exported as the probe note; the session, not the handwritten extraction, decides which parts are his, and the library refuses an extraction that claims an unpromoted part.
 - A standard-library test suite covering the CLI, store, retrieval, discussion, demo, pipeline and the K1 loop.

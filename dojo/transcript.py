@@ -295,19 +295,14 @@ def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
         lines.append("这几张卡是写下的那几句；四件回答没有改写它们，回看也不说它们已被认可。")
         lines.append("    逐张看：" + _card_command(database, view["saved"][0]))
     elif view["draft"]:
-        # The ending row's `draft` can name a card this session merely kept on the table:
-        # `_draft_conclusion` hits `DuplicateContent` when the wording is the one that was
-        # already there, attaches a model-generated source and returns *that* card's id.
-        # The review measured it with `--card c8` and one line of input: the draft id was
-        # c8, c8 carries a confirmation in the library, and a sentence saying 「没有人认可
-        # 过它」 was therefore false about it. The handout line above is the one fact this
-        # store-free view has about that card, so the wording follows it.
+        # A draft ID may point at an already-stored wording. The trace can speak
+        # for this session, not for recognition by any other session.
         handed_id = (view["handed"].get("candidate")
                      if isinstance(view["handed"], dict) else None)
         if handed_id is not None and handed_id == view["draft"]:
             lines.append(
                 "这一场结束时桌上仍是 " + view["draft"]
-                + " 那句话；本场没有新写的卡片，也没有新改过它。"
+                + " 那句话；本场没有认可这版说法。"
             )
             # What the handout row actually records about the card it was given. The view
             # has no store, so it says only what that row holds -- a status, not a guess
@@ -315,12 +310,11 @@ def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
             status = view["handed"].get("status")
             lines.append(
                 "    这张卡是开场交给本场的那一张（记录里的状态：" + str(status or "未记")
-                + "）；本场只是又把它说了一遍。"
+                + "）。"
             )
         else:
-            lines.append("这一场没有写下被认可的卡片；结束时留了一张未认可的草稿："
+            lines.append("这份轨迹记录了本场未认可的待定版本；它不是本场的结论。相关卡片："
                          + view["draft"] + "。")
-            lines.append("草稿是系统按你的话整理的那一版，没有人认可过它——它恰恰是最该你自己看一眼的那张。")
         # A bare id is not something a first-time reader can act on; this view exists
         # because that gap had already shipped once.
         lines.append("    看它：" + _card_command(database, view["draft"]))

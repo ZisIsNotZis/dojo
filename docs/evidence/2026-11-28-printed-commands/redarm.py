@@ -21,11 +21,8 @@ ARMS = [
     (
         "退出的 show 不带库",
         "dojo/discuss.py",
-        '''                    + "（系统整理的那一版，没有人认可过）。先看它："
-                    + commands.dojo("show", draft_id,
-                                    db=commands.library_argument(store.path)),''',
-        '''                    + "（系统整理的那一版，没有人认可过）。先看它："
-                    + commands.dojo("show", draft_id),''',
+        '+ commands.dojo("show", draft_id, db=commands.library_argument(store.path)),',
+        '+ commands.dojo("show", draft_id),',
         "the supervisor's original report: `candidate not found` on a draft this session wrote",
     ),
     (

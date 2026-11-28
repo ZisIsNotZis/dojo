@@ -56,14 +56,9 @@ class ThePrintedCommandsEntryPoint(unittest.TestCase):
             shutil.copytree(ROOT / name, work / name)
         path = work / "dojo" / "discuss.py"
         source = path.read_text(encoding="utf-8")
-        anchor = '''                    + "（系统整理的那一版，没有人认可过）。先看它："
-                    + commands.dojo("show", draft_id,
-                                    db=commands.library_argument(store.path)),'''
-        stripped = source.replace(
-            anchor,
-            '''                    + "（系统整理的那一版，没有人认可过）。先看它："
-                    + commands.dojo("show", draft_id),''', 1)
-        self.assertNotEqual(source, stripped, "the exit line was not found to change")
+        anchor = '+ commands.dojo("show", draft_id, db=commands.library_argument(store.path)),'
+        self.assertEqual(1, source.count(anchor), "expected exactly one exit show command")
+        stripped = source.replace(anchor, '+ commands.dojo("show", draft_id),', 1)
         path.write_text(stripped, encoding="utf-8")
         done = self.run_entry(work)
         self.assertEqual(1, done.returncode,

@@ -1,5 +1,7 @@
 # 照着走一遍
 
+> 当前入口先展示待核对版本，再由用户单独输入 `/认可`。下面的旧屏幕摘录保留作历史对照；用 `verify.py` 看现版输出。
+
 不需要网络，不需要模型密钥。下面每一步都是可以整段粘贴的。
 
 ## 0. 先看它现在怎么说话
@@ -29,12 +31,11 @@ C = {"statement": "把持续检查交给系统，人这一侧只保留随时可�
      "kind": "abstract_idea", "scope": ["一个人已经抽身、只在自己想推翻时回来时"],
      "premises": ["系统能自己跑检查"], "alternatives": ["把检查留给人"],
      "contradictions": ["检查必须发生在世界里时"], "unknowns": ["他自己会不会来看回执"]}
-R = [{"answer": "你描述的是：检查该谁做。", "candidate": C, "user_stance": "neutral"},
-     {"answer": "那我们把它写成这一条。", "candidate": C, "user_stance": "accept"}]
+R = [{"answer": "你描述的是：检查该谁做。", "candidate": C, "user_stance": "neutral"}]
 class Client:
     def complete(self, messages): return R.pop(0)
 
-lines = iter(["讲一条做法", "对",
+lines = iter(["讲一条做法", "/认可",  # 看到核对区后，再输入认可
               "上次是把一套检查交给别人的时候",   # 情境：答了
               "先到这吧"])                        # 张力：不想聊了
 def read_line(prompt):
@@ -89,7 +90,7 @@ PY
 把整段回答换成：
 
 ```sh
-lines = iter(["讲一条做法", "对",
+lines = iter(["讲一条做法", "/认可",  # 看到核对区后，再输入认可
               "上次是把一套检查交给别人的时候",
               "接下来五题都先不答"])
 ```

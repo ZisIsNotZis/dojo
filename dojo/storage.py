@@ -424,12 +424,22 @@ class Store:
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
+        # A compound write can hold the writer lock across Store operations.
+        # Nested scopes must neither commit nor roll back their caller's transaction.
+        nested = self.connection.in_transaction
+        self.connection.execute("SAVEPOINT store_operation" if nested else "BEGIN IMMEDIATE")
         try:
-            self.connection.execute("BEGIN IMMEDIATE")
             yield
-            self.connection.commit()
-        except Exception:
-            self.connection.rollback()
+            if nested:
+                self.connection.execute("RELEASE store_operation")
+            else:
+                self.connection.commit()
+        except BaseException:
+            if nested:
+                self.connection.execute("ROLLBACK TO store_operation")
+                self.connection.execute("RELEASE store_operation")
+            else:
+                self.connection.rollback()
             raise
 
     def _event(self, candidate_id: str | None, event: str, details: dict[str, Any]) -> int:
@@ -1774,6 +1784,7 @@ class Store:
         Kept separate from `_write` so it does not bump a version: accepting a wording
         already stored changes no content. `path` names which route accepted it, so a
         later reader can tell a resumed draft from a conclusion reached in conversation.
+        `version` identifies the immutable snapshot with its exact wording and field order.
 
         `agreed_at` is when the agreement itself happened, as the caller knew it. It is
         not the same fact as the event's `created_at` -- when this row was written -- and
@@ -1788,7 +1799,7 @@ class Store:
             state = self._get(_id(candidate_id))
             details = {
                 "session": session, "path": path, DIGEST_FIELD: wording_digest(state),
-                CARD_FIELD: candidate_id,
+                CARD_FIELD: candidate_id, "version": state["version"],
             }
             agreed = _agreed_at(agreed_at)
             if agreed is not None:

@@ -90,10 +90,12 @@ python3 -m dojo --db "$DB" stories "$STORY" --proposal 5 --synthetic
 export DOJO_LLM_BASE_URL=http://127.0.0.1:4000/v1
 export DOJO_LLM_MODEL=github_copilot/gpt-6-luna   # 必须与端点注册的 model id 一字不差
 # 若需要：在此 shell 里从你的密钥来源设置 DOJO_LLM_API_KEY；仓库里不存它
-python3 -m dojo discuss            # 零表单、零 y/n 提示；达成一致才写入结论
+python3 -m dojo discuss            # 讨论后逐项核对；单独输入 /认可 才接受屏幕上那一版
 python3 -m dojo discuss --verbose  # 在 stderr 实时显示请求与检索进度
-python3 -m dojo list               # 没人认可的版本保留为 `unaccepted_draft: true` 草稿
+python3 -m dojo list               # 本场未认可的版本保留为 `unaccepted_draft: true` 草稿
 ```
+
+主持人先用自然语言讨论。出现「写入前核对」时，屏幕会逐字印开场原话和提出这一版时的发言，再按字段印拟写内容、前提或推断、边界和未知。你可以直接纠正或补充；只在想认可当前屏幕这一版时，单独输入 `/认可`。这个动作在本地完成，不再问模型，也不等于验证。直接结束不会产生本场认可；新说法可能以未认可草稿保留供回看，重复旧卡不会因此给它增加来源。同一句话如果换了适用范围，新的认可不会挪到旧范围；续跑时也会先重新展示待认可版本。见[离线复跑和真实线路证据](docs/evidence/2026-11-28-review-before-accept/EXACT-VERSION.md)。
 
 ### 按库里的卡开一场，以及续跑同一场
 
@@ -179,8 +181,7 @@ python3 -m dojo --db "$DB" show c1
 [`docs/evidence/2026-11-28-printed-commands/WALK.md`](docs/evidence/2026-11-28-printed-commands/WALK.md)）：
 
 ```text
-这一场没有写下被认可的卡片；结束时留了一张未认可的草稿：d-1e56e2a1614c（系统整理的那一版，
-没有人认可过）。先看它：python3 -m dojo --db "/tmp/x/我的 库/my dojo's.sqlite3" show d-1e56e2a1614c
+本场未认可最后展示的版本；它不是本场达成的结论。回看库里的记录：python3 -m dojo --db "/tmp/x/我的 库/my dojo's.sqlite3" show d-1e56e2a1614c
 回看这一场说了什么：python3 -m dojo --db "/tmp/x/我的 库/my dojo's.sqlite3" transcript "/tmp/x/我的 库/sessions/discuss-….jsonl"
 ```
 
@@ -262,7 +263,7 @@ inbox/、mail/    作为历史保留的工作笔记
 idea.md          最初的原稿，保持原样
 ```
 
-各部分怎么说话：`cli.py` 解析命令后交给 `Store`（`storage.py`），它是 SQLite 唯一的写入者，也是检索唯一的读取者。`discuss.py` 组装主持人提示词、调用 `live.py`、把每一轮写进本地 JSONL 轨迹，并且只在模型报告用户已同意时写卡。`pipeline.py` 读写同一个 store，在会话结束后运行。`scripts/dao_life.py` 完全不碰数据库：它读写 `docs/dao/` 下的 JSON 库，给定 `--at` 时重跑逐字节相同。
+各部分怎么说话：`cli.py` 解析命令后交给 `Store`（`storage.py`），它是 SQLite 唯一的写入者，也是检索唯一的读取者。`discuss.py` 组装主持人提示词、调用 `live.py`、把每一轮写进本地 JSONL 轨迹；它逐项打印即将写下的版本，只有随后单独输入 `/认可` 才记下认可。`pipeline.py` 读写同一个 store，在会话结束后运行。`scripts/dao_life.py` 完全不碰数据库：它读写 `docs/dao/` 下的 JSON 库，给定 `--at` 时重跑逐字节相同。
 
 状态与隐私，直说：
 

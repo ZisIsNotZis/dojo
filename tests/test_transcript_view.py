@@ -69,8 +69,7 @@ def read_lines(lines):
 
 
 PROPOSE = result("那我们把这句当成现在这一版。", CONCLUSION)
-ACCEPT = result("好，就这句。", CONCLUSION, user_stance="accept")
-ANSWERS = ["讲一条做法", "对，就这么定", OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF]
+ANSWERS = ["讲一条做法", "/认可", OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF]
 
 
 class TranscriptTests(unittest.TestCase):
@@ -89,7 +88,7 @@ class TranscriptTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient([PROPOSE, ACCEPT]),
+            client=FakeClient([PROPOSE]),
             read_line=read_lines(list(answers or ANSWERS)),
             output=output,
             no_trace=no_trace,
@@ -336,7 +335,8 @@ class TranscriptTests(unittest.TestCase):
         self.assertEqual([], view["saved"])
         self.assertIsNotNone(view["draft"], "the draft should be on the ending row")
         shown = transcript_module.render(view)
-        self.assertIn("未认可的草稿", shown)
+        self.assertIn("本场未认可的待定版本", shown)
+        self.assertIn("不是本场的结论", shown)
         self.assertIn(view["draft"], shown)
         self.assertNotIn("这一场没有写下卡片", shown)
 

@@ -56,10 +56,7 @@ def read_lines(lines, seen=None):
     return read_line
 
 
-TWO_TURNS = [
-    result("你描述的是：检查该谁做。", CONCLUSION),
-    result("那我们把它写成这一条。", CONCLUSION, user_stance="accept"),
-]
+PROPOSE = result("你描述的是：检查该谁做。", CONCLUSION)
 
 
 class ElicitationLoopTests(unittest.TestCase):
@@ -76,7 +73,7 @@ class ElicitationLoopTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient(responses or TWO_TURNS),
+            client=FakeClient(responses or [PROPOSE]),
             read_line=read_lines(lines),
             output=output,
         )
@@ -94,7 +91,7 @@ class ElicitationLoopTests(unittest.TestCase):
 
     def test_a_written_rule_is_followed_by_the_four_questions_in_order(self):
         answers = ["上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了", "第一次觉得亏是没人再复核", "有一次我照着做反而漏了"]
-        code, output = self.run_session(["讲一条做法", "对", *answers])
+        code, output = self.run_session(["讲一条做法", "/认可", *answers])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         self.assertEqual(["情境", "张力", "代价", "失效"], [row["part"] for row in events])
@@ -119,12 +116,12 @@ class ElicitationLoopTests(unittest.TestCase):
             if len(seen) == 1:
                 return "讲一条做法"
             if len(seen) == 2:
-                return "对"
+                return "/认可"
             self.assertEqual(1, len(self.store.list_candidates()), "结论必须在问第一件之前就写进去")
             raise EOFError
 
         output = io.StringIO()
-        code = run_discuss(self.store, client=FakeClient(TWO_TURNS), read_line=read_line, output=output)
+        code = run_discuss(self.store, client=FakeClient([PROPOSE]), read_line=read_line, output=output)
         self.assertEqual(0, code)
         self.assertEqual(1, len(self.store.list_candidates()))
         self.assertIn(QUESTIONS["情境"]["ask"], output.getvalue())
@@ -139,7 +136,7 @@ class ElicitationLoopTests(unittest.TestCase):
         when it ended, which is the cost the lesson names.
         """
         code, output = self.run_session(
-            ["讲一条做法", "对", "那天我手上是三件没做完的事", "", "", "", "", ""])
+            ["讲一条做法", "/认可", "那天我手上是三件没做完的事", "", "", "", "", ""])
         self.assertEqual(0, code)
         text = output
         first_q = text.find(QUESTIONS["情境"]["ask"])
@@ -167,7 +164,7 @@ class ElicitationLoopTests(unittest.TestCase):
         """The block's sentence about authorship has to be true at the end of a session."""
         answers = ["上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了",
                    "第一次觉得亏是没人再复核", "有一次我照着做反而漏了"]
-        code, output = self.run_session(["讲一条做法", "对", *answers])
+        code, output = self.run_session(["讲一条做法", "/认可", *answers])
         self.assertEqual(0, code)
         end = self.elicitation_end()
         self.assertEqual("系统的", end["authorship"])
@@ -196,8 +193,8 @@ class ElicitationLoopTests(unittest.TestCase):
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient(TWO_TURNS),
-            read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
+            client=FakeClient([PROPOSE]),
+            read_line=read_lines(["讲一条做法", "/认可", *answers, "", "", "", "", ""]),
             output=output,
             no_trace=True,
         )
@@ -221,7 +218,7 @@ class ElicitationLoopTests(unittest.TestCase):
                       "the shape does not say what is still kept")
 
     def test_an_early_end_leaves_exactly_the_parts_it_should(self):
-        code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
+        code, _ = self.run_session(["讲一条做法", "/认可", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)
         end = self.elicitation_end()
         # Two parts were answered before the input ended, so those two sentences are on
@@ -239,7 +236,7 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(set(end["part_sources"]), set(end["unanchored"]))
 
     def test_nothing_is_filled_when_the_person_answers_nothing(self):
-        code, _ = self.run_session(["讲一条做法", "对", "", "", "", "", "", "", "", ""])
+        code, _ = self.run_session(["讲一条做法", "/认可", "", "", "", "", "", "", "", ""])
         self.assertEqual(0, code)
         end = self.elicitation_end()
         self.assertEqual([], end["promoted"])
@@ -249,7 +246,7 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(1, len(self.store.list_candidates()), "问不出来时也不能多出一条结论")
 
     def test_each_part_records_the_question_and_raw_answer_without_promotion(self):
-        code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "", "", "", "", "", ""])
+        code, _ = self.run_session(["讲一条做法", "/认可", "上次是把一套检查交给别人的时候", "", "", "", "", "", ""])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         first = events[0]
@@ -265,7 +262,7 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertFalse(follow_up["promoted"])
 
     def test_structured_input_is_not_a_way_to_answer(self):
-        code, output = self.run_session(["讲一条做法", "对", "1", "", "", "", "", "", ""])
+        code, output = self.run_session(["讲一条做法", "/认可", "1", "", "", "", "", "", ""])
         self.assertEqual(0, code)
         self.assertIn("用一句话说就行；这里不填表。", output)
         first = self.elicitation_events()[0]
@@ -273,13 +270,13 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual("none", first["reading"])
 
     def test_no_forms_no_counters_no_options_in_the_questions(self):
-        code, output = self.run_session(["讲一条做法", "对", "上次是这样", "少了判断", "耽误了时间", "有一次反着做"])
+        code, output = self.run_session(["讲一条做法", "/认可", "上次是这样", "少了判断", "耽误了时间", "有一次反着做"])
         self.assertEqual(0, code)
         for forbidden in ("1/4", "（1/", "2/4", "y/n", "第 1 件", "请选择", "选项"):
             self.assertNotIn(forbidden, output)
 
     def test_a_resumed_trace_knows_the_questions_already_ran(self):
-        self.run_session(["讲一条做法", "对", "上次是这样", "少了判断", "", "", "", "", ""])
+        self.run_session(["讲一条做法", "/认可", "上次是这样", "少了判断", "", "", "", "", ""])
         path = next((self.root / "sessions").glob("*.jsonl"))
         state = _load_resume_trace(path)
         self.assertTrue(state["elicitation_done"])
@@ -293,7 +290,7 @@ class ElicitationLoopTests(unittest.TestCase):
             "昨天上线时，我为了复核系统回执多花了半小时。",
             "上周系统拿不到现场数据时就该停，不能继续自动检查。",
         ]
-        code, _ = self.run_session(["讲一条做法", "对", *answers])
+        code, _ = self.run_session(["讲一条做法", "/认可", *answers])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         self.assertEqual(answers, [event["answer"] for event in events])
@@ -319,7 +316,7 @@ class ElicitationLoopTests(unittest.TestCase):
     def test_bounded_raw_answer_is_not_silently_truncated_at_4000(self):
         answer = "  " + "经" * (MAX_DISCUSS_USER_TURN_CHARS - 4) + "  "
         self.assertLessEqual(len(answer), MAX_DISCUSS_USER_TURN_CHARS)
-        self.run_session(["讲一条做法", "对", answer])
+        self.run_session(["讲一条做法", "/认可", answer])
         event = self.elicitation_events()[0]
         self.assertEqual(answer, event["answer"])
         self.assertTrue(event["collected"])
@@ -327,7 +324,7 @@ class ElicitationLoopTests(unittest.TestCase):
 
     def test_oversized_answer_is_explicitly_rejected_without_partial_collection(self):
         oversized = "超" * (MAX_DISCUSS_USER_TURN_CHARS + 1)
-        code, output = self.run_session(["讲一条做法", "对", oversized, "一次有效长度的原话"])
+        code, output = self.run_session(["讲一条做法", "/认可", oversized, "一次有效长度的原话"])
         self.assertEqual(0, code)
         self.assertIn("未收录原文，也未截断保存", output)
         events = self.elicitation_events()
@@ -342,7 +339,7 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertNotIn(oversized[:4000], json.dumps(self.trace(), ensure_ascii=False))
 
     def test_legacy_promotions_do_not_become_resumed_authorship_guarantees(self):
-        self.run_session(["讲一条做法", "对", "今天晚饭吃面条，与这个问题完全无关。"])
+        self.run_session(["讲一条做法", "/认可", "今天晚饭吃面条，与这个问题完全无关。"])
         path = next((self.root / "sessions").glob("*.jsonl"))
         records = self.trace()
         for row in records:
@@ -378,9 +375,8 @@ class ElicitationLoopTests(unittest.TestCase):
     def test_the_accepting_line_s_moment_reaches_the_ledger(self):
         """r1638: the live conversation also states *when* it was agreed, not just when written.
 
-        `record_acceptance` used to carry only the write time, so an acceptance agreed
-        before a long model call dated the reply. The turn now keeps the moment the
-        user's line arrived and hands it to the writer. The clock is driven here so the
+        The local acceptance turn captures when the line arrived, which is distinct
+        from when the ledger records it. The clock is driven here so the
         two facts are forced apart -- inside one second they would compare equal and the
         test could not tell "used the arrival" from "used the write time".
         """
@@ -396,9 +392,9 @@ class ElicitationLoopTests(unittest.TestCase):
                 return base + timedelta(seconds=10 * next(ticks))
 
         output = io.StringIO()
-        with patch("dojo.discuss.datetime", Clock):
+        with patch("dojo.discuss.datetime", Clock), patch("dojo.storage.datetime", Clock):
             code = run_discuss(
-                self.store, client=FakeClient(TWO_TURNS), read_line=read_lines(["讲一条做法", "对"]),
+                self.store, client=FakeClient([PROPOSE]), read_line=read_lines(["讲一条做法", "/认可"]),
                 output=output, environ={}, no_profile=True,
             )
         self.assertEqual(0, code)
@@ -414,12 +410,12 @@ class ElicitationLoopTests(unittest.TestCase):
         # the state this test has to be able to call out. Both values are ticks of the
         # driven clock, so the comparison is on a clock this test owns.
         self.assertLess(agreed, basis["accepted_at"],
-                        "the agreement happened while the user was typing, before the write")
+                        "the local acceptance arrived before the write")
         self.assertEqual(0, (datetime.fromisoformat(agreed) - base).seconds % 10,
                          "the moment came from this test's clock, not the host's")
 
     def test_legacy_event_promotions_without_summary_are_also_untrusted(self):
-        self.run_session(["讲一条做法", "对", "真实的回答材料"])
+        self.run_session(["讲一条做法", "/认可", "真实的回答材料"])
         path = next((self.root / "sessions").glob("*.jsonl"))
         records = self.trace()
         for row in records:

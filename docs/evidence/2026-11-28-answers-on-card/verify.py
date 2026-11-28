@@ -58,7 +58,8 @@ ANSWERS = {
     "price": "负责夜班的两个同事要多花时间跑一趟",
     "off": "有一次系统没发出来，我在路上才发现，那次就不该靠它",
 }
-OPENING = ["聊一下值班提醒", "对，就这么定"]
+# The stub proposes once; the next input approves the version shown on screen locally.
+OPENING = ["聊一下值班提醒", "/认可"]
 # None of these three words appears in the card's own sentence, so a match on them can only
 # have come from his answer -- which is what makes the search reading meaningful.
 HIS_QUERY = "没发出来 路上 才发现"
@@ -121,7 +122,6 @@ def main() -> int:
     REPLIES.extend([
         {"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
          "user_stance": "neutral"},
-        {"answer": "好，就这句。", "candidate": CONCLUSION, "user_stance": "accept"},
     ])
     server = ThreadingHTTPServer(("127.0.0.1", 0), Stub)
     port = server.server_address[1]
@@ -365,9 +365,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     broken_env = dict(env, DOJO_SESSIONS=str(root / "broken-sessions"))
     REQUESTS.clear()
     REPLIES.extend([{"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
-                     "user_stance": "neutral"},
-                    {"answer": "好，就这句。", "candidate": CONCLUSION,
-                     "user_stance": "accept"}])
+                     "user_stance": "neutral"}])
     # In a child process, because `dojo(...)` here is a subprocess: a monkeypatch in this
     # interpreter would never reach the session under test (my first version of this scene
     # patched here and reported all four answers as recorded -- a green that proved nothing).
@@ -499,9 +497,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     quiet_env = dict(env, DOJO_SESSIONS=str(quiet_sessions))
     REQUESTS.clear()
     REPLIES.extend([{"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
-                     "user_stance": "neutral"},
-                    {"answer": "好，就这句。", "candidate": CONCLUSION,
-                     "user_stance": "accept"}])
+                     "user_stance": "neutral"}])
     quiet = dojo(["--db", str(quiet_db), "discuss", "--no-trace"],
                  stdin_text="\n".join(OPENING + list(ANSWERS.values())) + "\n", env=quiet_env)
     quiet_receipt = next((line for line in quiet.stdout.splitlines()

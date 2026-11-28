@@ -71,9 +71,8 @@ def session_output(answers=("", "", "", ""), no_trace=False):
     try:
         code = run_discuss(
             store,
-            client=FakeClient([result("你描述的是：检查该谁做。", CONCLUSION),
-                               result("那我们把它写成这一条。", CONCLUSION, user_stance="accept")]),
-            read_line=read_lines(["讲一条做法", "对", *answers, "", "", "", "", ""]),
+            client=FakeClient([result("你描述的是：检查该谁做。", CONCLUSION)]),
+            read_line=read_lines(["讲一条做法", "/认可", *answers, "", "", "", "", ""]),
             output=out,
             no_trace=no_trace,
         )

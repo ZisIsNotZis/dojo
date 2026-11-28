@@ -100,13 +100,8 @@ def main() -> int:
     REPLIES[:] = [
         {"answer": "先把它写成一句带边界的话：" + STATEMENT, "candidate": CONCLUSION,
          "user_stance": "neutral"},
-        {"answer": "记下了。", "candidate": CONCLUSION, "user_stance": "accept"},
-        {"answer": "嗯。", "candidate": None, "user_stance": "neutral"},
-        {"answer": "嗯。", "candidate": None, "user_stance": "neutral"},
-        {"answer": "嗯。", "candidate": None, "user_stance": "neutral"},
-        {"answer": "嗯。", "candidate": None, "user_stance": "neutral"},
     ]
-    done = cli("discuss", stdin="提醒太多了，我想让系统盯着\n对，就是这个\n"
+    done = cli("discuss", stdin="提醒太多了，我想让系统盯着\n/认可\n"
                "他下班以后就不看群了\n团队就我们几个\n有一次半夜没人看\n就这些\n")
     if done.returncode:
         print(done.stdout[-1500:], done.stderr[-1500:])

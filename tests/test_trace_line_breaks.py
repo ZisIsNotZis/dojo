@@ -115,11 +115,10 @@ class OneRealSessionWithAPastedAnswer(unittest.TestCase):
         client = FakeClient([
             {"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": CONCLUSION, "user_stance": "accept"},
         ])
         output = io.StringIO()
         code = run_discuss(self.store, client=client,
-                           read_line=read_lines(["讲一条做法", "对，就这么定", *answers]),
+                           read_line=read_lines(["讲一条做法", "/认可", *answers]),
                            output=output, environ={})
         return code, output.getvalue()
 

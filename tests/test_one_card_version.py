@@ -100,15 +100,14 @@ class OpenedCardStaysOneVersion(unittest.TestCase):
         first = FakeClient([
             {"answer": "那我们把这句当成现在这一版。", "candidate": conclusion(),
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": conclusion(), "user_stance": "accept"},
-            {"answer": "接着说。", "candidate": None, "user_stance": "neutral"},
         ])
         code = run_discuss(
             self.store, client=first, card=candidate_id,
-            read_line=read_lines(["接着上次那条说", "对，就这么定", "还有一点"]),
+            read_line=read_lines(["接着上次那条说", "/认可"]),
             output=io.StringIO(), environ={},
         )
         self.assertEqual(0, code)
+        self.assertEqual([candidate_id], json.loads(self.trace().read_text(encoding="utf-8").splitlines()[-1])["saved"])
 
         # The library moves under the conversation, exactly as a second terminal could.
         self.store.revise(
@@ -139,11 +138,9 @@ class OpenedCardStaysOneVersion(unittest.TestCase):
         client = FakeClient([
             {"answer": "那我们把这句当成现在这一版。", "candidate": conclusion(),
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": conclusion(), "user_stance": "accept"},
-            {"answer": "接着说。", "candidate": None, "user_stance": "neutral"},
         ])
         run_discuss(self.store, client=client, card=candidate_id,
-                    read_line=read_lines(["接着上次那条说", "对，就这么定", "还有一点"]),
+                    read_line=read_lines(["接着上次那条说", "/认可"]),
                     output=io.StringIO(), environ={})
         self.store.revise(candidate_id, NARROWED, REASON, session="sess-B")
         output = io.StringIO()
@@ -171,11 +168,10 @@ class TheReceiptDoesNotSpeakForTheLibrary(unittest.TestCase):
         client = FakeClient([
             {"answer": "那我们把这句当成现在这一版。", "candidate": conclusion(),
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": conclusion(), "user_stance": "accept"},
         ])
         output = io.StringIO()
         code = run_discuss(self.store, client=client,
-                           read_line=read_lines(["讲一条做法", "对，就这么定", *answers]),
+                           read_line=read_lines(["讲一条做法", "/认可", *answers]),
                            output=output, environ={})
         return code, output.getvalue()
 

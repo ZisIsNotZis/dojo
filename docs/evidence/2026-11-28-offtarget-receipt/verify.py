@@ -88,9 +88,8 @@ class Library:
         output = io.StringIO()
         code = run_discuss(
             self.store,
-            client=FakeClient([result("那我们把这句当成现在这一版。", CONCLUSION),
-                               result("好，就这句。", CONCLUSION, user_stance="accept")]),
-            read_line=read_lines(["讲一条做法", "对，就这么定", *answers]),
+            client=FakeClient([result("那我们把这句当成现在这一版。", CONCLUSION)]),
+            read_line=read_lines(["讲一条做法", "/认可", *answers]),
             output=output, no_trace=no_trace,
         )
         return code, output.getvalue()

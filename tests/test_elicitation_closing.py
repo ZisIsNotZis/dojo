@@ -65,10 +65,7 @@ def read_lines(lines):
     return read_line
 
 
-TWO_TURNS = [
-    result("你描述的是：检查该谁做。", CONCLUSION),
-    result("那我们把它写成这一条。", CONCLUSION, user_stance="accept"),
-]
+PROPOSE = result("你描述的是：检查该谁做。", CONCLUSION)
 
 
 def store_snapshot(root):
@@ -100,7 +97,7 @@ class ClosingLineTests(unittest.TestCase):
 
     def run_session(self, answers, no_trace=False, snapshot_each_turn=True):
         output = io.StringIO()
-        scripted = ["讲一条做法", "对", *answers]
+        scripted = ["讲一条做法", "/认可", *answers]
         if snapshot_each_turn:
             inner = read_lines(scripted)
 
@@ -113,7 +110,7 @@ class ClosingLineTests(unittest.TestCase):
             read_line = read_lines(scripted)
         code = run_discuss(
             self.store,
-            client=FakeClient(TWO_TURNS),
+            client=FakeClient([PROPOSE]),
             read_line=read_line,
             output=output,
             no_trace=no_trace,

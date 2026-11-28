@@ -99,15 +99,14 @@ class OneRealSession(unittest.TestCase):
         self.store = Store(self.root / "dojo.sqlite3")
         self.addCleanup(self.store.close)
 
-    def run_session(self, answers, replies=None):
-        client = FakeClient(replies or [
+    def run_session(self, answers):
+        client = FakeClient([
             {"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": CONCLUSION, "user_stance": "accept"},
         ])
         output = io.StringIO()
         code = run_discuss(self.store, client=client,
-                           read_line=read_lines(["讲一条做法", "对，就这么定", *answers]),
+                           read_line=read_lines(["讲一条做法", "/认可", *answers]),
                            output=output, environ={})
         return code, output.getvalue(), client
 
@@ -148,13 +147,9 @@ class OneRealSession(unittest.TestCase):
     def test_two_ways_of_saying_it_get_the_same_outcome(self):
         first = self.run_session(["那天我把检查交出去了", "我少了判断的机会", "没人再复核",
                                   "没有。"])
-        second_replies = [
-            {"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
-             "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": CONCLUSION, "user_stance": "accept"},
-        ]
         second = self.run_session(["那天我把检查交出去了", "我少了判断的机会", "没人再复核",
-                                   "没遇到过。"], replies=second_replies)
+                                   "没遇到过。"])
+        self.assertTrue(self.receipt(first[1]), first[1])
         self.assertEqual(self.receipt(first[1]), self.receipt(second[1]),
                          "同一意思的两句话不该得到不同的回执")
 
@@ -277,13 +272,11 @@ class TheEndOfASession(unittest.TestCase):
         """
         code, text = self.run_early_exit()
         self.assertEqual(0, code)
-        draft_line = next(line for line in text.splitlines() if "草稿" in line)
-        self.assertIn("python3 -m dojo", draft_line)
-        self.assertIn(" show ", draft_line)
-        draft_id = draft_line.split("草稿：", 1)[1].split("（", 1)[0]
-        self.assertIn(draft_id, draft_line)
-        self.assertIn(str(self.store.path), draft_line,
-                      "the command names no library, so it reads the default one")
+        draft_line = next(line for line in text.splitlines() if "回看库里的记录：" in line)
+        tokens = shlex.split(draft_line.split("回看库里的记录：", 1)[1])
+        draft_id = self.store.list_candidates()[0]["id"]
+        self.assertEqual(["python3", "-m", "dojo", "--db", str(self.store.path),
+                          "show", draft_id], tokens)
 
     def test_the_exit_names_the_way_back_into_the_words(self):
         code, text = self.run_early_exit()
@@ -310,20 +303,19 @@ class TheEndOfASession(unittest.TestCase):
                     output=output, environ={}, no_trace=True)
         self.assertNotIn("dojo transcript", output.getvalue())
 
-    def test_a_reused_card_is_not_called_unaccepted(self):
-        """The ending wording is the card that was handed over; it carries a confirmation.
-        The screen may not say nobody has accepted it."""
+    def test_the_exit_distinguishes_library_acceptance_from_this_session(self):
+        """A historically accepted card was not accepted again in this session."""
         candidate_id = self.card()
         self.store.record_acceptance(candidate_id, "sess-A", path="discuss_conclusion")
         self.store.confirm(candidate_id, "值得讨论", session="sess-A")
         code, text = self.run_early_exit(card=candidate_id, lines=("我想接着说",))
         self.assertEqual(0, code)
-        ending = [line for line in text.splitlines()
-                  if "桌上仍是" in line or "未认可的草稿" in line]
-        self.assertTrue(ending, text)
-        self.assertIn("桌上仍是", ending[0])
-        self.assertIn("以前就被认可过", ending[0])
-        self.assertNotIn("没有人认可过", ending[0])
+        self.assertIn("库里有这套说法（句子连同它写的条件）的认可记录", text)
+        ending = next(line for line in text.splitlines() if "回看库里的记录：" in line)
+        self.assertIn("本场未认可最后展示的版本", ending)
+        self.assertIn("它不是本场达成的结论", ending)
+        self.assertIn(candidate_id, ending)
+        self.assertNotIn("没有人认可过", text)
 
     def test_the_view_does_not_call_a_reused_card_unaccepted(self):
         """The view is store-free, so it decides from the handout row: when the ending
@@ -341,15 +333,20 @@ class TheEndOfASession(unittest.TestCase):
         self.assertEqual(candidate_id, view["handed"]["candidate"])
         shown = transcript_module.render(view)
         self.assertIn("桌上仍是", shown)
+        self.assertIn("本场没有认可这版说法", shown)
         self.assertNotIn("没有人认可过", shown)
         self.assertIn("python3 -m dojo show", shown)
 
     def test_a_fresh_draft_is_still_called_unaccepted(self):
         code, text = self.run_early_exit()
         self.assertEqual(0, code)
-        ending = [line for line in text.splitlines() if "草稿" in line][0]
-        self.assertIn("没有写下被认可的卡片", ending)
-        self.assertIn("没有人认可过", ending)
+        ending = next(line for line in text.splitlines() if "回看库里的记录：" in line)
+        self.assertIn("本场未认可最后展示的版本", ending)
+        self.assertIn("它不是本场达成的结论", ending)
+        draft_id = self.store.list_candidates()[0]["id"]
+        sources = self.store.show(draft_id)["candidate"]["sources"]
+        self.assertEqual([("model_generated", "unverified")],
+                         [(source["type"], source["verification"]) for source in sources])
 
 
 if __name__ == "__main__":

@@ -230,11 +230,10 @@ def main() -> int:
     restated = conclusion("检查交给系统跑，只在结果会打断他时叫醒他。")
     echo = FakeClient([
         {"answer": "这句就是以前那条。", "candidate": restated, "user_stance": "neutral"},
-        {"answer": "那我记成你同意。", "candidate": restated, "user_stance": "accept"},
     ])
     echo_out = io.StringIO()
     run_discuss(store, client=echo, card=echo_card["id"],
-                read_line=read_lines(["就是以前那条，我同意", "对"]),
+                read_line=read_lines(["就是以前那条，我同意", "/认可"]),
                 output=echo_out, environ={})
     state = store.show(echo_card["id"])["candidate"]
     check("C9 只是把交过来的话重复一遍，本场不算第二个独立来源",

@@ -147,9 +147,8 @@ class Checks:
         REPLIES[:] = [
             {"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
              "user_stance": "neutral"},
-            {"answer": "好，就这句。", "candidate": CONCLUSION, "user_stance": "accept"},
         ]
-        stdin = "\n".join(["我想接着上次那张卡继续想", "对，就这么定",
+        stdin = "\n".join(["我想接着上次那张卡继续想", "/认可",
                            "那天我把检查交出去了", "我少了判断的机会",
                            "没人再复核", "没有。"]) + "\n"
         done = self.cli("--db", str(self.library), "discuss", "--card", "c1", stdin=stdin)
