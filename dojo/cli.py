@@ -112,6 +112,15 @@ def _parser() -> argparse.ArgumentParser:
     revise.add_argument("id")
     revise.add_argument("--statement", required=True)
     revise.add_argument("--reason", required=True)
+    revise.add_argument(
+        "--adopt-link", type=int, action="append", metavar="EVENT_SEQUENCE",
+        help=(
+            "explicitly use one already-registered link to this card's current version in "
+            "this revision; the number is show's incoming_links[].sequence. This does not "
+            "copy its source, wording, relation or approval onto the card, and a stale, "
+            "unknown or non-link event is refused"
+        ),
+    )
 
     promote = sub.add_parser(
         "promote",
@@ -532,6 +541,10 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
                 "source / target 是登记时的版本，不随修订或合并改写。"
                 "若 target 的编号或版本与当前 candidate 不同，不能把这条关联当作对当前版的判断；"
                 "旧记录的版本若为 null，表示未留下版本。"
+                "incoming_link_summary 按目标版本列出登记时的申报来源组；同组去重，未知另列。"
+                "组数不是人数、支持票或独立核验数。adopted_by 只表示这次改写明确采用了该关联，"
+                "不表示认可对方措辞，"
+                "也不把来源计入本卡。"
             )
         if len(value["redirect_chain"]) > 1:
             value["redirect_links_reading"] = (
@@ -569,7 +582,11 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         source = _json_argument(args.source_json, "source") if args.source_json else None
         return store.challenge(args.id, args.text, source)
     if command == "revise":
-        return store.revise(args.id, args.statement, args.reason)
+        sequences = args.adopt_link or []
+        if len(sequences) > 1:
+            raise DojoError("一次改写只能用 --adopt-link 指定一条关联；不会从多条中默认选一条")
+        return store.revise(args.id, args.statement, args.reason,
+                            adopt_link_sequence=sequences[0] if sequences else None)
     if command == "alias":
         return store.alias(args.id, args.wording, args.reason)
     if command == "promote":

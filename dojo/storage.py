@@ -945,6 +945,25 @@ class Store:
             ) if key in snapshot})
         return endpoint
 
+    def _link_from_event(self, row: sqlite3.Row, target_id: str) -> dict[str, Any] | None:
+        try:
+            details = json.loads(row["details_json"])
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(details, dict) or details.get("target") != target_id:
+            return None
+        relation, source_id = details.get("type"), row["candidate_id"]
+        if not isinstance(relation, str) or relation not in RELATIONS or not source_id:
+            return None
+        return {
+            "relation": relation,
+            "reason": details.get("note"),
+            "sequence": row["seq"],
+            "recorded_at": row["created_at"],
+            "source": self._link_endpoint(source_id, details.get("version")),
+            "target": self._link_endpoint(target_id, details.get("target_version")),
+        }
+
     def incoming_links(self, candidate_id: str) -> list[dict[str, Any]]:
         """Read human link decisions addressed to this exact ID, not inherited edges.
 
@@ -958,24 +977,48 @@ class Store:
             "SELECT candidate_id, seq, details_json, created_at FROM events "
             "WHERE event='link' ORDER BY seq"
         ):
+            link = self._link_from_event(row, candidate_id)
+            if link is not None:
+                found.append(link)
+        return found
+
+    def _adoptable_link(self, state: dict[str, Any], sequence: int) -> None:
+        """Check under the same writer lock as the new revision."""
+        if type(sequence) is not int or not 1 <= sequence <= 2**63 - 1:
+            raise DojoError("--adopt-link 需要正整数关联事件编号（sequence）")
+        row = self.connection.execute(
+            "SELECT seq,candidate_id,details_json,created_at FROM events WHERE seq=? AND event='link'",
+            (sequence,),
+        ).fetchone()
+        if row is None:
+            raise DojoError(f"找不到关联事件 #{sequence}；请使用 show 的 incoming_links.sequence")
+        link = self._link_from_event(row, state["id"])
+        if link is None:
+            raise DojoError(f"关联 #{sequence} 不是明确登记到 {state['id']} 的关联")
+        source, target = link["source"], link["target"]
+        if "statement" not in source or "statement" not in target:
+            raise DojoError(f"关联 #{sequence} 的登记版本未留存或无法读取，不能采纳")
+        if target["version"] != state["version"]:
+            raise DojoError(f"关联 #{sequence} 指向 v{target['version']}，当前是 v{state['version']}；"
+                            "请重新核对并登记对当前版本的关联")
+
+    def _link_adoptions(self, candidate_id: str) -> dict[int, dict[str, Any]]:
+        adoptions = {}
+        for row in self.connection.execute(
+            "SELECT seq,details_json FROM events WHERE candidate_id=? AND event='revise' ORDER BY seq",
+            (candidate_id,),
+        ):
             try:
                 details = json.loads(row["details_json"])
             except (TypeError, json.JSONDecodeError):
                 continue
-            if not isinstance(details, dict) or details.get("target") != candidate_id:
-                continue
-            relation, source_id = details.get("type"), row["candidate_id"]
-            if not isinstance(relation, str) or relation not in RELATIONS or not source_id:
-                continue
-            found.append({
-                "relation": relation,
-                "reason": details.get("note"),
-                "sequence": row["seq"],
-                "recorded_at": row["created_at"],
-                "source": self._link_endpoint(source_id, details.get("version")),
-                "target": self._link_endpoint(candidate_id, details.get("target_version")),
-            })
-        return found
+            if (isinstance(details, dict) and type(details.get("adopt_link_sequence")) is int
+                    and type(details.get("version")) is int and isinstance(details.get("reason"), str)
+                    and details.get("effect") != "unchanged"):
+                adoptions[details["adopt_link_sequence"]] = {
+                    "sequence": row["seq"], "version": details["version"], "reason": details["reason"],
+                }
+        return adoptions
 
     def show(self, candidate_id: str, *, include_incoming_links: bool = False) -> dict[str, Any]:
         state, path = self.resolve(candidate_id)
@@ -1016,6 +1059,14 @@ class Store:
             incoming = self.incoming_links(path[0])
             if incoming:
                 payload["incoming_links"] = incoming
+                adoptions = self._link_adoptions(path[0])
+                for link in incoming:
+                    adoption = adoptions.get(link["sequence"])
+                    if adoption:
+                        link["adopted_by"] = {**adoption, "is_current": (
+                            path[0] == state["id"] and adoption["version"] == state["version"]
+                        )}
+                payload["incoming_link_summary"] = _summarize_incoming_links(incoming, state)
         return payload
 
     def _active(self, state: dict[str, Any]) -> None:
@@ -1102,6 +1153,7 @@ class Store:
         contradictions: list[str] | None = None,
         unknowns: list[str] | None = None,
         session: str | None = None,
+        adopt_link_sequence: int | None = None,
     ) -> dict[str, Any]:
         statement, reason = _text(statement, "statement"), _text(reason, "revision reason")
         if kind is not None and kind not in KINDS:
@@ -1117,6 +1169,10 @@ class Store:
             state = self._get(_id(candidate_id))
             self._active(state)
             old_statement = state["statement"]
+            if adopt_link_sequence is not None:
+                self._adoptable_link(state, adopt_link_sequence)
+                if statement == old_statement:
+                    raise DojoError("采纳关联须写出不同的新措辞；原样保留不是一次改写")
             state["statement"] = statement
             if kind is not None:
                 state["kind"] = kind
@@ -1151,6 +1207,8 @@ class Store:
                 "alternatives": alternatives, "contradictions": contradictions,
                 "unknowns": unknowns, "session": session,
             }
+            if adopt_link_sequence is not None:
+                details["adopt_link_sequence"] = request["adopt_link_sequence"] = adopt_link_sequence
             state = self._write(state, "revise", details, request)
         return state
 
@@ -3415,6 +3473,48 @@ def wording_digest(state: dict[str, Any]) -> str:
     return hashlib.sha256(
         content_key(state.get("statement", ""), state.get("kind", ""), state).encode("utf-8")
     ).hexdigest()
+
+
+def _summarize_incoming_links(links: list[dict[str, Any]], current: dict[str, Any]) -> dict[str, Any]:
+    # Group from the recorded source snapshots, never the live card or session ID.
+    # One link may have multiple declared groups and an unidentified source at once.
+    by_version: dict[int | None, dict[str, Any]] = {}
+    all_groups = set()
+    for link in links:
+        seq, target = link["sequence"], link["target"]
+        version = target["version"]
+        bucket = by_version.setdefault(version, {
+            "target_version": version,
+            "is_current": (target["id"] == current["id"] and version == current["version"]
+                           and "statement" in target),
+            "declared_groups": {}, "unknown_group_link_sequences": [], "relations": {},
+        })
+        bucket["relations"].setdefault(link["relation"], []).append(seq)
+        sources = link["source"].get("sources", [])
+        known = set()
+        unknown = not sources
+        for source in sources:
+            group = source.get("independence_group")
+            if isinstance(group, str) and group.strip() and group != "unknown":
+                known.add(group)
+            else:
+                unknown = True
+        if unknown:
+            bucket["unknown_group_link_sequences"].append(seq)
+        all_groups.update(known)
+        for group in sorted(known):
+            bucket["declared_groups"].setdefault(group, []).append(seq)
+
+    return {
+        "declared_group_count": len(all_groups),
+        "by_target_version": [
+            {**bucket, "declared_groups": [
+                {"group": group, "link_sequences": seqs}
+                for group, seqs in bucket["declared_groups"].items()
+            ]}
+            for bucket in by_version.values()
+        ],
+    }
 
 
 def _same_provenance(

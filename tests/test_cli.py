@@ -450,6 +450,82 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertIn("show ramp-survivor", redirected["redirect_links_reading"])
         self.assertNotIn("incoming_links", self.run_cli("show", "ramp-survivor"))
 
+    def test_show_groups_registered_links_and_distinguishes_adoption(self):
+        def add(card, group=None):
+            source = {"id": "src-" + card, "type": "synthetic_roleplay", "claim": card}
+            if group:
+                source["independence_group"] = group
+            self.run_cli("add", "--id", card, "--kind", "experience_claim", "--statement", card,
+                         "--source-json", json.dumps(source))
+
+        def link(card, relation):
+            self.run_cli("link", card, "--relation", relation, "--target", "claim", "--reason", relation)
+            return self.run_cli("show", "claim")["incoming_links"][-1]["sequence"]
+
+        add("claim", "own-group")
+        add("note", "notebook")
+        old = link("note", "supports")
+        now = self.run_cli("revise", "claim", "--statement", "限于一次记录", "--reason", "补范围")
+        self.run_cli("revise", "note", "--statement", "只记了桌面的情况", "--reason", "补范围")
+        selected = link("note", "narrows")
+        # The original `note` snapshot is retained when a new group is later attached.
+        self.run_cli("attach-source", "note", "--source-json", json.dumps({
+            "id": "src-later", "type": "synthetic_roleplay", "claim": "复查", "independence_group": "later",
+        }))
+        add("unsigned")
+        objection = link("unsigned", "challenges")
+        unchanged = self.db.read_bytes()
+        shown = self.run_cli("show", "claim", "--history")
+        self.assertEqual(now, shown["candidate"])
+        self.assertEqual(unchanged, self.db.read_bytes())
+        self.assertEqual({
+            "declared_group_count": 1,
+            "by_target_version": [
+                {"target_version": 1, "is_current": False,
+                 "declared_groups": [{"group": "notebook", "link_sequences": [old]}],
+                 "unknown_group_link_sequences": [], "relations": {"supports": [old]}},
+                {"target_version": 2, "is_current": True,
+                 "declared_groups": [{"group": "notebook", "link_sequences": [selected]}],
+                 "unknown_group_link_sequences": [objection],
+                 "relations": {"narrows": [selected], "challenges": [objection]}},
+            ],
+        }, shown["incoming_link_summary"])
+        self.assertTrue(all("adopted_by" not in link for link in shown["incoming_links"]))
+        for flags, statement in [([old], "新措辞"), ([selected], now["statement"]),
+                                 ([selected, objection], "新措辞"), ([10**30], "新措辞")]:
+            with self.subTest(flags=flags, statement=statement):
+                result = self.run_cli("revise", "claim", "--statement", statement, "--reason", "不应写入",
+                                      *(s for seq in flags for s in ("--adopt-link", str(seq))), success=False)
+                self.assertEqual(2, result.returncode)
+                self.assertEqual(unchanged, self.db.read_bytes())
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            raw, = conn.execute("SELECT details_json FROM events WHERE seq=?", (objection,)).fetchone()
+            details = json.loads(raw)
+            del details["target_version"]
+            conn.execute("UPDATE events SET details_json=? WHERE seq=?", (json.dumps(details), objection))
+        no_version = self.run_cli("show", "claim")["incoming_link_summary"]["by_target_version"][-1]
+        self.assertEqual((None, False, [objection]), (no_version["target_version"],
+                         no_version["is_current"], no_version["unknown_group_link_sequences"]))
+        unchanged = self.db.read_bytes()
+        self.run_cli("revise", "claim", "--statement", "不猜版本", "--reason", "拒绝",
+                     "--adopt-link", str(objection), success=False)
+        self.assertEqual(unchanged, self.db.read_bytes())
+        revised = self.run_cli("revise", "claim", "--statement", "桌面上的一次记录", "--reason", "纳入桌面条件",
+                               "--adopt-link", str(selected))
+        self.assertEqual((3, "draft", now["sources"], now["relations"]),
+                         (revised["version"], revised["status"], revised["sources"], revised["relations"]))
+        read = self.run_cli("show", "claim", "--history")
+        changed = read["history"]["events"][-1]
+        self.assertEqual(("revise", selected), (changed["event"], changed["details"]["adopt_link_sequence"]))
+        adopted, = [edge for edge in read["incoming_links"] if "adopted_by" in edge]
+        self.assertEqual(selected, adopted["sequence"])
+        expected_adoption = {"sequence": changed["sequence"], "version": 3, "reason": "纳入桌面条件"}
+        self.assertEqual({**expected_adoption, "is_current": True}, adopted["adopted_by"])
+        self.run_cli("revise", "claim", "--statement", "普通的新修订", "--reason", "不再采纳任何关联")
+        final = self.run_cli("show", "claim")
+        adopted, = [edge for edge in final["incoming_links"] if "adopted_by" in edge]
+        self.assertEqual({**expected_adoption, "is_current": False}, adopted["adopted_by"])
+
     def test_real_cli_seed_add_confirm_search_revoke_merge_restore_and_export(self):
         seeded = self.run_cli("seed")
         self.assertTrue(seeded["loaded"])
