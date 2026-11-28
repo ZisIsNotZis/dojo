@@ -26,6 +26,19 @@ DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
 DEFAULT_EXPORTS = DEFAULT_HOME / "exports"
 
 
+def _trace_argument(value: str, database: str | None = None) -> Path:
+    """The record file a reader asked to see, found even if the library moved.
+
+    A printed command carries an absolute path, which is right when it is printed and
+    stale the moment someone moves the library and `sessions/` together -- the reviewer did
+    exactly that: `search` still found the card and the answers were still on it, but the
+    freshly printed command pointed at the old directory and exited 2. `commands.locate_record`
+    holds the rule; this only supplies the library the caller named.
+    """
+    found, _where = commands.locate_record(value, database)
+    return found or Path(value).expanduser()
+
+
 def _json_argument(value: str, label: str) -> Any:
     try:
         if value.startswith("@"):
@@ -892,7 +905,7 @@ def main(argv: list[str] | None = None) -> int:
             # store here would create one for a question about a file.
             from .transcript import TranscriptError, load, render
             try:
-                view = load(Path(args.trace).expanduser())
+                view = load(_trace_argument(args.trace, args.db))
             except TranscriptError as exc:
                 print(f"无法回看：{exc}。", file=sys.stderr)
                 return 2

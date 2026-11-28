@@ -173,6 +173,36 @@ ARMS = [
         "两个写入同时给旧库补列，都没有报错",
     ),
     (
+        # Review: a relative `DOJO_SESSIONS` produced a relative path in the printed
+        # command, so pasting it elsewhere opened nothing.
+        "a-relative-record-path-is-printed-unchanged",
+        "dojo/commands.py",
+        '        return absolute(given), "as-stored"\n',
+        '        return given, "as-stored"\n',
+        "相对路径也解析成绝对路径",
+    ),
+    (
+        # Review: a stored path was echoed without checking it still exists, so moving
+        # the library with its `sessions/` printed a command that exited 2.
+        "a-moved-record-is-still-printed-as-the-old-path",
+        "dojo/answers.py",
+        '            found, where = commands.locate_record(record, database)\n',
+        '            from pathlib import Path as _P\n'
+        '            found, where = _P(record), "as-stored"\n',
+        "搬走之后屏幕上那条命令仍存在且能跑",
+    ),
+    (
+        # Review: the opening promised nothing would be kept while an accepted card, whose
+        # sentence may be the person's own words, was still written to the library.
+        "the-quiet-promise-is-wider-than-the-code",
+        "dojo/discuss.py",
+        '    "这一场不保存会话原文（上面已说轨迹关闭），你答四件事的原话不会附到卡片上。"\n'
+        '    "卡片仍会像平常一样留在库里：你认可的那一句（可能就是你说过的话，由主持人整理）"\n',
+        '    "这一场什么都不留下，也不会写任何卡片。"\n'
+        '    "不必为了把卡片填满而勉强作答。"\n',
+        "开场就说清楚哪部分不存、哪部分仍会留下",
+    ),
+    (
         # Review: every line offered the way back even when the record died before that
         # answer, so the command opened a file that did not contain the sentence.
         "a-way-back-is-offered-for-a-sentence-not-in-the-record",

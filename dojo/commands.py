@@ -31,6 +31,7 @@ makes what the caller decided paste-able.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -99,6 +100,41 @@ def absolute(path: str | Path) -> Path:
     """
     value = Path(path).expanduser()
     return value if value.is_absolute() else Path.cwd() / value
+
+
+def locate_record(record: str | Path | None,
+                  database: str | Path | None = None) -> tuple[Path | None, str]:
+    """The session record a stored path names, found again if the library moved.
+
+    A stored path is right when it is written and stale the moment someone moves the
+    library and its `sessions/` directory together. Repeated review finding: after such a
+    move `search` still found the card and the answers were still on it, but the command
+    it printed pointed at the old directory and exited 2.
+
+    A session file's name is unique (`discuss-<32 hex>.jsonl`), so the same name under the
+    configured session directory, or beside this library, is the same record rather than a
+    guess. Returns the path to use (or None if nothing was found) and which of the three
+    it was, so the screen can say "this moved" instead of silently printing a fifth path.
+    """
+    if not record:
+        return None, "none"
+    given = Path(record).expanduser()
+    if given.is_file():
+        # Absolute even when it was relative: `DOJO_SESSIONS=meeting notes` is a perfectly
+        # normal thing to type, and a command printed with that path means a different
+        # directory in every terminal it is pasted into (#3419's rule, applied here).
+        return absolute(given), "as-stored"
+    candidates: list[tuple[Path, str]] = []
+    configured = os.environ.get("DOJO_SESSIONS", "").strip()
+    if configured:
+        candidates.append((Path(configured).expanduser() / given.name, "sessions-env"))
+    if database is not None:
+        candidates.append((absolute(database).parent / "sessions" / given.name,
+                           "beside-library"))
+    for candidate, where in candidates:
+        if candidate.is_file():
+            return absolute(candidate), where
+    return None, "missing"
 
 
 def dojo(*arguments: object, db: str | Path | None = None) -> str:

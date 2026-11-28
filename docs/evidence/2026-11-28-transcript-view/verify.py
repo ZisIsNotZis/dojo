@@ -136,7 +136,7 @@ def main() -> int:
     line = receipt_of(text)
     marker = "运行："
     check("A1 回执在说「留在本场记录里」之后点名了一条回看命令",
-          marker in line and "python3 -m dojo transcript" in line, line)
+          marker in line and " transcript " in line, line)
     command = line.split(marker, 1)[1].split("（", 1)[0].strip() if marker in line else ""
     check("A2 点名的命令指向这一场的轨迹", str(trace) in command, command)
 
@@ -176,7 +176,7 @@ def main() -> int:
     check("C1 半路断盘时回执说中途写入失败，不说原话留在记录里",
           "轨迹中途写入失败" in line2 and "留在本场记录里" not in line2, line2)
     check("C2 那句仍然点名回看命令（先说的几句真在盘上）",
-          "python3 -m dojo transcript" in line2, line2)
+          " transcript " in line2, line2)
 
     # Cut a complete session instead: `die_after=2` leaves a file too short to cut, and
     # the point here is the tail, not how few rows a dying file has.
@@ -526,10 +526,10 @@ def main() -> int:
                 output=early_out, environ={})
     screen = early_out.getvalue()
     check("J1 退出时点名草稿，并给出看它的命令",
-          any("草稿" in line and "python3 -m dojo show" in line
+          any("草稿" in line and " show " in line
               for line in screen.splitlines()), screen[-500:])
     check("J2 退出时给出回看这一场的命令",
-          "python3 -m dojo transcript" in screen, screen[-500:])
+          " transcript " in screen, screen[-500:])
 
     # A different wording from the draft above, so the library's duplicate check does not
     # hand back that fresh draft; the point is a card that carries a confirmation.

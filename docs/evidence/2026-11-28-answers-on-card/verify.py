@@ -287,6 +287,73 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     reading("卡的状态没有因为附上回答而变成可讨论",
             shown["candidate"]["status"] == "draft", shown["candidate"]["status"])
 
+    # ---- D1b: the way back survives moving the library ------------------------------
+    # Review: with the library and `sessions/` moved together and the session directory
+    # repointed, `search` still found the card and the answers were still on it, but the
+    # freshly printed command pointed at the old directory and exited 2.
+    heading("D1b. 库和 sessions 一起搬走之后，回看命令仍能打开")
+    # A real move, not a copy: the old directory has to be gone, or the stored path still
+    # works and the reading would be green for the wrong reason (my first version copied,
+    # and the old path resolved). The library this scene uses is a dedicated one so the
+    # earlier scenes are not disturbed.
+    moved_root = root / "moved"
+    moved_root.mkdir()
+    moved_db = moved_root / "library.sqlite3"
+    moved_sessions = moved_root / "sessions"
+    shutil.copy2(db, moved_db)
+    original_sessions = db.parent / "sessions"
+    stashed: Path | None = None
+    if original_sessions.is_dir():
+        shutil.copytree(original_sessions, moved_sessions)
+        # Hidden for the length of this reading, then restored: the stored absolute paths
+        # must really be stale (a copy leaves them readable), and the later scenes need
+        # this directory back.
+        stashed = db.parent / "sessions-away"
+        original_sessions.rename(stashed)
+    moved_env = dict(env, DOJO_SESSIONS=str(moved_sessions))
+    moved_screen = dojo(["--db", str(moved_db), "search", HIS_QUERY], env=moved_env).stderr
+    moved_line = next((line.split("回看说这句的那一场：", 1)[1].strip()
+                       for line in moved_screen.splitlines()
+                       if "回看说这句的那一场：" in line), "")
+    if moved_line:
+        moved_run = subprocess.run(shlex.split(moved_line), cwd=str(root), env=moved_env,
+                                   text=True, capture_output=True, timeout=120)
+        reading("搬走之后屏幕上那条命令仍存在且能跑",
+                Path(shlex.split(moved_line)[-1]).is_file() and moved_run.returncode == 0
+                and all(words in moved_run.stdout for words in ANSWERS.values()),
+                moved_run.stderr[-400:])
+    else:
+        reading("搬走之后屏幕上那条命令仍存在且能跑", False, "没有印出命令")
+    if stashed is not None:
+        stashed.rename(original_sessions)
+
+    # ---- D1c: a relative session directory -------------------------------------------
+    # Review: `DOJO_SESSIONS=meeting notes` is a normal thing to type, and the command
+    # printed from it carried that relative path -- pasting it in another terminal opened
+    # a different (or absent) directory and exited 2. A printed line has to mean one file
+    # wherever it lands.
+    heading("D1c. 会话目录写成相对路径时，打印出来的命令仍是绝对路径")
+    from dojo import commands as commands_module  # noqa: E402
+    relative_root = root / "relative-home"
+    relative_root.mkdir()
+    relative_record = relative_root / "meeting notes" / "discuss-abc.jsonl"
+    relative_record.parent.mkdir()
+    relative_record.write_text("{}\n", encoding="utf-8")
+    previous_cwd = Path.cwd()
+    previous_env = os.environ.get("DOJO_SESSIONS")
+    try:
+        os.chdir(relative_root)
+        os.environ["DOJO_SESSIONS"] = "meeting notes"
+        found, where = commands_module.locate_record("meeting notes/discuss-abc.jsonl", None)
+    finally:
+        os.chdir(previous_cwd)
+        if previous_env is None:
+            os.environ.pop("DOJO_SESSIONS", None)
+        else:
+            os.environ["DOJO_SESSIONS"] = previous_env
+    reading("相对路径也解析成绝对路径", found is not None and found.is_absolute()
+            and Path(found).is_file(), str(found))
+
     # ---- D2: the way back is promised only for a sentence that is really in the file --
     # Review: with the second answer's write failing, all four lines still said 回看说这句
     # 的那一场, and the command opened a record holding only the first answer. The trace is
@@ -458,6 +525,13 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     # The sentences must not have leaked into the card itself either: the sentence, the
     # scope and the boundary fields are the pre-question ones.
     quiet_body = json.dumps(quiet_shown.get("candidate") or {}, ensure_ascii=False)
+    # Review: the promise was wider than the code. The four answers are not attached (just
+    # checked), but a card the person accepts is still written -- and its sentence may be
+    # their own words tidied up. Saying "nothing is kept" was false, so the screen has to
+    # say which is which before the person types a word.
+    reading("开场就说清楚哪部分不存、哪部分仍会留下",
+            "不保存会话原文" in quiet.stdout and "不会附到卡片上" in quiet.stdout
+            and "卡片仍会像平常一样留在库里" in quiet.stdout, quiet.stdout[:600])
     reading("他的话也没有漏进卡片的句子或条件",
             not any(words in quiet_body for words in ANSWERS.values()), quiet_body[:300])
     # And a person who does want one kept can still say so, in a command they typed.

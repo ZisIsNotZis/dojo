@@ -195,6 +195,10 @@ class Promotion(unittest.TestCase):
 
 
 class TheWordsOnAScreen(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+
     def card(self, **extra):
         state = {
             "statement": "一句话",
@@ -231,11 +235,18 @@ class TheWordsOnAScreen(unittest.TestCase):
         """
         card = self.card()
         card["answers"]["situation"]["provenance"] = "discussion"
-        card["answers"]["situation"]["trace"] = "/abs/sessions/discuss-abc.jsonl"
-        text = "\n".join(answers_module.screen_lines(card, database="/abs/lib.sqlite3"))
+        # A real file: the screen now resolves the stored path before printing a command,
+        # because a moved library makes the stored one stale (the reviewer moved both and
+        # the printed command exited 2).
+        root = Path(self.temp.name)
+        record = root / "sessions" / "discuss-abc.jsonl"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text("{}\n", encoding="utf-8")
+        card["answers"]["situation"]["trace"] = str(record)
+        text = "\n".join(answers_module.screen_lines(card, database=str(root / "lib.sqlite3")))
         self.assertIn("transcript", text)
         self.assertIn("discuss-abc.jsonl", text)
-        self.assertIn("/abs/lib.sqlite3", text)
+        self.assertIn("lib.sqlite3", text)
         self.assertIn("回看说这句的那一场", text)
 
     def test_a_hand_kept_answer_is_named_as_hand_kept_not_as_a_conversation(self):

@@ -474,9 +474,16 @@ SHAPE_KEPT = (
     "所以不必为了把卡片填满而勉强作答。"
 )
 SHAPE_UNKEPT = (
-    "这一场不保存原文（上面已说轨迹关闭），你答的话只在这段对话里用，"
-    "不会附到卡片上；卡片上那一句和它的条件全算我写的——"
-    "所以不必为了把卡片填满而勉强作答。"
+    # Precise rather than sweeping. "Nothing you say is kept" was not true and could not
+    # be made true without removing the product's main path: a card the person accepts is
+    # written to the library, and its sentence may be their own words tidied up. Review
+    # measured exactly that under `--no-trace` and read the old promise as wider than it
+    # was. So the block says the two things separately: the session record is off and the
+    # four answers are not attached; a card he accepts is still kept, because that is what
+    # the product is for.
+    "这一场不保存会话原文（上面已说轨迹关闭），你答四件事的原话不会附到卡片上。"
+    "卡片仍会像平常一样留在库里：你认可的那一句（可能就是你说过的话，由主持人整理）"
+    "会存下来，条件也算我写的——所以不必为了把卡片填满而勉强作答。"
 )
 
 
@@ -624,8 +631,12 @@ def closing_text(
         # `--no-trace` covers the card too: it is a file like the session record, and the
         # build before this one kept his words there while the screen said they were not
         # kept. An explicit `promote` is still there for a person who wants them kept.
-        on_card = ("这一场你选了不留记录，所以你的原话没有附到卡片上，库里查不到；"
-                   "那张卡只有提问前写下的句子。想把哪句留在卡上，可以用 promote 自己附上去。")
+        # Two facts, because "nothing was kept" would be false: the four answers are not
+        # attached, and the accepted card is still in the library (measured by review --
+        # the opening sentence came back verbatim from `show`).
+        on_card = ("这一场你选了不留记录，所以四件问答的原话没有附到卡片上，库里查不到。"
+                   "卡片本身照常留着——你认可的那一句可能就是你说过的话；要把它也拿掉，"
+                   "用 withdraw 撤销这张卡。想把哪句问答留在卡上，可以用 promote 自己附上去。")
     if not said:
         use = ""  # Nothing was said, so do not say where the words went.
     elif kept is None:

@@ -213,8 +213,12 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertIsNotNone(block, "the shape was never printed")
         self.assertNotIn("会留在本场记录", block,
                          "the shape promises retention in a session that keeps no trace")
-        self.assertIn("不保存原文", block,
+        self.assertIn("不保存会话原文", block,
                       "the shape does not say the transcript is off")
+        # And it no longer claims more than it can: the accepted card is still kept, which
+        # review measured (`show` returned the opening sentence verbatim under --no-trace).
+        self.assertIn("卡片仍会像平常一样留在库里", block,
+                      "the shape does not say what is still kept")
 
     def test_an_early_end_leaves_exactly_the_parts_it_should(self):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])

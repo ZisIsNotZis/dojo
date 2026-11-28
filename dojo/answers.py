@@ -155,9 +155,20 @@ def screen_lines(
             lines.append(indent + "    这句没有写进那一场的记录文件（后半段写入失败），"
                                    "回看那一场也找不到它；会话号：" + str(item.get("session") or "无"))
         elif from_discussion and record:
-            lines.append(indent + "    回看说这句的那一场："
-                         + commands.dojo("transcript", record,
-                                         db=commands.library_argument(database)))
+            # Resolved, not echoed: the stored path is where the record was, and a reader
+            # who moved the library with its `sessions/` should get a command that runs.
+            found, where = commands.locate_record(record, database)
+            if found is not None:
+                lines.append(indent + "    回看说这句的那一场："
+                             + commands.dojo("transcript", found,
+                                             db=commands.library_argument(database)))
+                if where != "as-stored":
+                    # Two facts, both true: where it was recorded, and where it is now.
+                    lines.append(indent + "    （记录已不在原处；这是按文件名找到的同一份记录。）")
+            else:
+                lines.append(indent + "    这一场的记录文件不在了：" + record
+                             + "。卡片上的话仍有效，但那场原话只能靠会话号 "
+                             + str(item.get("session") or "") + " 去找。")
         elif from_discussion:
             # A discussion that kept no record: the card still holds his sentence, and
             # saying why there is nowhere to go is more useful than silence.

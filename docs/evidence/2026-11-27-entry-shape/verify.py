@@ -158,7 +158,11 @@ def main() -> int:
         # repeating the promise the opening just contradicted.
         "关记录时没有轨迹": recorded_off is None and code_off == 0,
         "关记录时不许诺保存原文": block_off is not None and "会留在本场记录" not in block_off,
-        "关记录时说清楚原文不存": block_off is not None and "不保存原文" in block_off,
+        # Narrowed at review's request: the promise has to say exactly what is not kept.
+        # The session record and the four answers are; a card he accepts is not, and
+        # saying otherwise was wider than the code (measured on 4a4aa26).
+        "关记录时说清楚原文不存": block_off is not None and "不保存会话原文" in block_off
+                                 and "卡片仍会像平常一样留在库里" in block_off,
     })
     print(json.dumps({"exit_code": code, "shape_block": block,
                       "chars": len(block), "checks": checks,
