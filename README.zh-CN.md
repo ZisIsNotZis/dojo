@@ -39,9 +39,12 @@ DEMO=$(mktemp -d)
 export DOJO_DB=$DEMO/lifecycle.sqlite3   # 临时目录：不会碰你自己的库
 python3 -m dojo add --id idea-01 --kind abstract_idea \
   --statement '降低与目标无关的摩擦能让重复行为更容易持续' \
-  --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦'
-python3 -m dojo confirm idea-01 --basis '表述清楚，值得检索；不表示为真'
+  --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦' \
+  --contradiction '练习中需要掌握的那部分难度不能省掉' --session author-01
+python3 -m dojo confirm idea-01 --basis '表述清楚，值得检索；不表示为真' --session author-01
 python3 -m dojo search '摩擦 持续 行为'          # 词汇重合，命中词可见
+# 隔几天，另一场带着自己的问题来读
+python3 -m dojo search '怎么让整理更容易持续' --session reader-02
 python3 -m dojo show idea-01 --history          # 版本与事件
 python3 -m dojo challenge idea-01 --text '把一切变容易未必有益'
 python3 -m dojo revise idea-01 --statement '在难度不是训练的情况下，降低无关摩擦才让重复行为更容易持续' \
@@ -50,6 +53,8 @@ python3 -m dojo confirm idea-01 --basis '修订后仍值得检索；仍不表示
 python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # 撤销的是可讨论性，不是历史
 ```
 
+
+**隔几天带着另一个问题回来？** 先用 `search`，不是 `broadcast`：只想判断别人留下的办法能否借用，单一未核验的经历也值得读。沿用上面的临时库，在另一场读 `python3 -m dojo search '怎么让整理更容易持续' --session reader-02`。先找命中的词在哪，再对照前提和失效条件：若难度本身就是要练的能力，别原样借用。`--session` 只记录交付给哪场，不为卡片增加来源。广播守卫可能拦下单会话的卡；需要读原卡时回到 `search`，而不是添一个来源来解锁。[操作指南](docs/cli-guide.md)
 
 这份 Demo 是什么、不是什么：三位各有独立问题的陌生人——让整洁可持续、需求没想清就先写代码、以及「有些能力靠困难练出来」这条异议——各自拿到一个候选、一次来自真实本地 Store 的检索，以及一次产生新版本而不删除旧版本的挑战。每一句都是预设台词，`seed-m01`–`seed-m04` 是模拟材料，人物不是用户研究。`compare --full` 离线回放两份归档的 Luna 回答（旧 editor-bridge 评价材料，不是当前故事）；`freeze-materials` 生成四份冻结模型输入，其中 C 条件来自真实的 Store 检索；`demo --workdir ./run` 把数据库和简短总结留在一个新建或空目录里，拒绝覆盖已有数据。
 

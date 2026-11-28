@@ -180,8 +180,7 @@ def _parser() -> argparse.ArgumentParser:
         "search",
         help=(
             "transparent lexical retrieval of discussable candidates only; --session names the "
-            "reader so the read is recorded under them (without it the read is recorded with no "
-            "reader, which still says somebody read it)"
+            "reader only if you want to record the delivery"
         ),
     )
     search.add_argument("query", nargs="?")
@@ -190,7 +189,9 @@ def _parser() -> argparse.ArgumentParser:
 
     broadcast = sub.add_parser(
         "broadcast",
-        help="transparent lexical retrieval of cross-session material only; suppressed cards are listed with their reason",
+        help="词汇检索，经广播来源守卫；只想阅读别人留下的办法作参考，用 search",
+        description="按词汇检索并做广播来源检查（例如不广播只有写作者一场作为来源的卡）。"
+                    "这不是判断真假；只想阅读一条旧办法及其边界，用 search。",
     )
     broadcast.add_argument("query", nargs="?")
     broadcast.add_argument("--limit", type=int, default=10)
@@ -1129,6 +1130,17 @@ def main(argv: list[str] | None = None) -> int:
         except OSError:
             pass
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        if args.command == "broadcast" and result["suppressed"]:
+            # --session is an exclusion on broadcast, but it asks search to
+            # write a read receipt. Keep the suggested reference read read-only.
+            sys.stdout.flush()
+            query = " ".join(result["query"].split())
+            command = commands.dojo("search", "--", query, db=commands.library_argument(db_path))
+            print("有词汇命中被广播守卫拦下；不是库里没有这些记录。\n"
+                  "只想把旧办法当参考来读（不算独立佐证）？用同一个库和查询：\n"
+                  f"  {command}\n"
+                  "对照卡片的前提、失效条件和来源，再决定借用、挑战，还是先放下。",
+                  file=sys.stderr)
         return 0
     except (DojoError, sqlite3.Error, OSError, TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)

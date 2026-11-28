@@ -95,6 +95,8 @@ python3 -m dojo broadcast '摩擦 持续 行为' --session life-anon-1
 python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 全部来源就是写它的那一个会话的卡会被拒
 ```
 
+**另一场想读旧办法，不是找独立佐证？** 用 `search`。若 `broadcast` 有命中被守卫拦下，终端会给一条同库、同查询的 `search` 命令；它不会自动运行，不带 `--session`，也不写读记录。要记下交付给哪场，可自己加 `--session 读者编号`（写在查询前的 `--` 之前）。先看命中的是正文还是边界，再对照自己的前提与反例；可借用一部分，也可以挑战或先放下。机器可读的 `results` 和 `suppressed` 仍走 stdout，不因提示变化。
+
 `independence_groups` 数的是判决实际用到的来源，不是核验过的独立来源，也不是人数。一条来源算一处，按这几条决定它算在哪：
 
 1. 来源自己填了 `independence_group`，就按这个名字算（自填组名的清单另在 `named_groups`）。

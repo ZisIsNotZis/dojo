@@ -39,9 +39,12 @@ DEMO=$(mktemp -d)
 export DOJO_DB=$DEMO/lifecycle.sqlite3   # throwaway: nothing here touches your own library
 python3 -m dojo add --id idea-01 --kind abstract_idea \
   --statement '降低与目标无关的摩擦能让重复行为更容易持续' \
-  --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦'
-python3 -m dojo confirm idea-01 --basis '表述清楚，值得检索；不表示为真'
+  --scope '日常重复行为' --unknown '哪些难度是有意义的训练而非无谓摩擦' \
+  --contradiction '练习中需要掌握的那部分难度不能省掉' --session author-01
+python3 -m dojo confirm idea-01 --basis '表述清楚，值得检索；不表示为真' --session author-01
 python3 -m dojo search '摩擦 持续 行为'          # lexical overlap, hit words shown
+# Another reader comes back later with a different question
+python3 -m dojo search '怎么让整理更容易持续' --session reader-02
 python3 -m dojo show idea-01 --history          # versions and events
 python3 -m dojo challenge idea-01 --text '把一切变容易未必有益'
 python3 -m dojo revise idea-01 --statement '在难度不是训练的情况下，降低无关摩擦才让重复行为更容易持续' \
@@ -50,6 +53,8 @@ python3 -m dojo confirm idea-01 --basis '修订后仍值得检索；仍不表示
 python3 -m dojo revoke idea-01 --reason '范围仍不清楚'   # revoking discussability, not deleting history
 ```
 
+
+**Coming back with a different question?** Start with `search`, not `broadcast`, to read someone else's bounded practice as reference, even if its only source is an unverified report. Look at where the words match, then compare the card's conditions and limits with your own. If the difficulty is itself what you want to practise, don't borrow the method as written. `--session` records the delivery; it does not add a source. `broadcast` can withhold a single-session card. To read it as reference, follow the local `search` command, rather than adding a source to get past the guard. See the [CLI guide](docs/cli-guide.md).
 
 What the demo is, and what it is not: three strangers with independent problems — making tidiness stick, writing code before the requirement is clear, and the objection that some ability is built by difficulty — each get a candidate, a retrieval from the real local store, and a challenge that produces a new version without deleting the old one. Every line is scripted, the seed records `seed-m01`–`seed-m04` are simulated material, and the personas are not user research. `compare --full` replays two archived Luna answers offline (old editor-bridge evaluation material, not the current story); `freeze-materials` writes four frozen model inputs with C condition drawn from a real store retrieval; `demo --workdir ./run` keeps the database and a short summary in a new or empty directory and refuses to overwrite.
 
