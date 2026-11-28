@@ -140,6 +140,8 @@ a later `revise`. It needs the trace the session itself wrote (`sessions/discuss
 under the library's directory, or wherever `DOJO_SESSIONS` points), and it cannot be combined
 with `--no-trace`, because the trace is the thing being continued.
 
+New traces preserve the opening card's attached answers across library edits. See the [real-model walkthrough](docs/evidence/2026-11-28-live-blank-reply/SUMMARY.md) with synthetic examples. Review the host's wording before accepting a card.
+
 ```sh
 python3 -m dojo discuss --resume sessions/discuss-0123456789abcdef0123456789abcdef.jsonl
 ```

@@ -133,6 +133,8 @@ python3 -m dojo discuss --card c9                               # 打错卡名�
 （库目录下的 `sessions/discuss-<32 位十六进制>.jsonl`，或 `DOJO_SESSIONS` 指向的地方），
 且不能与 `--no-trace` 同时用，因为要续跑的正是那份轨迹。
 
+新轨迹保留开场时卡片上的附答，之后改写库里的卡也不会改变续跑材料。参见使用合成案例的[真实模型演练](docs/evidence/2026-11-28-live-blank-reply/SUMMARY.md)。认可卡片前请核对主持人整理的措辞。
+
 ```sh
 python3 -m dojo discuss --resume sessions/discuss-0123456789abcdef0123456789abcdef.jsonl
 ```
