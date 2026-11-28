@@ -603,6 +603,10 @@ def closing_text(
     # also true then and is no longer.
     promoted = [part for part in ordered((promotion or {}).get("promoted") or [])]
     promote_error = (promotion or {}).get("error") if isinstance(promotion, dict) else None
+    # The person turned the record off, so nothing was attached -- by their own request,
+    # not by a failure. Saying 没能附上 would blame the library for keeping the promise,
+    # and saying nothing would read as success.
+    withheld = (promotion or {}).get("withheld") if isinstance(promotion, dict) else None
     on_card = ""
     if promoted:
         on_card = ("你在这几件上的原话现在也附在卡片 " + str(card or "") + " 上了（"
@@ -616,6 +620,12 @@ def closing_text(
     elif promote_error and said:
         on_card = ("这些原话没能附到卡片上（" + str(promote_error)
                    + "）；它们仍在本场记录里，卡片也没有因为这次失败被改。")
+    elif withheld == "no_trace" and said:
+        # `--no-trace` covers the card too: it is a file like the session record, and the
+        # build before this one kept his words there while the screen said they were not
+        # kept. An explicit `promote` is still there for a person who wants them kept.
+        on_card = ("这一场你选了不留记录，所以你的原话没有附到卡片上，库里查不到；"
+                   "那张卡只有提问前写下的句子。想把哪句留在卡上，可以用 promote 自己附上去。")
     if not said:
         use = ""  # Nothing was said, so do not say where the words went.
     elif kept is None:
@@ -2208,10 +2218,28 @@ def run_discuss(
                         and trace.written > 0)
                 else trace is not None and trace.file is not None
             )
+            # `--no-trace` means what it says. The card lives on disk too, so attaching
+            # his answers to it kept them anyway: measured at the CLI on the build before
+            # this line existed, the receipt said 这场不留原文, no session file was
+            # created, and `show` still returned all four sentences verbatim
+            # (`.scratch/3480/probe_notrace.py`, scene B). The opening block had already
+            # promised 不会附到卡片上, so the promise wins: a person who turns the record
+            # off is not asking for their words to be kept somewhere else. No trace is
+            # also the only case where nothing was written as the session ran, so it is
+            # the only case that withholds -- a trace that died mid-session was promised
+            # attachment and still gets it.
+            #
+            # An explicit `promote` still writes them: that is the person saying so, in a
+            # command they typed, after the fact.
+            #
             # Written before the receipt prints, so the sentence about where his answers
             # went describes the library as it is now rather than as this build used to
             # leave it.
-            promotion = promote_answers_onto_card()
+            promotion = (
+                promote_answers_onto_card() if trace is not None else
+                {"promoted": [], "error": None, "withheld": "no_trace",
+                 "card": elicitation.get("entry")}
+            )
             elicitation["promotion"] = promotion
             print(
                 "\n主持人> " + closing_text(

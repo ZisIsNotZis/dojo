@@ -264,6 +264,63 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
             str(len(shown["candidate"]["sources"])))
     reading("卡的状态没有因为附上回答而变成可讨论",
             shown["candidate"]["status"] == "draft", shown["candidate"]["status"])
+
+    # ---- E: the flag that decides whether anything is kept --------------------------
+    # `--no-trace` says the session keeps nothing. The card is a file on the same disk,
+    # so the answers must not reach it either -- measured before this was fixed: the
+    # receipt said 这场不留原文, no trace file existed, and `show` returned all four
+    # sentences verbatim (`.scratch/3480/probe_notrace.py`, scene B).
+    heading("E. 选了不留记录的一场，什么文件里都没有他的话")
+    quiet_db = root / "quiet.sqlite3"
+    quiet_sessions = root / "quiet-sessions"
+    quiet_env = dict(env, DOJO_SESSIONS=str(quiet_sessions))
+    REQUESTS.clear()
+    REPLIES.extend([{"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
+                     "user_stance": "neutral"},
+                    {"answer": "好，就这句。", "candidate": CONCLUSION,
+                     "user_stance": "accept"}])
+    quiet = dojo(["--db", str(quiet_db), "discuss", "--no-trace"],
+                 stdin_text="\n".join(OPENING + list(ANSWERS.values())) + "\n", env=quiet_env)
+    quiet_receipt = next((line for line in quiet.stdout.splitlines()
+                          if line.startswith("主持人> ") and "四件问完了" in line), "")
+    print("回执：\n  " + (quiet_receipt or "（没有回执）"))
+    reading("不留记录的一场正常跑完", quiet.returncode == 0, quiet.stderr[-600:])
+    reading("回执说这场不留原文", "这场不留原文" in quiet_receipt, quiet_receipt)
+    reading("回执说原话没有附到卡片上", "没有附到卡片上" in quiet_receipt, quiet_receipt)
+    reading("回执没有说原话留在本场记录里", "留在本场记录" not in quiet_receipt, quiet_receipt)
+    reading("盘上真的没有轨迹文件",
+            not (quiet_sessions.exists() and any(quiet_sessions.iterdir())),
+            str(quiet_sessions))
+    quiet_cards = json.loads(dojo(["--db", str(quiet_db), "list", "--history"],
+                                  env=quiet_env).stdout or "[]")
+    quiet_id = quiet_cards[0]["id"] if quiet_cards else ""
+    quiet_shown = json.loads(dojo(["--db", str(quiet_db), "show", quiet_id],
+                                  env=quiet_env).stdout) if quiet_id else {}
+    reading("show 读不到任何一条他的原话",
+            quiet_shown.get("answers") in (None, {}),
+            json.dumps(quiet_shown.get("answers"), ensure_ascii=False))
+    # The sentences must not have leaked into the card itself either: the sentence, the
+    # scope and the boundary fields are the pre-question ones.
+    quiet_body = json.dumps(quiet_shown.get("candidate") or {}, ensure_ascii=False)
+    reading("他的话也没有漏进卡片的句子或条件",
+            not any(words in quiet_body for words in ANSWERS.values()), quiet_body[:300])
+    # And a person who does want one kept can still say so, in a command they typed.
+    if quiet_id:
+        kept = dojo(["--db", str(quiet_db), "confirm", quiet_id, "--basis", "值得讨论"],
+                    env=quiet_env)
+        reading("（准备）能把那张卡标成可讨论", kept.returncode == 0, kept.stderr[-300:])
+        pushed = dojo(["--db", str(quiet_db), "promote", quiet_id,
+                       "--answer", "情境=" + ANSWERS["situation"]], env=quiet_env)
+        after = json.loads(dojo(["--db", str(quiet_db), "show", quiet_id],
+                                env=quiet_env).stdout)
+        reading("显式 promote 之后那句才在卡上",
+                (after.get("answers") or {}).get("situation", {}).get("answer")
+                == ANSWERS["situation"], pushed.stderr[-300:])
+        quiet_hit = dojo(["--db", str(quiet_db), "search", "冷库温度报警"], env=quiet_env)
+        reading("显式 promote 之后能用自己的话搜回它",
+                any(row.get("id") == quiet_id
+                    for row in json.loads(quiet_hit.stdout or "{}").get("results") or []),
+                quiet_hit.stdout[:200])
     return finish()
 
 

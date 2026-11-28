@@ -63,6 +63,29 @@ session_end.elicitation: promoted=[]  part_sources=系统补 ×6
   的措辞、也不是对它的赞同**。
 - `show`：`answers` 与 `candidate` 并列，`candidate` 仍是逐字节的存储状态。
 
+## 复核在发布前拦住的那一处：`--no-trace` 是个假开关
+
+主管的读法（干净导出、标准 CLI）：明确用 `--no-trace` 开一场，屏幕说「这些原话只在这次
+对话里用过」，确实没有轨迹文件，**而 `show` 读到了四条逐字原话**。我自己另写了一个探针
+重走三场（`.scratch/3480/probe_notrace.py`）确认：
+
+| 场景 | 回执 | 轨迹文件 | `show` 里的 `answers` |
+|---|---|---|---|
+| 正常讨论 | 附在卡片 … 上了 | 有 | 四条 |
+| `--no-trace`（修前） | 这场不留原文 | **没有** | **四条** |
+| `--no-trace`（修后） | 没有附到卡片上 | 没有 | 空 |
+| 事后手工 `promote` | —— | 没有 | 只有那一条，且能搜到 |
+
+根因是我这一片自己造成的：`promote_answers` 把回答写进库，而**卡片也是同一个盘上的文件**；
+`--no-trace` 原来只关会话记录。开场白早就写了「不会附到卡片上」，所以错的是代码，不是屏幕。
+修法：`trace is None` 时**不写**，回执改说「这一场你选了不留记录，所以你的原话没有附到
+卡片上」，并指出想留就自己跑 `promote`。`promote` 仍然写——那是他本人事后敲的命令，不是
+一场声明过不留记录的会话替他决定。
+
+两个新读数（E 段）+ 两条新红臂：`no-trace-keeps-his-words-on-the-card-anyway`、
+`the-quiet-session-says-nothing-about-the-card`。README（中英两版）里那段自相矛盾的话改成
+按开关分两种情形讲，`--no-trace` 的帮助文字也改成覆盖卡片。
+
 ## 自己走一遍时抓到的两处（都出了屏，都看着像对的）
 
 1. **匹配器去卡片的 state 里找回答**——回答在表里，不在 state 里。于是他那句失效例子只
@@ -87,14 +110,15 @@ stderr` 在没有命中时也成立，因为屏幕会列出「最近写下的卡
 ## 读数与红臂
 
 ```bash
-python3 docs/evidence/2026-11-28-answers-on-card/verify.py   # 25 项读数
-python3 docs/evidence/2026-11-28-answers-on-card/redarm.py   # 9 条臂
+python3 docs/evidence/2026-11-28-answers-on-card/verify.py   # 35 项读数
+python3 docs/evidence/2026-11-28-answers-on-card/redarm.py   # 11 条臂
 python3 -B -m unittest tests.test_answers                     # 20 项
 python3 -B -m unittest discover -s tests -q                   # 全量
 ```
 
 `verify.py` 的五段：A 一场四件都答了的会话；B 过几天用他自己的话去找；C 后来的一场
-`--card` 带上这张卡（屏幕与发给模型的请求各查一次）；D 不该动的东西没动。
+`--card` 带上这张卡（屏幕与发给模型的请求各查一次）；D 不该动的东西没动；E 选了
+`--no-trace` 的一场什么都不留，以及事后手工 `promote` 仍能留下他想要的那句。
 
 ## 仍然开着的
 

@@ -259,7 +259,11 @@ def _parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="输出同样的内容，机器可读",
     )
     discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
-    discuss.add_argument("--no-trace", action="store_true", help="不创建轨迹文件，也不保存会话原文")
+    # The card is a file too. This flag used to cover only the session record, so the
+    # four answers were written onto the card while the screen said they were not kept;
+    # the flag now covers both, and `promote` is the way to keep them on purpose.
+    discuss.add_argument("--no-trace", action="store_true",
+                         help="不创建轨迹文件，也不把你在这场说的话存到任何地方（包括卡片上；要存就用 promote）")
     discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
     discuss.add_argument(

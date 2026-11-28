@@ -350,6 +350,37 @@ class ClosingLineTests(unittest.TestCase):
         self.assertIn("你说跳过", line)
         self.assertNotIn("留在本场记录", line)
 
+    def test_with_the_trace_off_his_words_are_not_written_to_the_card(self):
+        """--no-trace covers the card too, and the screen has to say so.
+
+        The build before this one attached all four answers to the card in a session that
+        had said 这场不留原文 -- measured at the CLI with `.scratch/3480/probe_notrace.py`,
+        where `show` returned four verbatim sentences and no session file existed. A card
+        is a file on the same disk, so the flag has to cover it or it is not a promise
+        about privacy but a promise about one filename.
+        """
+        code, text = self.run_session(ALL_FOUR, no_trace=True)
+        self.assertEqual(0, code)
+        line = self.closing_line(text)
+        self.assertIn("没有附到卡片上", line)
+        self.assertNotIn("留在本场记录", line)
+        cards = self.store.list_candidates()
+        self.assertEqual(1, len(cards))
+        self.assertEqual({}, self.store.answers_for(cards[0]["id"]))
+        # And the whole card is untouched, not just the answers table: the four answers
+        # must not have leaked into the sentence, a scope line or anywhere else.
+        stored = json.dumps(self.store.show(cards[0]["id"]), ensure_ascii=False)
+        for answer in ALL_FOUR:
+            self.assertNotIn(answer, stored)
+
+    def test_a_trace_that_produced_a_file_still_attaches_the_answers(self):
+        """The withholder is the request, not a failure: a normal session still attaches."""
+        code, text = self.run_session(ALL_FOUR)
+        self.assertEqual(0, code)
+        self.assertIn("附在卡片", self.closing_line(text))
+        card = self.store.list_candidates()[0]["id"]
+        self.assertEqual(4, len(self.store.answers_for(card)))
+
     def test_with_the_trace_on_the_skipped_parts_are_still_recorded(self):
         code, _ = self.run_session((SKIP,) * 4)
         self.assertEqual(0, code)

@@ -102,6 +102,25 @@ ARMS = [
         "卡片的版本没有因为附上回答而变动（流水线标记不会被打回）",
     ),
     (
+        # The supervisor's finding, put back: `--no-trace` turns off only the session
+        # record, so his words are written onto the card while the screen says nothing
+        # was kept. An arm of its own because the flag was a promise about one filename,
+        # not about privacy, and the reading is what makes that visible.
+        "no-trace-keeps-his-words-on-the-card-anyway",
+        "dojo/discuss.py",
+        "                promote_answers_onto_card() if trace is not None else\n",
+        "                promote_answers_onto_card() if True else\n",
+        "show 读不到任何一条他的原话",
+    ),
+    (
+        # The write is withheld but the receipt says nothing, which reads as success.
+        "the-quiet-session-says-nothing-about-the-card",
+        "dojo/discuss.py",
+        '    elif withheld == "no_trace" and said:\n',
+        '    elif False and said:\n',
+        "回执说原话没有附到卡片上",
+    ),
+    (
         # The screen finds the card but does not say the words were his.
         "the-screen-does-not-say-the-words-were-his",
         "dojo/finding.py",
