@@ -2692,6 +2692,7 @@ def run_discuss(
 
                 hint = review_hint(trace_path, session, store.path)
                 if hint:
+                    print("下面从会话轨迹找回各轮拟写，也包括没存进资料库的轮次。", file=output)
                     print("找回本场先前的拟写（核对原话、补边界、选择留下或略过；不请求模型）：" + hint,
                           file=output)
             if trace.warning:
@@ -2708,7 +2709,7 @@ def run_discuss(
             else:
                 approved = sum(status == "approved" for _, _, status in entries)
                 drafts = sum(status == "unaccepted_draft" for _, _, status in entries)
-                print(f"本场留下：{approved} 个已认可版本，{drafts} 份未认可草稿。认可的是当时的表述，不是独立验证。",
+                print(f"资料库统计（不数轨迹里的轮次）｜本场留下：{approved} 个已认可版本，{drafts} 份未认可草稿。认可的是当时的表述，不是他人独立核验。",
                       file=output)
                 if unbound or any(status == "unproven" for _, _, status in entries):
                     print("另有无法确认为本场已认可版本的记录，详见清单。", file=output)
@@ -3222,7 +3223,7 @@ def run_discuss(
                     reason = "accepted_unchanged"
                     print("库里已是本场认可的同一版，没有改写卡片。", file=output)
                 elif saved_id is not None:
-                    print(f"已记下对屏上这一版的认可：{saved_id}。", file=output)
+                    print(f"已记下对屏上这一版的认可：{saved_id} v{saved_version}。这只是措辞认可，不是他人独立核验。", file=output)
                     note(f"结论已在认可这一轮写入：{saved_id}")
                     if saved_id in saved_ids:
                         saved_ids.remove(saved_id)

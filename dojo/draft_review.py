@@ -83,7 +83,7 @@ def run(path: Path, database: Path, expected_sha256: str, *, read=input, output=
 
     opening = next((row["user"] for row in rounds
                     if isinstance(row.get("user"), str) and row["user"].strip() not in {"", "/认可"}), None)
-    tell("【会后草稿复核】这些是曾经展示的拟写，不是共识。核对再留；不会重开讨论或请求模型。")
+    tell("【会后草稿复核】这里按轮次读会话轨迹，不是资料库的草稿清单。拟写是讨论材料；核对再留，不会重开讨论或请求模型。")
     while True:
         available = {}
         for turn, (original, proposal) in proposals.items():
@@ -150,8 +150,8 @@ def run(path: Path, database: Path, expected_sha256: str, *, read=input, output=
             if error is not None:
                 tell(f"未写入认可：{error}")
                 continue
-            tell(f"已留下并认可第 {turn} 轮的屏上版本：{card} v{version}。认可表述，不等于独立验证。")
-            tell("看库里的记录：" + commands.dojo("show", card, db=commands.library_argument(database)))
+            tell(f"已留下并认可第 {turn} 轮的屏上版本：{card} v{version}。记下的是你对这份措辞的认可，不是他人独立核验。")
+            tell("看库里的当前卡片（卡片状态与措辞认可分开）：" + commands.dojo("show", card, db=commands.library_argument(database)))
             tell("看认可的准确版本：" + commands.dojo("distill", "--session", session, "--text", "--trace",
                                                   commands.absolute(path), db=commands.library_argument(database)))
             return 0

@@ -19,7 +19,7 @@ from .discuss import _load_resume_trace, run_discuss
 from .finding import search_screen
 from .live import LiveConfig, LiveError, run_chat
 from .pipeline import distill, run_pipeline
-from .storage import READING_ROW_KEYS, DojoError, Store, load_simulated_seeds
+from .storage import READING_ROW_KEYS, DojoError, Store, is_unaccepted_draft, load_simulated_seeds
 
 DEFAULT_HOME = Path.home() / ".local" / "share" / "dojo"
 DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
@@ -525,6 +525,17 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.list_candidates(include_history=args.history)
     if command == "show":
         value = store.show(args.id)
+        if value.get("time_basis", {}).get("accepted_at"):
+            wording = "当前措辞有认可记录。"
+        elif is_unaccepted_draft(value["candidate"]):
+            wording = "未找到当前措辞的认可记录；这是讨论材料。"
+        else:
+            wording = "未找到当前措辞的认可记录。"
+        value["approval_reading"] = {
+            "措辞": wording,
+            "资料库状态": "candidate.status 是资料库的卡片状态；draft 不代表当前措辞未获认可。",
+            "独立核验": "措辞认可、确认可讨论和来源标签都不能证明内容已由他人独立核验。",
+        }
         if args.history:
             value["history"] = store.history(value["resolved_id"])
         return value
@@ -1053,7 +1064,9 @@ def main(argv: list[str] | None = None) -> int:
             trace = _trace_argument(args.trace, db_path) if args.trace else None
             report = distill(store, args.session, trace=trace)
             if args.text:
-                print(f"本场提炼清单 · {report['session']}（近邻与挑战是提议；认可不等于独立验证）")
+                print(f"本场提炼清单 · {report['session']}（资料库记录，不是轨迹里的拟写轮次）")
+                print("认可快照记下当时认可的措辞；未认可草稿是讨论材料。"
+                      "近邻与挑战是提议。本清单不判定是否有他人独立核验。")
                 for line in report["lines"]:
                     print(line)
                 if not report["cards"]:
