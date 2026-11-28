@@ -49,6 +49,7 @@ python3 -m dojo alias life-01 \
   --reason '主持人核对为等价改写'
 python3 -m dojo link life-01 --relation narrows --target seed-m01 \
   --reason '新候选限定在日常重复行为的持续'
+python3 -m dojo show seed-m01               # 从原卡读回 life-01 → seed-m01
 python3 -m dojo confirm life-01 \
   --basis '表述足够精确，值得在新讨论检索；不是事实确认' \
   --session life-anon-1
@@ -56,6 +57,9 @@ python3 -m dojo search '摩擦 持续 行为'
 ```
 
 `link` 能写的类型是一个闭集：`supports`、`challenges`、`narrows`、`generalizes`、`conflicts`、`instantiates`、`duplicates`。
+
+第二场的材料若是补充、收窄或反例，先分别存卡和各自的来源。只有明确执行 `link 新卡 --relation … --target 原卡 --reason …` 后，原卡的 `show` 才会列出这次登记（`incoming_links`）。每一项都带登记理由、事件编号、时间，以及登记所指的两版陈述、范围和来源。`source` 是新卡写入关系后的版本；`target` 是当时所指的原卡版本。两个版本即使后来改过也不会跟着换；旧记录没存目标版本，显示 `null`，不猜。手动登记不等于采纳反例、认可措辞或独立核验，也不把新卡的来源算进原卡。合并后按所请求编号分别看：旧编号的关系不继承到现用编号；要看登记在现用编号的关系，另开 `show <resolved_id>`。
+
 另有一种 `derived_from` 是**程序自己**写的：一场带着 `--card X` 的讨论写下了另一版时，新卡记着它来自 X。它不是人能连的关系，`link` 会拒绝——屏幕上「后来有一场带着这条继续谈」这句话只对程序记下的那条边说，手打的边印成「库里记着与这条有关的关系」。两者都不是 `narrows`/`generalizes`：库里没有记方向。
 
 逐条读命中的 `matched_terms`、条件、来源、unknowns 和 contradictions。分数只计算不同查询词命中数，不代表可信度。没被接受的草稿、撤回状态不返回；但你自己认可过的措辞即使还停在 `draft` 也会返回——那种命中带 `accepted_at`（那一版措辞被接受的时间）。被挑战、以及接受之后又改过措辞的卡不返回：接受绑的是当时那一版措辞，改后那句没被接受。

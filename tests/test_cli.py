@@ -393,6 +393,63 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertIn("no network request was made", result.stderr)
         self.assertFalse(db_path.exists())
 
+    def test_show_reads_explicit_cross_session_link_at_its_recorded_versions(self):
+        def add(identifier, kind, statement, scope):
+            return self.run_cli(
+                "add", "--id", identifier, "--kind", kind, "--statement", statement,
+                "--scope", scope, "--session", "session-" + identifier,
+                "--source-json", json.dumps({
+                    "id": "src-" + identifier, "type": "synthetic_roleplay",
+                    "verification": "unverified", "independence_group": "group-" + identifier,
+                    "claim": statement,
+                }),
+            )
+
+        original = "光面硬纸板斜坡上，木珠滚过了标线。"
+        exception = "粗布斜坡上，同尺寸木珠停在标线前。"
+        add("ramp-a", "experience_claim", original, "只试了光面硬纸板")
+        self.run_cli("confirm", "ramp-a", "--basis", "保留供讨论，不确认真实性")
+        second = add("ramp-b", "counterexample", exception, "只试了粗布")
+        before = self.run_cli("show", "ramp-a", "--history")
+        self.assertNotIn("incoming_links", before)
+        reason = "只收窄适用范围，不把两场并为同一观察"
+        linked = self.run_cli("link", "ramp-b", "--relation", "narrows",
+                              "--target", "ramp-a", "--reason", reason)
+        self.assertEqual(second["status"], linked["status"])
+        self.assertEqual(second["sources"], linked["sources"])
+
+        self.db.chmod(0o444)
+        db_bytes = self.db.read_bytes()
+        after = self.run_cli("show", "ramp-a", "--history")
+        self.assertEqual(db_bytes, self.db.read_bytes())
+        self.assertEqual(0o444, self.db.stat().st_mode & 0o777)
+        self.db.chmod(0o600)
+        for key in before:
+            self.assertEqual(before[key], after[key], key)
+        self.assertIn("不计入本卡的来源", after["incoming_links_reading"])
+        link, = after["incoming_links"]
+        self.assertEqual(("narrows", reason), (link["relation"], link["reason"]))
+        source_events = self.run_cli("show", "ramp-b", "--history")["history"]["events"]
+        event = source_events[-1]
+        self.assertEqual(("link", link["sequence"], link["recorded_at"]),
+                         (event["event"], event["sequence"], event["created_at"]))
+        for key, state in (("source", linked), ("target", before["candidate"])):
+            for field in ("id", "version", "statement", "scope", "sessions", "sources"):
+                self.assertEqual(state[field], link[key][field], (key, field))
+
+        self.run_cli("revise", "ramp-a", "--statement", original + "只测了一次。", "--reason", "补边界")
+        self.run_cli("revise", "ramp-b", "--statement", exception + "只试了粗布。", "--reason", "补边界")
+        revised = self.run_cli("show", "ramp-a")
+        self.assertGreater(revised["candidate"]["version"], link["target"]["version"])
+        self.assertEqual([link], revised["incoming_links"])
+
+        add("ramp-survivor", "experience_claim", original + "仅有一次记录。", "只试了光面硬纸板")
+        self.run_cli("merge", "ramp-a", "ramp-survivor", "--confirm", "--reason", "确认是同一条观察的等价措辞")
+        redirected = self.run_cli("show", "ramp-a")
+        self.assertEqual([link], redirected["incoming_links"])
+        self.assertIn("show ramp-survivor", redirected["redirect_links_reading"])
+        self.assertNotIn("incoming_links", self.run_cli("show", "ramp-survivor"))
+
     def test_real_cli_seed_add_confirm_search_revoke_merge_restore_and_export(self):
         seeded = self.run_cli("seed")
         self.assertTrue(seeded["loaded"])

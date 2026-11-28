@@ -65,7 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     list_parser = sub.add_parser("list", help="list candidates and statuses")
     list_parser.add_argument("--history", action="store_true", help="include full current records")
 
-    show_parser = sub.add_parser("show", help="show a candidate, resolving merge redirects")
+    show_parser = sub.add_parser("show", help="show a candidate and explicit incoming links")
     show_parser.add_argument("id")
     show_parser.add_argument("--history", action="store_true", help="include immutable versions and events")
 
@@ -524,7 +524,20 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
     if command == "list":
         return store.list_candidates(include_history=args.history)
     if command == "show":
-        value = store.show(args.id)
+        value = store.show(args.id, include_incoming_links=True)
+        if value.get("incoming_links"):
+            value["incoming_links_reading"] = (
+                "这里是对所请求编号（requested_id）明确登记的关联；不是自动推断或讨论承接。"
+                "关联理由只是登记者的判断，不是认可措辞、采纳结论或独立核验，也不计入本卡的来源。"
+                "source / target 是登记时的版本，不随修订或合并改写。"
+                "若 target 的编号或版本与当前 candidate 不同，不能把这条关联当作对当前版的判断；"
+                "旧记录的版本若为 null，表示未留下版本。"
+            )
+        if len(value["redirect_chain"]) > 1:
+            value["redirect_links_reading"] = (
+                f"旧编号的关联不转移；如要看登记在现用编号的关联，请另运行 show {value['resolved_id']}"
+                "（沿用同一资料库）。"
+            )
         if value.get("time_basis", {}).get("accepted_at"):
             wording = "当前措辞有认可记录。"
         elif is_unaccepted_draft(value["candidate"]):
@@ -1079,6 +1092,11 @@ def main(argv: list[str] | None = None) -> int:
                         print("找回本场先前的拟写（核对原话、补边界、选择留下或略过；不请求模型）：" + hint)
             else:
                 print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "show":
+            store = Store(db_path, readonly=True)
+            print(json.dumps(_execute(args, store), ensure_ascii=False, indent=2, sort_keys=True))
             return 0
 
         _secure_default_paths(db_path, export_dir)

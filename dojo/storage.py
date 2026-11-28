@@ -929,7 +929,55 @@ class Store:
             result["relations"] = relations
         return result
 
-    def show(self, candidate_id: str) -> dict[str, Any]:
+    def _link_endpoint(self, candidate_id: str, version: Any) -> dict[str, Any]:
+        endpoint = {"id": candidate_id, "version": None}
+        if type(version) is not int or version < 1:
+            return endpoint
+        endpoint["version"] = version
+        row = self.connection.execute(
+            "SELECT state_json FROM snapshots WHERE candidate_id=? AND version=?",
+            (candidate_id, version),
+        ).fetchone()
+        if row is not None:
+            snapshot = json.loads(row["state_json"])
+            endpoint.update({key: snapshot[key] for key in (
+                "statement", "kind", "scope", "sessions", "sources",
+            ) if key in snapshot})
+        return endpoint
+
+    def incoming_links(self, candidate_id: str) -> list[dict[str, Any]]:
+        """Read human link decisions addressed to this exact ID, not inherited edges.
+
+        The event belongs to the source card. Its post-link snapshot retains the
+        wording and sources at the decision (link only changes relations). A merge
+        can copy a relation to another card, but cannot copy the decision that made it.
+        Legacy events did not record the target version; do not guess from timestamps.
+        """
+        found = []
+        for row in self.connection.execute(
+            "SELECT candidate_id, seq, details_json, created_at FROM events "
+            "WHERE event='link' ORDER BY seq"
+        ):
+            try:
+                details = json.loads(row["details_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(details, dict) or details.get("target") != candidate_id:
+                continue
+            relation, source_id = details.get("type"), row["candidate_id"]
+            if not isinstance(relation, str) or relation not in RELATIONS or not source_id:
+                continue
+            found.append({
+                "relation": relation,
+                "reason": details.get("note"),
+                "sequence": row["seq"],
+                "recorded_at": row["created_at"],
+                "source": self._link_endpoint(source_id, details.get("version")),
+                "target": self._link_endpoint(candidate_id, details.get("target_version")),
+            })
+        return found
+
+    def show(self, candidate_id: str, *, include_incoming_links: bool = False) -> dict[str, Any]:
         state, path = self.resolve(candidate_id)
         payload = {
             "requested_id": candidate_id,
@@ -964,6 +1012,10 @@ class Store:
         answers = self.answers_for(state["id"])
         if answers:
             payload["answers"] = {key: dict(item) for key, item in answers.items()}
+        if include_incoming_links:
+            incoming = self.incoming_links(path[0])
+            if incoming:
+                payload["incoming_links"] = incoming
         return payload
 
     def _active(self, state: dict[str, Any]) -> None:
@@ -1439,7 +1491,7 @@ class Store:
             if link in source.get("relations", []):
                 raise DojoError("identical relation already exists")
             source["relations"].append(link)
-            source = self._write(source, "link", link,
+            source = self._write(source, "link", {**link, "target_version": target["version"]},
                                  {"relation": link["type"], "target": link["target"],
                                   "note": reason})
         return source
