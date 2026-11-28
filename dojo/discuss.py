@@ -2104,6 +2104,29 @@ def run_discuss(
             "line": draft_line(part_sources),
         }
 
+    def _answer_reached_the_file(path: Path, part: str, answer: str) -> bool:
+        """Was this exact sentence found in the record file after the session ended?
+
+        Read back from disk rather than inferred from `trace.written`, which counts rows
+        of every kind: a failure between the second and third answer leaves the first on
+        disk and the rest only in memory, and `written > 0` cannot tell those apart. A
+        file that cannot be read means no, because the promise is "you can open this and
+        find your sentence" and an unreadable file keeps no such promise.
+        """
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if (row.get("event") == "elicitation" and row.get("part") == part
+                            and row.get("answer") == answer):
+                        return True
+        except (OSError, UnicodeDecodeError):
+            return False
+        return False
+
     def _elicit_four_parts() -> str:
         """Ask the four parts, one at a time, in the conversation. Two turns each at most."""
 
@@ -2141,8 +2164,25 @@ def run_discuss(
                     "at": event.get("at"),
                     "question": event.get("question"),
                 }
+                # Where this sentence came from, said as a fact rather than inferred by
+                # the reader: the review found a hand-kept answer reported as a
+                # `--no-trace` discussion because the screen substituted for what it did
+                # not know.
+                entry["provenance"] = "discussion"
                 if trace_path is not None:
-                    entry["trace"] = str(datetime.now(timezone.utc).isoformat())
+                    # The path of the record this row came from, not the time it was
+                    # promoted. It used to be `datetime.now().isoformat()`: a date is not
+                    # something a reader can open, so `show` offered a `trace` value that
+                    # led nowhere (found in review on fdd55ff). A relative directory is
+                    # made absolute here, because a later terminal is not this one.
+                    entry["trace"] = str(commands.absolute(trace_path))
+                    # Whether *this* sentence is really in that file. Not "did the trace
+                    # open" (it did) and not "did any answer get written" (the first
+                    # one did): the record can die between turns, and a screen that says
+                    # 回看说这句的那一场 for a sentence that is not in the file sends the
+                    # reader to the wrong evidence. The file is closed and flushed by
+                    # now, so this is a fact, not a hope.
+                    entry["recorded"] = _answer_reached_the_file(trace_path, part, answer)
                 rows.append(entry)
             return rows
 

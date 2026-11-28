@@ -310,5 +310,20 @@ class OffTargetAnswerTests(unittest.TestCase):
         # are, and it must not pretend the session had no trace at all either.
         self.assertNotIn("留在本场记录里", line)
         self.assertIn("轨迹中途写入失败", line)
+        # And the card must not offer a way back for a sentence its record lacks. Review on
+        # this slice found every answer after the failure still printing 回看说这句的那一场,
+        # with the command opening a file that holds only the first one.
+        answers = self.store.answers_for(self.store.list_candidates()[0]["id"])
+        self.assertTrue(answers, "the answers themselves are still attached")
+        recorded = {key: item.get("recorded") for key, item in answers.items()}
+        self.assertIn(0, recorded.values(),
+                      "at least one answer did not reach the file: " + str(recorded))
+        # The screen that would offer the command is the card's own block, so render it
+        # from the same rows the receipt just used.
+        from dojo import answers as answers_module
+        screen = "\n".join(answers_module.screen_lines({"answers": answers},
+                                                       database=self.store.path))
+        self.assertIn("没有写进那一场的记录文件", screen)
+        self.assertNotIn("回看说这句的那一场", screen)
 if __name__ == "__main__":
     unittest.main()

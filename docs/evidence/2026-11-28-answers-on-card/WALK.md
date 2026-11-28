@@ -91,7 +91,15 @@ python3 -m dojo --db "$DB" search '没发出来 路上 才发现'
   带进一场新讨论：python3 -m dojo --db /abs/…/walk.sqlite3 discuss --card d-…
 ```
 
-每条后面还带着它是哪个会话说的、哪一天记的，可以回到那一场去看原句。
+每条后面还带着它是哪个会话说的、哪一天记的，**还有一条回看那一场的命令**（带这一场的库和
+记录文件的绝对路径，可直接粘）：
+
+```
+  回看说这句的那一场：python3 -m dojo --db /abs/…/walk.sqlite3 transcript "/abs/…/sessions/discuss-….jsonl"
+```
+
+手工用 `promote` 附上去的那句没有会话，屏幕就说「（手工附上的）」，不印命令、不造时间；
+那一场选了 `--no-trace` 时，屏幕说「这一场没有留下记录文件」，而不是给一条打不开的路径。
 
 ## 3. 把这张卡带进后来的一场
 

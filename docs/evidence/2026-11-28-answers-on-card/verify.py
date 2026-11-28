@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -161,6 +162,27 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
             {key: item.get("answer") for key, item in carried.items()} == ANSWERS,
             json.dumps({key: item.get("answer") for key, item in carried.items()},
                        ensure_ascii=False))
+    reading("每条回答的 trace 是一个真存在、能打开的记录文件",
+            bool(carried) and all(item.get("trace") and Path(item["trace"]).is_file()
+                                  for item in carried.values()),
+            json.dumps({key: item.get("trace") for key, item in carried.items()},
+                       ensure_ascii=False))
+    # On fdd55ff this field was `datetime.now().isoformat()`: a timestamp where a reader
+    # expected a place, so the one thing it was for -- getting back to the session -- was
+    # impossible (found in review). The screen has to turn it into a command that runs.
+    back = dojo(["--db", str(db), "search", HIS_QUERY], env=env).stderr
+    back_line = next((line.split("回看说这句的那一场：", 1)[1].strip()
+                      for line in back.splitlines() if "回看说这句的那一场：" in line), "")
+    reading("屏幕给每条原话印出回看那一场的命令", bool(back_line), back[:400])
+    if back_line:
+        # Pasted as printed, from a directory that is not the library's: the same test
+        # #3419 established for every printed command.
+        pasted = subprocess.run(shlex.split(back_line), cwd=str(root), env=env,
+                                text=True, capture_output=True, timeout=120)
+        reading("照抄那条命令能打开那一场，且里面有他的话",
+                pasted.returncode == 0 and all(words in pasted.stdout
+                                               for words in ANSWERS.values()),
+                pasted.stderr[-400:])
     reading("每条回答都带着它是哪个会话说的",
             all(item.get("session") for item in carried.values()),
             json.dumps(carried, ensure_ascii=False)[:300])
@@ -265,6 +287,140 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     reading("卡的状态没有因为附上回答而变成可讨论",
             shown["candidate"]["status"] == "draft", shown["candidate"]["status"])
 
+    # ---- D2: the way back is promised only for a sentence that is really in the file --
+    # Review: with the second answer's write failing, all four lines still said 回看说这句
+    # 的那一场, and the command opened a record holding only the first answer. The trace is
+    # broken the same way `tests/test_offtarget_receipt.py` breaks it -- at the file object,
+    # which is the path a real OSError takes -- so the answers themselves still land on the
+    # card and only the record loses them.
+    heading("D2. 记录中途写不进去时，那条回看命令不再给出")
+    broken_db = root / "broken.sqlite3"
+    broken_env = dict(env, DOJO_SESSIONS=str(root / "broken-sessions"))
+    REQUESTS.clear()
+    REPLIES.extend([{"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
+                     "user_stance": "neutral"},
+                    {"answer": "好，就这句。", "candidate": CONCLUSION,
+                     "user_stance": "accept"}])
+    # In a child process, because `dojo(...)` here is a subprocess: a monkeypatch in this
+    # interpreter would never reach the session under test (my first version of this scene
+    # patched here and reported all four answers as recorded -- a green that proved nothing).
+    # The failure is injected where a real one happens, at the file object's write path.
+    breaker = (
+        "import sys\n"
+        "sys.path.insert(0, %r)\n"
+        "from dojo import discuss as d\n"
+        "from dojo.storage import Store\n"
+        "real = d._SessionTrace.append\n"
+        "kept = {'n': 0}\n"
+        "def dying(self, value):\n"
+        "    if value.get('event') == 'elicitation' and value.get('answer'):\n"
+        "        kept['n'] += 1\n"
+        "        if kept['n'] >= 2:\n"
+        "            self._warn(OSError('no space left on device'))\n"
+        "            return\n"
+        "    real(self, value)\n"
+        "d._SessionTrace.append = dying\n"
+        "sys.exit(d.run_discuss(Store(%r), read_line=lambda prompt: input()))\n"
+    ) % (str(ROOT), str(broken_db))
+    broken = subprocess.run([sys.executable, "-c", breaker],
+                            input="\n".join(OPENING + list(ANSWERS.values())) + "\n",
+                            text=True, capture_output=True, env=broken_env, cwd=str(ROOT),
+                            timeout=300)
+    reading("记录写坏的那一场仍跑完了", broken.returncode == 0, broken.stderr[-600:])
+    broken_cards = json.loads(dojo(["--db", str(broken_db), "list", "--history"],
+                                   env=broken_env).stdout or "[]")
+    broken_id = broken_cards[0]["id"] if broken_cards else ""
+    broken_rows = (json.loads(dojo(["--db", str(broken_db), "show", broken_id],
+                                   env=broken_env).stdout).get("answers") or {}) if broken_id else {}
+    missing = [key for key, item in broken_rows.items() if item.get("recorded") == 0]
+    reading("哪些回答真的没写进记录，是查文件看出来的", bool(missing), str({
+        key: item.get("recorded") for key, item in broken_rows.items()}))
+    broken_screen = dojo(["--db", str(broken_db), "search", "冷库温度报警"],
+                         env=broken_env).stderr if broken_id else ""
+    # The property is a match, not a count of zero: the first answer *is* in the file and
+    # deserves its command; the rest are not. Every command printed must land on a record
+    # that really contains the sentence printed above it -- that is what review found
+    # broken, and it is the only version of this check that can tell the two apart.
+    offered, unmatched, pending = 0, 0, None
+    for line in broken_screen.splitlines():
+        if "：「" in line and "他的话" not in line:
+            pending = line.split("：「", 1)[1].split("」", 1)[0]
+        elif "回看说这句的那一场：" in line and pending:
+            offered += 1
+            opened = subprocess.run(shlex.split(line.split("回看说这句的那一场：", 1)[1].strip()),
+                                    text=True, capture_output=True, cwd=str(root), env=broken_env,
+                                    timeout=120)
+            if pending not in opened.stdout:
+                unmatched += 1
+    reading("每条回看命令打开的记录都真的有那句原话",
+            offered > 0 and unmatched == 0, f"{offered} 条命令，{unmatched} 条对不上")
+    reading("记录里没有的那几句，屏幕说出原因而不是给一条命令",
+            "没有写进那一场的记录文件" in broken_screen, broken_screen[-700:])
+
+    # ---- D3: the first upgrade of an old library, by two writers at once -------------
+    # Review's finding: the column check ran outside the write lock, so two sessions
+    # upgrading the same library both ran the ALTER and the second died on `duplicate
+    # column name` -- losing that person's answer. The window is microseconds wide, so the
+    # durable form of this is `tests/test_answers_upgrade.py` (two threads, a barrier);
+    # this reading checks the same property end to end, that a read-only look changes no
+    # byte and that an upgraded library keeps both answers.
+    heading("D3. 旧库第一次升级：只读不改字节，两个写入都留下")
+    old_db = root / "old.sqlite3"
+    import sqlite3  # noqa: E402
+    seed_store = Store(old_db)
+    try:
+        old_card = seed_store.add("旧库里的那张卡。", "abstract_idea", scope=["x"])["id"]
+    finally:
+        seed_store.close()
+    connection = sqlite3.connect(old_db)
+    connection.execute("DROP TABLE IF EXISTS answers")
+    connection.executescript(
+        "CREATE TABLE answers (candidate_id TEXT NOT NULL, field TEXT NOT NULL,\n"
+        "    answer TEXT NOT NULL, session TEXT, at TEXT, question TEXT, trace TEXT,\n"
+        "    promoted_at TEXT NOT NULL, PRIMARY KEY(candidate_id, field));")
+    connection.commit()
+    connection.close()
+    old_bytes = old_db.read_bytes()
+    look = Store(old_db, readonly=True)
+    try:
+        look.answers_for(old_card)
+    finally:
+        look.close()
+    reading("只读回看旧库，一个字节都不改", old_db.read_bytes() == old_bytes,
+            "bytes changed while looking")
+    import threading  # noqa: E402
+    outcomes: dict[str, object] = {}
+    gate = threading.Barrier(2)
+
+    def upgrade(part: str, answer: str, key: str) -> None:
+        gate.wait()
+        writer = Store(old_db)
+        try:
+            writer.promote_answers(old_card, [{"part": part, "answer": answer,
+                                               "provenance": "discussion",
+                                               "session": "s-1"}], session="s-1")
+            outcomes[key] = None
+        except Exception as exc:  # noqa: BLE001
+            outcomes[key] = exc
+        finally:
+            writer.close()
+
+    pair = [threading.Thread(target=upgrade, args=("situation", ANSWERS["situation"], "a")),
+            threading.Thread(target=upgrade, args=("price", ANSWERS["price"], "b"))]
+    for thread in pair:
+        thread.start()
+    for thread in pair:
+        thread.join()
+    reading("两个写入同时给旧库补列，都没有报错",
+            outcomes == {"a": None, "b": None},
+            str({key: repr(value) for key, value in outcomes.items()}))
+    after = Store(old_db, readonly=True)
+    try:
+        both = after.answers_for(old_card)
+    finally:
+        after.close()
+    reading("两条回答都留下来了", set(both) == {"situation", "price"}, str(sorted(both)))
+
     # ---- E: the flag that decides whether anything is kept --------------------------
     # `--no-trace` says the session keeps nothing. The card is a file on the same disk,
     # so the answers must not reach it either -- measured before this was fixed: the
@@ -316,6 +472,32 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
         reading("显式 promote 之后那句才在卡上",
                 (after.get("answers") or {}).get("situation", {}).get("answer")
                 == ANSWERS["situation"], pushed.stderr[-300:])
+        hand_row = (after.get("answers") or {}).get("situation") or {}
+        # Review's finding: a session number typed into `promote` made the card claim a
+        # `--no-trace` discussion that never happened. Provenance is stored, not guessed.
+        reading("手工附上的那句记着自己的来源是手工，没有冒充那场讨论",
+                hand_row.get("provenance") == "manual",
+                json.dumps(hand_row, ensure_ascii=False))
+        sessioned = dojo(["--db", str(quiet_db), "promote", quiet_id,
+                          "--answer", "张力=盯现场的踏实感就只能选一个",
+                          "--session", "s-hand"], env=quiet_env)
+        typed = (json.loads(dojo(["--db", str(quiet_db), "show", quiet_id],
+                                 env=quiet_env).stdout).get("answers") or {}).get("tension") or {}
+        typed_screen = dojo(["--db", str(quiet_db), "search", "盯现场的踏实感"],
+                            env=quiet_env).stderr
+        reading("手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
+                typed.get("provenance") == "manual"
+                and "手工附上的" in typed_screen
+                and "没有留下记录文件" not in typed_screen,
+                typed_screen[:400] or sessioned.stderr[-300:])
+        reading("手工附上的那句不带会话和时刻，也不假装有记录文件",
+                not hand_row.get("session") and not hand_row.get("at")
+                and not hand_row.get("trace"), json.dumps(hand_row, ensure_ascii=False))
+        hand_screen = dojo(["--db", str(quiet_db), "search", "冷库温度报警"],
+                           env=quiet_env).stderr
+        reading("屏幕说这句是手工附上的，不是某场讨论里说的",
+                "手工附上的" in hand_screen
+                and "回看说这句的那一场" not in hand_screen, hand_screen[:400])
         quiet_hit = dojo(["--db", str(quiet_db), "search", "冷库温度报警"], env=quiet_env)
         reading("显式 promote 之后能用自己的话搜回它",
                 any(row.get("id") == quiet_id

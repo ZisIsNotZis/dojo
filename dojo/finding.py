@@ -235,7 +235,7 @@ def _entry(index: int, row: dict[str, Any], database: str | Any) -> list[str]:
     # boundary is what the card claims, this is what he said about it, and keeping them
     # in that order is the difference the whole slice is about. Absent for a card with
     # nothing stored, so every existing entry keeps the bytes it had.
-    answered = answers_module.screen_lines(row)
+    answered = answers_module.screen_lines(row, database=database)
     if answered:
         lines.extend(answered)
     sources = source_summary(row)
@@ -278,7 +278,7 @@ def _recent(result: dict[str, Any], database: str | Any) -> list[str]:
         lines.extend(extra)
         for line in boundary_lines(row):
             lines.append("  " + line)
-        for line in answers_module.screen_lines(row):
+        for line in answers_module.screen_lines(row, database=database):
             lines.append("  " + line)
         lines.append("    带进一场新讨论：" + commands.dojo("discuss", "--card", row.get("id"), db=database))
     return lines

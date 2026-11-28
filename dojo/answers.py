@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import commands
 from .storage import PART_KEYS_BY_FIELD
 
 # The four parts `discuss` asks, by the field key the card stores. The mapping is declared
@@ -87,8 +88,24 @@ def answers_text(state: dict[str, Any]) -> str:
     return " ".join(str(item.get("answer", "")) for item in stored(state).values())
 
 
-def screen_lines(state: dict[str, Any], indent: str = "  ") -> list[str]:
-    """His answers, one heading and one quoted line each, in part order."""
+def screen_lines(
+    state: dict[str, Any], indent: str = "  ", *, database: str | Any = None,
+) -> list[str]:
+    """His answers, one heading and one quoted line each, in part order.
+
+    Each line ends with somewhere to go next, and the two ways back are different facts:
+
+      a trace file      the session that said it, openable with `dojo transcript`. Only
+                        a discussion writes one; a hand-run `promote` has none, and the
+                        line says so rather than pointing at nothing.
+      where it came from  either 他本人在讨论里说的 (a `discuss` row) or 手工附上
+                        (someone typed `promote`). A hand-kept sentence has no session
+                        and no moment, and inventing one would make the card claim a
+                        conversation that never happened.
+
+    The old line printed a `trace` value that was `datetime.now().isoformat()` (review on
+    fdd55ff): a timestamp is not a place, so the reader had a field they could not open.
+    """
     answers = stored(state)
     if not answers:
         return []
@@ -99,14 +116,52 @@ def screen_lines(state: dict[str, Any], indent: str = "  ") -> list[str]:
             continue
         label = PART_LABELS.get(key, part)
         when = str(item.get("at") or "")[:10]
-        by = "，".join(value for value in (
-            ("来自会话 " + str(item["session"])) if item.get("session") else "",
-            ("记于 " + when) if when else "",
-        ) if value)
+        # Only a discussion has a session at all, and only a sentence that was really
+        # found in the record file gets a way back. Two review findings live here: a
+        # hand-kept answer with a session number typed in was reported as a `--no-trace`
+        # discussion, and when the record file died after the first answer, all four lines
+        # still offered a command that opens a file holding only the first one.
+        # Not inferred from a session id: `promote` accepted one by hand, so a session id
+        # alone cannot tell a discussion from a hand-kept sentence -- exactly the case
+        # review found the screen getting wrong. Rows written before provenance existed
+        # say so instead.
+        from_discussion = item.get("provenance") == "discussion"
+        record = str(item.get("trace") or "") if from_discussion else ""
+        recorded = item.get("recorded")
+        if from_discussion and item.get("session"):
+            by = "，".join(value for value in (
+                "来自会话 " + str(item["session"]),
+                ("记于 " + when) if when else "",
+            ) if value)
+        elif item.get("provenance") == "manual":
+            # No brackets of its own: the caller wraps this in a pair.
+            by = "手工附上的，不在任何一场会话记录里"
+        else:
+            # A row from a library written before provenance was stored. The session id, if
+            # there is one, is still a stored fact worth printing -- it is only the claim
+            # "this was said in that discussion" that is missing. Said without brackets of
+            # its own, so the line does not end in doubled parentheses.
+            by = ",".join(value for value in (
+                ("会话号 " + str(item["session"])) if item.get("session") else "",
+                "来源未记录：这个库比记录来源的版本早",
+            ) if value)
         lines.append(
             indent + "  " + label + "（" + part + "）：「" + str(item["answer"]) + "」"
-            + ("（" + by + "）" if by else "")
+            + ("（" + by.strip("（）") + "）" if by else "")
         )
+        if from_discussion and recorded == 0:
+            # The one case that must never print a command: the record file exists but
+            # this sentence is not in it. Naming the session keeps it traceable by hand.
+            lines.append(indent + "    这句没有写进那一场的记录文件（后半段写入失败），"
+                                   "回看那一场也找不到它；会话号：" + str(item.get("session") or "无"))
+        elif from_discussion and record:
+            lines.append(indent + "    回看说这句的那一场："
+                         + commands.dojo("transcript", record,
+                                         db=commands.library_argument(database)))
+        elif from_discussion:
+            # A discussion that kept no record: the card still holds his sentence, and
+            # saying why there is nowhere to go is more useful than silence.
+            lines.append(indent + "    这一场没有留下记录文件（--no-trace），回到那场只能靠会话号。")
     missing = [PARTS[key] for key in PARTS if key not in answers]
     if missing:
         lines.append(

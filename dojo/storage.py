@@ -1078,14 +1078,15 @@ class Store:
                 entry = merged[key]
                 self.connection.execute(
                     "INSERT INTO answers(candidate_id,field,answer,session,at,question,trace,"
-                    "promoted_at) VALUES(?,?,?,?,?,?,?,?) "
+                    "promoted_at,provenance,recorded) VALUES(?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(candidate_id,field) DO UPDATE SET answer=excluded.answer, "
                     "session=excluded.session, at=excluded.at, question=excluded.question, "
-                    "trace=excluded.trace, promoted_at=excluded.promoted_at",
+                    "trace=excluded.trace, promoted_at=excluded.promoted_at, "
+                    "provenance=excluded.provenance, recorded=excluded.recorded",
                     (
                         state["id"], key, entry["answer"], entry.get("session"),
                         entry.get("at"), entry.get("question"), entry.get("trace"),
-                        _now(),
+                        _now(), entry.get("provenance"), entry.get("recorded"),
                     ),
                 )
             details: dict[str, Any] = {"fields": changed, "session": session}
@@ -1141,9 +1142,25 @@ class Store:
             question TEXT,
             trace TEXT,
             promoted_at TEXT NOT NULL,
+            provenance TEXT,
+            recorded INTEGER,
             PRIMARY KEY(candidate_id, field)
         );
     """
+    # Columns added after the first version of this table. A library written by the
+    # earlier build has the table but not these, and the review found two screens reading
+    # facts that were never stored: a hand-kept answer was reported as a discussion, and
+    # an answer whose trace write failed was given a record path anyway.
+    ANSWERS_ADDED_COLUMNS = {
+        # 'discussion' (a `discuss` row) or 'manual' (a typed `promote`). NULL on rows
+        # written before this column existed: unknown, and said as unknown, not guessed.
+        "provenance": "TEXT",
+        # 1 when this sentence was found in the record file after the session ended, 0
+        # when it was not. NULL means nothing was ever going to be recorded (a hand-kept
+        # answer). This is what lets the screen promise a way back only for a sentence
+        # that is really in the file.
+        "recorded": "INTEGER",
+    }
 
     def _ensure_answers_table(self) -> None:
         """Create the answers table if it is not there.
@@ -1152,12 +1169,69 @@ class Store:
         a read-only search may not run DDL. `executescript` commits, so this stays outside
         the caller's transaction, the same way `ensure_reads_table` does.
         """
-        if self.connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='answers'"
-        ).fetchone() is not None:
-            return
+        # The decision and the write happen inside one `BEGIN IMMEDIATE`. Checking
+        # outside it was a real race, found by review: two sessions upgrading the same
+        # old library at the same moment both read "no such column", both ran the ALTER,
+        # and the second one died on `duplicate column name` -- losing that person's own
+        # answer for a reason that had nothing to do with their answer (see
+        # `.scratch/3480/probe_concurrent_upgrade.py`). `BEGIN IMMEDIATE` takes the write
+        # lock before the read, so the second writer sees the first one's column and
+        # simply proceeds. Distinct columns can then never collide.
         with self.transaction():
-            self.connection.executescript(self.ANSWERS_SCHEMA)
+            if self.connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='answers'"
+            ).fetchone() is None:
+                # `executescript` would commit the open transaction; the table is small
+                # and fixed, so the statements are run one by one instead.
+                for statement in self.ANSWERS_SCHEMA.split(";"):
+                    if statement.strip():
+                        self.connection.execute(statement)
+            self._widen_answers_table()
+
+    def _widen_answers_table(self) -> None:
+        """Add the columns a library from an earlier build does not have yet.
+
+        `CREATE TABLE IF NOT EXISTS` does nothing to an existing table, so a reader on an
+        older library would otherwise get `no such column: provenance` the first time a
+        screen asked. Existing rows keep NULL in both: what they cannot say, they do not
+        claim.
+
+        **Call it inside a transaction.** The read of `PRAGMA table_info` and the `ALTER`
+        have to be under the same write lock, or two sessions upgrading the same library
+        each decide the column is missing and the second fails.
+
+        `duplicate column name` is still treated as success if it arrives: a library
+        upgraded by a build that took a different route to the same column is in exactly
+        the state this method wants, and refusing there would turn a harmless race into a
+        lost answer. Any other error is raised, because a column that silently did not get
+        added would turn into `no such column` on the next read.
+        """
+        # A test seam with a real job: the window between this read and the ALTER below
+        # is where the review's race lives, and it is microseconds wide in a real run.
+        # `tests/test_answers_upgrade.py` and the evidence red arm widen it here rather
+        # than by editing the code under test, so the arm keeps exercising the real
+        # method instead of a copy. Production leaves it at zero.
+        pause = float(getattr(self, "_widen_pause", 0) or 0)
+        if pause:
+            import time as _time
+            _time.sleep(pause)
+        present = {row["name"] for row in
+                   self.connection.execute("PRAGMA table_info(answers)")}
+        for name, kind in self.ANSWERS_ADDED_COLUMNS.items():
+            if name in present:
+                continue
+            if pause:
+                import time as _time
+                _time.sleep(pause)
+            try:
+                self.connection.execute(f"ALTER TABLE answers ADD COLUMN {name} {kind}")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc):
+                    raise
+                # Another writer added it between our read and our write. The state we
+                # wanted is the state we have.
+                continue
+            present.add(name)
 
     def answers_for(self, candidate_id: str) -> dict[str, dict[str, Any]]:
         """His stored answers for one card, by field key, in part order.
@@ -1170,9 +1244,15 @@ class Store:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='answers'"
         ).fetchone() is None:
             return {}
+        # The added columns may not exist yet on a library this build has not written to;
+        # read what is there rather than failing the whole screen over two optional facts.
+        present = {row["name"] for row in
+                   self.connection.execute("PRAGMA table_info(answers)")}
+        extra = [name for name in ("provenance", "recorded") if name in present]
         rows = self.connection.execute(
-            "SELECT field,answer,session,at,question,trace,promoted_at FROM answers "
-            "WHERE candidate_id=?", (_id(candidate_id),)
+            "SELECT field,answer,session,at,question,trace,promoted_at"
+            + ("" if not extra else "," + ",".join(extra))
+            + " FROM answers WHERE candidate_id=?", (_id(candidate_id),)
         ).fetchall()
         found = {
             row["field"]: {
@@ -1180,6 +1260,8 @@ class Store:
                 "answer": row["answer"],
                 "session": row["session"],
                 "at": row["at"],
+                "provenance": row["provenance"] if "provenance" in extra else None,
+                "recorded": row["recorded"] if "recorded" in extra else None,
                 "question": row["question"],
                 "trace": row["trace"],
                 "promoted_at": row["promoted_at"],
@@ -1221,6 +1303,18 @@ class Store:
                 value = item.get(key)
                 if isinstance(value, str) and value.strip():
                     entry[key] = value
+            # How this sentence got here. A caller that knows says so; `discuss` passes
+            # 'discussion' and the CLI passes 'manual'. Anything else is left unset rather
+            # than guessed, because the screen would otherwise be inventing a conversation
+            # (the review found a hand-kept answer reported as a `--no-trace` discussion).
+            provenance = item.get("provenance")
+            if provenance in ("discussion", "manual"):
+                entry["provenance"] = provenance
+            # 1/0 only when the caller actually checked the record file; missing means
+            # "nothing was going to record it", which is not the same as "it failed".
+            recorded = item.get("recorded")
+            if recorded in (True, False):
+                entry["recorded"] = 1 if recorded else 0
             entries.append(entry)
         return entries
 

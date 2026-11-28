@@ -121,6 +121,94 @@ ARMS = [
         "回执说原话没有附到卡片上",
     ),
     (
+        # Review: the upgrade decision sat outside the write lock, so two sessions
+        # upgrading one old library both ran the ALTER and the second lost its answer to
+        # `duplicate column name`. This reverses exactly that lock and nothing else; the
+        # window is widened by the test seam (`_widen_pause`), and `duplicate column` is
+        # NOT tolerated here -- tolerating it is what made the first version of this arm
+        # green on broken code.
+        "the-upgrade-decides-outside-the-write-lock",
+        # Two reversals, because the fix has two halves and each one masks the other:
+        # (a) the decision moves back outside `BEGIN IMMEDIATE`; (b) the tolerance for
+        # `duplicate column` goes away. With only (a) the second writer quietly accepts
+        # the column it finds and the arm is green on broken code -- which is exactly what
+        # the first two versions of this arm did. The reading is what review described:
+        # two writers, one old library, both answers must survive.
+        [
+            ("dojo/storage.py",
+             '        with self.transaction():\n'
+             '            if self.connection.execute(\n'
+             '                "SELECT 1 FROM sqlite_master WHERE type=\'table\' AND name=\'answers\'"\n'
+             '            ).fetchone() is None:\n'
+             '                # `executescript` would commit the open transaction; the table is small\n'
+             '                # and fixed, so the statements are run one by one instead.\n'
+             '                for statement in self.ANSWERS_SCHEMA.split(";"):\n'
+             '                    if statement.strip():\n'
+             '                        self.connection.execute(statement)\n'
+             '            self._widen_answers_table()\n',
+             '        if self.connection.execute(\n'
+             '            "SELECT 1 FROM sqlite_master WHERE type=\'table\' AND name=\'answers\'"\n'
+             '        ).fetchone() is not None:\n'
+             '            self._widen_pause = 0.4  # widen the window the lock used to close\n'
+             '            self._widen_answers_table()\n'
+             '            return\n'
+             '        with self.transaction():\n'
+             '            if self.connection.execute(\n'
+             '                "SELECT 1 FROM sqlite_master WHERE type=\'table\' AND name=\'answers\'"\n'
+             '            ).fetchone() is None:\n'
+             '                for statement in self.ANSWERS_SCHEMA.split(";"):\n'
+             '                    if statement.strip():\n'
+             '                        self.connection.execute(statement)\n'
+             '            self._widen_answers_table()\n'),
+            ("dojo/storage.py",
+             '            except sqlite3.OperationalError as exc:\n'
+             '                if "duplicate column name" not in str(exc):\n'
+             '                    raise\n'
+             '                # Another writer added it between our read and our write. The state we\n'
+             '                # wanted is the state we have.\n'
+             '                continue\n',
+             '            except sqlite3.OperationalError:\n'
+             '                raise\n'),
+        ],
+        "两个写入同时给旧库补列，都没有报错",
+    ),
+    (
+        # Review: every line offered the way back even when the record died before that
+        # answer, so the command opened a file that did not contain the sentence.
+        "a-way-back-is-offered-for-a-sentence-not-in-the-record",
+        "dojo/discuss.py",
+        "                    entry[\"recorded\"] = _answer_reached_the_file(trace_path, part, answer)\n",
+        "                    entry[\"recorded\"] = True\n",
+        "每条回看命令打开的记录都真的有那句原话",
+    ),
+    (
+        # Review: a session number typed into `promote` made a hand-kept sentence look
+        # like a `--no-trace` discussion.
+        "a-hand-kept-answer-borrows-a-session-number",
+        "dojo/cli.py",
+        '"session": args.session, "provenance": "manual"})',
+        '"session": args.session, "provenance": "discussion"})',
+        "手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
+    ),
+    (
+        # Review's finding on fdd55ff, put back: the record column holds the time the
+        # answer was promoted instead of the path of the session that said it, so `show`
+        # offers a field a reader cannot open and the screen prints no way back.
+        "the-record-of-a-session-is-a-timestamp-not-a-place",
+        "dojo/discuss.py",
+        '                entry["trace"] = str(commands.absolute(trace_path))\n',
+        '                entry["trace"] = str(datetime.now(timezone.utc).isoformat())\n',
+        "每条回答的 trace 是一个真存在、能打开的记录文件",
+    ),
+    (
+        # A hand-kept sentence borrows a session and a moment it never had.
+        "a-hand-kept-answer-claims-a-conversation",
+        "dojo/answers.py",
+        '        from_discussion = item.get("provenance") == "discussion"\n',
+        '        from_discussion = True\n',
+        "手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
+    ),
+    (
         # The screen finds the card but does not say the words were his.
         "the-screen-does-not-say-the-words-were-his",
         "dojo/finding.py",
@@ -140,18 +228,40 @@ def main() -> int:
         return 1
     print("baseline: verify.py green (" + str(len(ARMS)) + " arms)")
     broken = 0
-    for name, target, old, new, expected in ARMS:
+    for name, target, old, new, expected in ((arm[0], arm[1],
+                                              arm[2] if not isinstance(arm[1], list) else None,
+                                              arm[3] if not isinstance(arm[1], list) else None,
+                                              arm[-1]) for arm in ARMS):
         work = Path(tempfile.mkdtemp(prefix="answers-arm-"))
         try:
             for entry in ("dojo", "tests", "docs"):
                 shutil.copytree(ROOT / entry, work / entry)
-            path = work / target
-            source = path.read_text(encoding="utf-8")
-            if old not in source:
-                print("  %-46s ARM BROKEN: anchor not found" % name)
+            # An arm may need more than one reversal, either because the fix has more
+            # than one part or because one part *masks* another: the upgrade race is
+            # invisible while `duplicate column` is tolerated, so an arm that restores
+            # only the unlocked decision stays green on broken code. `target` may be a
+            # single path with one (old, new) pair, or a list of such triples. Requiring
+            # every anchor keeps an arm from silently testing only half its change.
+            plan = target if isinstance(target, list) else [(target, old, new)]
+            if isinstance(target, list):
+                if not all(isinstance(step, tuple) and len(step) == 3 for step in plan):
+                    print("  %-46s ARM BROKEN: malformed multi-step arm" % name)
+                    broken += 1
+                    continue
+                edits = plan
+            else:
+                edits = [(target, old, new)]
+            missing = [path for path, old_text, _new in edits
+                       if old_text not in (work / path).read_text(encoding="utf-8")]
+            if missing:
+                print("  %-46s ARM BROKEN: anchor not found in %s"
+                      % (name, ", ".join(missing)))
                 broken += 1
                 continue
-            path.write_text(source.replace(old, new, 1), encoding="utf-8")
+            for path_name, old_text, new_text in edits:
+                path = work / path_name
+                source = path.read_text(encoding="utf-8")
+                path.write_text(source.replace(old_text, new_text, 1), encoding="utf-8")
             done = subprocess.run([sys.executable, "-B", str(work / VERIFY), str(work)],
                                   cwd=str(work), text=True, capture_output=True, timeout=1800)
             failed = [line.strip()[5:].strip() for line in done.stdout.splitlines()

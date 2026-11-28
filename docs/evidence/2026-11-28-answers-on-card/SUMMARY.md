@@ -86,6 +86,56 @@ session_end.elicitation: promoted=[]  part_sources=系统补 ×6
 `the-quiet-session-says-nothing-about-the-card`。README（中英两版）里那段自相矛盾的话改成
 按开关分两种情形讲，`--no-trace` 的帮助文字也改成覆盖卡片。
 
+## 复核又拦住一处：那条原话回不到它那场
+
+`show` 里每条原话带一个 `trace` 字段，但它是 `datetime.now().isoformat()`——**晋升的时刻，
+不是地方**。读者拿到一个打不开的字段，用自选会话目录（`DOJO_SESSIONS`）时更晕。
+
+现在 `trace` 是那一场记录文件的**绝对路径**，屏幕把它印成能直接粘的命令：
+
+```
+什么时候会这么做（情境）：「上周二夜里冷库温度报警…」（来自会话 discuss-2f67…，记于 2026-11-28）
+  回看说这句的那一场：python3 -m dojo --db /abs/lib.sqlite3 transcript "/abs/my records/discuss-2f67….jsonl"
+```
+
+实测（`.scratch/3480/probe_traceback.py`，会话目录叫 `my records`，带空格）：四条 `trace`
+都是存在的文件；照抄那行、在**另一个目录**里粘贴，rc=0 并把他两句原话都印出来。
+
+两种真实状态分得开，也不互相冒充：
+
+| 这条原话怎么来的 | 屏幕 |
+|---|---|
+| 讨论里说的 | 「来自会话 … 」+ 一条 `transcript` 命令 |
+| 手工 `promote` 的 | 「（手工附上的）」，**不**印命令、不造会话号和时刻 |
+| 那场没留记录（`--no-trace`） | 「这一场没有留下记录文件（--no-trace），回到那场只能靠会话号」 |
+
+新读数 5 项（A 段 `trace` 是真文件 + 屏幕命令可粘可跑；E 段手工附上的行不带会话/时刻/文件且屏幕说手工），
+新红臂 2 条（`the-record-of-a-session-is-a-timestamp-not-a-place`、
+`a-hand-kept-answer-claims-a-conversation`）。
+
+## 复核又拦住两处：手工附上会冒充讨论，记录写到一半
+
+**一、手工 `promote` 填了一个来源编号。** 屏幕上于是说「来自会话 s-hand，这一场没有留下记录
+文件（--no-trace）」——把一个从没发生过的讨论说成了事实。根因是屏幕在**猜**：它只看有没有
+`session`。现在 `answers` 表多存一列 `provenance`（`discussion` / `manual`），`discuss` 写
+第一种，CLI 写第二种，屏幕不再推断；旧库的行没有这列，就说「来源未记录」，不二选一。
+
+**二、记录写到一半就死了。** 第二条回答没落盘，后三条却照样显示「回看说这句的那一场」，
+打开却只找得到第一条。根因是「记录开着」被当成了「这句在文件里」。现在写入卡片前会**真的
+读那个文件、逐字找这句**，结果存成 `recorded`（1/0），屏幕只对 `=1` 的给命令，`=0` 的说
+「这句没有写进那一场的记录文件（后半段写入失败）」并给出会话号。
+
+**三、旧库第一次升级，两个写入撞在一起。** 复核用两个独立写入同时升级同一个旧库：一条成功，
+另一条报 `duplicate column name`，那句回答就丢了。根因是补列前的 `PRAGMA table_info` 在写锁
+外面。现在决定与 `ALTER` 在同一个 `BEGIN IMMEDIATE` 里，并且兼容式地容忍 `duplicate
+column`（另一个写者已经补上就是我想要的状态）。只读回看旧库仍然一个字节不改。
+
+这一条的红臂值得记下来：**头两版臂都是绿的**。第一版只把锁移出去，却留着 `duplicate
+column`
+容忍——两者互相遮蔽，测试量不到；第二版加了宽窗口但仍然容忍。只有同时退回“无锁 + 不容忍”
+才红。窗口本身只有微秒宽，所以在 `_widen_answers_table` 里留了一个只给测试用的 `_widen_pause`
+缝隙：它不制造竞态，只让竞态可观察。
+
 ## 自己走一遍时抓到的两处（都出了屏，都看着像对的）
 
 1. **匹配器去卡片的 state 里找回答**——回答在表里，不在 state 里。于是他那句失效例子只
@@ -110,8 +160,8 @@ stderr` 在没有命中时也成立，因为屏幕会列出「最近写下的卡
 ## 读数与红臂
 
 ```bash
-python3 docs/evidence/2026-11-28-answers-on-card/verify.py   # 35 项读数
-python3 docs/evidence/2026-11-28-answers-on-card/redarm.py   # 11 条臂
+python3 docs/evidence/2026-11-28-answers-on-card/verify.py   # 49 项读数
+python3 docs/evidence/2026-11-28-answers-on-card/redarm.py   # 16 条臂
 python3 -B -m unittest tests.test_answers                     # 20 项
 python3 -B -m unittest discover -s tests -q                   # 全量
 ```

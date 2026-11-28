@@ -536,7 +536,12 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
             part, separator, text = value.partition("=")
             if not separator or not text.strip():
                 raise DojoError("--answer 要写成「件=原话」，例如 --answer 情境=上周二夜里报警")
-            entries.append({"part": part.strip(), "answer": text, "session": args.session})
+            # `manual` is a fact, not a guess: this is a command a person typed, so
+            # there was no discussion, no question and no record file. Before the screen
+            # knew that, a session number passed by hand made the card claim a
+            # `--no-trace` discussion that never happened (found in review).
+            entries.append({"part": part.strip(), "answer": text,
+                            "session": args.session, "provenance": "manual"})
         state = store.promote_answers(args.id, entries, session=args.session)
         # What the card *now carries*, read back from the table: the returned state is the
         # stored card, which does not hold the answers, and printing it alone would show a
