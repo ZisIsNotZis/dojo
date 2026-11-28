@@ -141,7 +141,19 @@ def _new_id(prefix: str) -> str:
 # a program and diffing the rows -- a check on the four top-level keys cannot see it,
 # which is why the readings now compare whole row key sets on a library holding both a
 # sentence-match and a limits-match.
-READING_ROW_KEYS = ("matched_on", "matched_wording", "matched_in")
+READING_ROW_KEYS = ("matched_on", "matched_wording", "matched_in", "answers")
+# The four parts `discuss` asks, by the field key the card stores. Declared beside the
+# reading keys because three layers have to agree on the vocabulary: `discuss` writes the
+# answers, `storage` orders and searches them, and `finding`/`discuss` print them. The
+# Chinese name is what the trace calls a part; the key is what the card stores.
+PART_KEYS_BY_FIELD = {
+    "situation": "情境",
+    "tension": "张力",
+    "price": "代价",
+    "off": "失效",
+}
+# The same mapping the other way, for a caller holding the name `discuss` uses.
+PART_FIELD_BY_NAME = {name: key for key, name in PART_KEYS_BY_FIELD.items()}
 
 
 class Store:
@@ -858,6 +870,12 @@ class Store:
         # for the same reason the two above are: `candidate` is the stored state, and a
         # test compares it byte for byte.
         payload.update(self.revision_basis(state["id"], state))
+        # His own words, for the surface a person opens directly. Beside `candidate` for
+        # the same reason the keys above are: `candidate` is the stored state byte for
+        # byte, and the answers are a different table.
+        answers = self.answers_for(state["id"])
+        if answers:
+            payload["answers"] = {key: dict(item) for key, item in answers.items()}
         return payload
 
     def _active(self, state: dict[str, Any]) -> None:
@@ -995,6 +1013,216 @@ class Store:
             }
             state = self._write(state, "revise", details, request)
         return state
+
+    def promote_answers(
+        self,
+        candidate_id: str,
+        answers: list[dict[str, Any]],
+        *,
+        session: str | None = None,
+    ) -> dict[str, Any]:
+        """Keep his own words on the card, one entry per part, exactly as he said them.
+
+        This is the write `discuss` has never done: four concrete answers came back, the
+        receipt said 没有写进卡片, and the card's `part_sources` said 系统补 for all four
+        forever (measured at the CLI, `.scratch/3474/probe_promote.py`). The values come
+        from trace rows, never from a caller's paraphrase, and each entry keeps the
+        session and moment it came from, so a reader can go back to the record.
+
+        Two limits, both deliberate:
+
+        * the sentence and the content fields do not move -- his condition is not silently
+          promoted into `scope`, which would hand the model's phrasing back to him as his
+          own. `answers` is its own key, shown under its own heading.
+        * no source is attached and the status is untouched. An answer is material about
+          the claim, not a second arrival at it, so `independence`, `broadcast`, the
+          acceptance digest and the discussable gate all read exactly as before.
+
+        A part that already carries an answer is replaced only when the new one differs,
+        and the earlier value stays in the ledger's `from` field -- the same rule every
+        other write here follows. Passing the same answers again is a repeat, not a new
+        version.
+        """
+        clean = self._answer_entries(answers)
+        # Its own table, not the card's state: a state write bumps `version`, and
+        # `pipeline_marks` compares against versions, so keeping a sentence he said would
+        # turn finished work back into pending work -- the exact rule `_write` documents.
+        # It would also change `wording_digest` if the key were part of content, which
+        # would invalidate a recorded acceptance of the wording. Neither is acceptable for
+        # a fact that is about his material, not about the claim.
+        self._ensure_answers_table()
+        with self.transaction():
+            state = self._get(_id(candidate_id))
+            self._active(state)
+            current = self.answers_for(candidate_id)
+            merged: dict[str, Any] = dict(current)
+            changed: list[str] = []
+            replaced: dict[str, Any] = {}
+            for entry in clean:
+                key = entry["field"]
+                previous = current.get(key)
+                if isinstance(previous, dict) and previous.get("answer") == entry["answer"]:
+                    continue
+                if isinstance(previous, dict):
+                    replaced[key] = previous
+                merged[key] = entry
+                changed.append(key)
+            if not changed:
+                # Same answers again: a row in the ledger so a reader can tell a replay
+                # from a second action, and no version move (nothing on the card changed).
+                self._event(state["id"], "promote_answers.repeat", {
+                    "fields": [], "session": session, "effect": "unchanged",
+                })
+                return state
+            for key in changed:
+                entry = merged[key]
+                self.connection.execute(
+                    "INSERT INTO answers(candidate_id,field,answer,session,at,question,trace,"
+                    "promoted_at) VALUES(?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(candidate_id,field) DO UPDATE SET answer=excluded.answer, "
+                    "session=excluded.session, at=excluded.at, question=excluded.question, "
+                    "trace=excluded.trace, promoted_at=excluded.promoted_at",
+                    (
+                        state["id"], key, entry["answer"], entry.get("session"),
+                        entry.get("at"), entry.get("question"), entry.get("trace"),
+                        _now(),
+                    ),
+                )
+            details: dict[str, Any] = {"fields": changed, "session": session}
+            if replaced:
+                details["from"] = replaced
+            # The ledger row names the session that said it; the card's `sessions` is not
+            # touched, because `independence()` counts it as a provenance group and his
+            # answer is material about the claim, not a second arrival at it.
+            self._event(state["id"], "promote_answers", details)
+        return state
+
+    def unpromote_answer(
+        self, candidate_id: str, part: str, reason: str, *, session: str | None = None,
+    ) -> dict[str, Any]:
+        """Take one stored answer off the card, keeping what it was in the ledger.
+
+        Reversible by design: a person who decides his sentence was about something else
+        takes it back without a new card and without losing what was said. The wording,
+        the content fields and the status do not move.
+        """
+        reason = _text(reason, "unpromote reason")
+        field = str(part or "").strip()
+        # Both the Chinese part name the discussion uses and the field key the card
+        # stores are accepted; refusing the first would make the CLI ask a person to learn
+        # the storage vocabulary to undo their own answer.
+        field = PART_FIELD_BY_NAME.get(field, field)
+        if field not in PART_KEYS_BY_FIELD:
+            raise DojoError("part must be one of: " + ", ".join(PART_KEYS_BY_FIELD))
+        self._ensure_answers_table()
+        with self.transaction():
+            state = self._get(_id(candidate_id))
+            self._active(state)
+            answers = self.answers_for(candidate_id)
+            if field not in answers:
+                raise DojoError(f"this card carries no answer for {field}")
+            removed = answers.pop(field)
+            self.connection.execute(
+                "DELETE FROM answers WHERE candidate_id=? AND field=?",
+                (state["id"], field),
+            )
+            self._event(state["id"], "unpromote_answer",
+                        {"field": field, "reason": reason, "session": session,
+                         "from": removed})
+        return state
+
+    ANSWERS_SCHEMA = """
+        CREATE TABLE IF NOT EXISTS answers (
+            candidate_id TEXT NOT NULL REFERENCES candidates(id),
+            field TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            session TEXT,
+            at TEXT,
+            question TEXT,
+            trace TEXT,
+            promoted_at TEXT NOT NULL,
+            PRIMARY KEY(candidate_id, field)
+        );
+    """
+
+    def _ensure_answers_table(self) -> None:
+        """Create the answers table if it is not there.
+
+        Not in `__init__`: opening a library must describe it, not change it (#1893), and
+        a read-only search may not run DDL. `executescript` commits, so this stays outside
+        the caller's transaction, the same way `ensure_reads_table` does.
+        """
+        if self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='answers'"
+        ).fetchone() is not None:
+            return
+        with self.transaction():
+            self.connection.executescript(self.ANSWERS_SCHEMA)
+
+    def answers_for(self, candidate_id: str) -> dict[str, dict[str, Any]]:
+        """His stored answers for one card, by field key, in part order.
+
+        Absent table means "no answers recorded here", not "he said nothing": a library
+        written before this table existed simply has nothing to show, and every caller
+        prints nothing for it rather than a sentence about his silence.
+        """
+        if self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='answers'"
+        ).fetchone() is None:
+            return {}
+        rows = self.connection.execute(
+            "SELECT field,answer,session,at,question,trace,promoted_at FROM answers "
+            "WHERE candidate_id=?", (_id(candidate_id),)
+        ).fetchall()
+        found = {
+            row["field"]: {
+                "field": row["field"],
+                "answer": row["answer"],
+                "session": row["session"],
+                "at": row["at"],
+                "question": row["question"],
+                "trace": row["trace"],
+                "promoted_at": row["promoted_at"],
+            }
+            for row in rows if row["field"] in PART_KEYS_BY_FIELD
+        }
+        return {key: found[key] for key in PART_KEYS_BY_FIELD if key in found}
+
+    @staticmethod
+    def _answer_entries(answers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Validate answers coming from a caller, keeping the stored value verbatim.
+
+        Accepted shape: a list of `{"part"|"field", "answer", "session"?, "at"?,
+        "question"?, "trace"?}`. `part` may be the Chinese part name or the field key --
+        both are what the trace and the CLI have to hand. Neither the text nor the moment
+        is filled in by this program: an answer with no `at` stays without one rather
+        than borrowing the write time, which would make two different answers look
+        simultaneous.
+        """
+        if not isinstance(answers, list) or not answers:
+            raise DojoError("answers must be a non-empty list")
+        entries: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in answers:
+            if not isinstance(item, dict):
+                raise DojoError("each answer must be an object")
+            field = str(item.get("field") or item.get("part") or "").strip()
+            field = PART_FIELD_BY_NAME.get(field, field)
+            if field not in PART_KEYS_BY_FIELD:
+                raise DojoError("answer part must be one of: " + ", ".join(PART_KEYS_BY_FIELD))
+            if field in seen:
+                raise DojoError(f"two answers for the same part: {field}")
+            seen.add(field)
+            answer = item.get("answer")
+            if not isinstance(answer, str) or not answer.strip():
+                raise DojoError(f"answer for {field} cannot be empty")
+            entry: dict[str, Any] = {"field": field, "answer": answer}
+            for key in ("session", "at", "question", "trace"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    entry[key] = value
+            entries.append(entry)
+        return entries
 
     def alias(self, candidate_id: str, wording: str, reason: str) -> dict[str, Any]:
         wording, reason = _text(wording, "alias"), _text(reason, "alias reason")
@@ -1800,6 +2028,7 @@ class Store:
 
     def _matches(
         self, terms: set[str], *, include_withheld: bool = False,
+        include_answers: bool = False,
     ) -> list[tuple[int, set[str], dict[str, Any], dict[str, Any] | None]]:
         """Every retrievable card whose text overlaps `terms`, best overlap first.
 
@@ -1846,7 +2075,23 @@ class Store:
             )
             if not kept and not include_withheld:
                 continue
-            found = terms.intersection(lexical_terms(searchable_text(canonical, accepts)))
+            haystack = searchable_text(canonical, accepts)
+            if include_answers:
+                # His own answers are on the card now, so the words *he* used have to
+                # reach it -- that is the point of keeping them (see `dojo/answers.py`).
+                # Kept out of `searchable_text` on purpose: that function is also the
+                # model-facing matcher's input, and this slice leaves the material handed
+                # to a model exactly as it was. Only the person's own screen asks for this.
+                # From the answers table, not from the card's state: the answers are not
+                # part of the stored card, and asking the state dict silently matched
+                # nothing -- measured on the walk, where a query built from his own
+                # counterexample found the card only through the word 系统 in its
+                # sentence, scoring 1 instead of 4.
+                extra = " ".join(str(item.get("answer", ""))
+                                 for item in self.answers_for(canonical["id"]).values())
+                if extra:
+                    haystack += " " + extra
+            found = terms.intersection(lexical_terms(haystack))
             if not found:
                 continue
             withheld = None if kept else self._withheld_basis(canonical, accepts)
@@ -1963,7 +2208,8 @@ class Store:
                 # as a query that matched nothing, so it gets the same way in.
                 empty["recent"] = self._recent_rows(3)
             return empty
-        ordered = self._matches(terms, include_withheld=for_reading)
+        ordered = self._matches(terms, include_withheld=for_reading,
+                                include_answers=for_reading)
         results = []
         for score, found, state, withheld in ordered:
             if withheld is not None or len(results) >= limit:
@@ -1971,6 +2217,9 @@ class Store:
             row = self._card_row(state, score, found)
             if for_reading:
                 row.update(self._matched_wording(state, found))
+                # His own words are already on the row (`_card_row` reads the table).
+                # This block used to add them from the state; nothing is left to add.
+                pass
             results.append(row)
         payload: dict[str, Any] = {
             "query": query,
@@ -1985,6 +2234,8 @@ class Store:
                 {
                     **self._card_row(state, score, found),
                     **self._matched_wording(state, found),
+                    **({"answers": {key: dict(item) for key, item in _stored_answers(state).items()}}
+                       if _stored_answers(state) else {}),
                     # The reason is a record code plus counts; what it is called on
                     # screen is `finding.py`'s decision, not this method's.
                     "refused": withheld,
@@ -2020,6 +2271,7 @@ class Store:
         copies of this block would drift, and the one that drifted quietly would be the
         one a person reads about the sentence he was looking for (#3436).
         """
+        answers = self.answers_for(state["id"])
         row: dict[str, Any] = {
             "id": state["id"],
             "version": state["version"],
@@ -2037,6 +2289,14 @@ class Store:
             "relations": self._present_state(state).get("relations", []),
             "aliases": state.get("aliases", []),
         }
+        # His own words about this card, when the table holds any. Added by value like
+        # every key around it, so a card with nothing stored keeps exactly the bytes it
+        # had -- and on the model-facing row too, because the answers are part of what
+        # makes the card findable only for the person's own screen; a hole there would
+        # hand a row over with no visible reason. (The model's reach is unchanged: the
+        # matcher only searches answers when the reading screen asks.)
+        if answers:
+            row["answers"] = {key: dict(item) for key, item in answers.items()}
         # #1929: a card he revised carried the reason it changed only in the ledger,
         # so this row described the sentence and hid how it got that way. Added by
         # value, only when a revision of *this* wording exists.
@@ -2087,6 +2347,13 @@ class Store:
         in_aliases = bool(found & lexical_terms(aliases_text(state)))
         in_limits = bool(found & lexical_terms(limits_text(state)))
         in_sources = bool(found & lexical_terms(sources_text(state)))
+        # The words may be his own answer rather than any wording of the card. Reported
+        # separately because it answers a different question: "this is the card whose
+        # story I told", not "this is the sentence I remember".
+        in_answers = bool(found & lexical_terms(
+            " ".join(str(item.get("answer", ""))
+                     for item in self.answers_for(state["id"]).values())
+        ))
         matched_in: list[str] = []
         if in_sentence:
             matched_in.append("sentence")
@@ -2096,6 +2363,8 @@ class Store:
             matched_in.append("limits")
         if in_sources:
             matched_in.append("sources")
+        if in_answers:
+            matched_in.append("answers")
         # `candidate_text` is the whole card, so it is the honest answer to "did the
         # query overlap this card's own current text" -- which is what `matched_on`
         # has always meant and what the rewrite note keys on.
@@ -2890,6 +3159,26 @@ def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = No
 # #3436's second round measured an entry claiming "对上 8 个词" over a sentence that
 # shared none of them, because its condition line was the phrase being searched.
 BOUNDARY_FIELDS = ("premises", "scope", "alternatives", "contradictions", "unknowns")
+
+
+def _stored_answers(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The card's stored answers, by field key, with malformed entries dropped.
+
+    Answers live in their own table (`Store.answers_for`), so a state dict does not carry
+    them; a retrieval row does, because `Store` puts them there when it builds the row.
+    This reader therefore serves the row path only, and `answers.stored` serves either.
+
+    Imported lazily: `dojo.answers` imports `PART_KEYS_BY_FIELD` from this module, so a
+    top-level import here would close the circle.
+    """
+    from .answers import stored
+    return stored(state)
+
+
+def answers_text(state: dict[str, Any]) -> str:
+    """His own answers as searchable text. Used by the person's retrieval only."""
+    from .answers import answers_text as _answers_text
+    return _answers_text(state)
 
 
 def statement_text(state: dict[str, Any]) -> str:

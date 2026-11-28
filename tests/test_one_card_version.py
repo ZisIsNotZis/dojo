@@ -189,7 +189,10 @@ class TheReceiptDoesNotSpeakForTheLibrary(unittest.TestCase):
                                    "没人再复核", "有一次反而漏了"])
         self.assertEqual(0, code)
         line = self.receipt(text)
-        self.assertIn("卡片是提问前写下的那句", line)
+        # The receipt now has two shapes and both must keep the claim: the card's
+        # own sentence is the one written before the questions. The promoted shape
+        # names it in the same words ("卡片上那句子还是提问前写下的那一句").
+        self.assertIn("提问前写下", line)
         self.assertIn("这场问答没有改过它", line)
         self.assertNotIn("之后没改过", line)
 

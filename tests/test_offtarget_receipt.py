@@ -158,18 +158,32 @@ class OffTargetAnswerTests(unittest.TestCase):
         self.assertNotIn("在上面", line)
         self.assertNotIn("你自己看", line)
 
-    def test_the_words_do_not_reach_the_card(self):
+    def test_the_words_reach_the_card_without_becoming_its_wording(self):
+        """Superseded 2026-11-28: this used to assert the answers never left the record.
+
+        That was true of the build then and is false now -- `promote_answers` stores them
+        beside the card, in their own table. What this test was protecting survives as a
+        narrower claim, and is what is checked here: the answers do not become the card's
+        sentence or its fields, and the field's author does not change.
+        """
         code, text = self.run_session([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
         self.assertEqual(0, code)
         line = self.closing_line(text)
-        self.assertIn("没有写进卡片", line)
-        # The card holds the sentence it was written with, and the confirm kept its
-        # own basis -- neither absorbed the answers.
+        self.assertIn("附在卡片", line)
+        self.assertIn("没有改写成卡片的措辞", line)
         saved = [row for row in self.trace_rows() if row.get("event") == "session_end"][-1]
         self.assertTrue(saved["saved"], "这场应当写下了结论")
         shown = self.store.show(saved["saved"][0])
         self.assertEqual(CONCLUSION["statement"], shown["candidate"]["statement"])
-        self.assertNotIn(OFF_PRICE, json.dumps(shown, ensure_ascii=False))
+        # Not in the wording or any content field...
+        self.assertNotIn(OFF_PRICE, json.dumps(shown["candidate"], ensure_ascii=False))
+        # ...but kept verbatim beside them, with the session that said it.
+        self.assertEqual(OFF_PRICE, shown["answers"]["price"]["answer"])
+        self.assertTrue(shown["answers"]["price"]["session"],
+                        "回答要带着是哪个会话说的")
+        # And the field is still the system's: attaching a sentence is not authorship of
+        # a field, and this session does not judge whether the answer fills it.
+        self.assertEqual("系统补", saved["elicitation"]["part_sources"]["price"])
 
     # ---- the word must not swing the other way ----------------------------------
 

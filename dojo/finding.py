@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from . import commands
+from . import answers as answers_module
 from .discuss import (
     HANDOFF_STATUS_WORDS,
     acceptance_line,
@@ -109,8 +110,17 @@ def _where_the_words_are(row: dict[str, Any]) -> str | None:
     if "sources" in parts:
         where.append("它的来源记录")
     alias_part = "alias" in parts
-    if not where and not alias_part:
+    # His own answer, when that is what matched. A distinct sentence, because "this is
+    # the card whose story I told" and "this is the sentence I remember" are different
+    # finds -- and the answer is printed below under its own heading, so the reader can
+    # check it without leaving the screen.
+    answers_part = "answers" in parts
+    if not where and not alias_part and not answers_part:
         return None
+    if answers_part:
+        line = ("  你记得的字不在卡片写的那句里，而在附在这张卡上的你的原话里"
+                "（原样印在下面的「他的话」）；卡片本身那句和这些词没有重叠。")
+        return line
     if where:
         line = ("  你记得的字不在本条目开头引的那句里，而在" + "、".join(where) + "里"
                 "（原样印在下面）；卡片本身的那句和这些词没有重叠。")
@@ -221,6 +231,13 @@ def _entry(index: int, row: dict[str, Any], database: str | Any) -> list[str]:
     if earlier:
         lines.append(earlier)
     lines.extend(boundary_lines(row))
+    # His own words, after the card's own boundary and before its provenance: the
+    # boundary is what the card claims, this is what he said about it, and keeping them
+    # in that order is the difference the whole slice is about. Absent for a card with
+    # nothing stored, so every existing entry keeps the bytes it had.
+    answered = answers_module.screen_lines(row)
+    if answered:
+        lines.extend(answered)
     sources = source_summary(row)
     if sources:
         lines.append("  " + sources)
@@ -260,6 +277,8 @@ def _recent(result: dict[str, Any], database: str | Any) -> list[str]:
         lines.append("  " + head.strip())
         lines.extend(extra)
         for line in boundary_lines(row):
+            lines.append("  " + line)
+        for line in answers_module.screen_lines(row):
             lines.append("  " + line)
         lines.append("    带进一场新讨论：" + commands.dojo("discuss", "--card", row.get("id"), db=database))
     return lines

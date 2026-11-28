@@ -160,12 +160,20 @@ def main() -> int:
     check("C5c 回执说原话在本场记录里，而那记录真有这几句",
           "留在本场记录里" in line and OFF_PRICE in last_trace(root / "a"),
           line)
-    check("C6 回执说这些原话没有写进卡片",
-          "没有写进卡片" in line, line)
-    check("C7 卡片仍是提问前那句，回答一个字都没进去",
+    # Superseded 2026-11-28 by the slice that made the answers reach the card. The claim
+    # this slice made -- "his words were kept in the record, not written onto the card" --
+    # was true of that build and is false of this one: `promote_answers` now stores them
+    # in their own table beside the card. What must still hold, and is what this slice was
+    # really protecting, is that the card's own sentence and fields do not absorb them.
+    check("C6 回执说这些原话现在附在卡片上（照他的字存）",
+          "附在卡片" in line and "没有改写成卡片的措辞" in line, line)
+    check("C7 卡片的句子和字段仍是提问前那句，回答没有被写进措辞或条件",
           shown["candidate"]["statement"] == CARD
-          and OFF_PRICE not in json.dumps(shown, ensure_ascii=False),
+          and OFF_PRICE not in json.dumps(shown["candidate"], ensure_ascii=False),
           shown["candidate"]["statement"])
+    attached = (shown.get("answers") or {}).get("price", {}).get("answer")
+    check("C7b 回答原样在他自己的那一栏里，逐字未改",
+          attached == OFF_PRICE, str(attached))
 
     # The other direction: do not let the word creep onto parts that were not said.
     second = Library(root / "b")

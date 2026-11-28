@@ -100,6 +100,24 @@ def _parser() -> argparse.ArgumentParser:
     revise.add_argument("--statement", required=True)
     revise.add_argument("--reason", required=True)
 
+    promote = sub.add_parser(
+        "promote",
+        help=(
+            "attach his own words about a card, verbatim, under their own heading; this "
+            "changes no sentence, field, source or status, and does not make the card discussable"
+        ),
+    )
+    promote.add_argument("id")
+    promote.add_argument("--answer", action="append", default=[], required=True,
+                         metavar="件=原话", help="repeat per part: 情境/张力/代价/失效 (or the field key)")
+    promote.add_argument("--session", help="which session said it; stored on the answer")
+
+    unpromote = sub.add_parser("unpromote", help="take one stored answer off a card; the ledger keeps what it was")
+    unpromote.add_argument("id")
+    unpromote.add_argument("part")
+    unpromote.add_argument("--reason", required=True)
+    unpromote.add_argument("--session")
+
     alias = sub.add_parser("alias", help="add an equivalent wording; this does not merge candidates")
     alias.add_argument("id")
     alias.add_argument("--wording", required=True)
@@ -505,6 +523,26 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         return store.revise(args.id, args.statement, args.reason)
     if command == "alias":
         return store.alias(args.id, args.wording, args.reason)
+    if command == "promote":
+        # His own words onto the card, kept verbatim beside it. `--answer` repeats, one
+        # "part=words" per part, so the shell never has to build JSON by hand; the part
+        # may be the name `discuss` uses (情境) or the field key (situation).
+        entries = []
+        for value in args.answer:
+            part, separator, text = value.partition("=")
+            if not separator or not text.strip():
+                raise DojoError("--answer 要写成「件=原话」，例如 --answer 情境=上周二夜里报警")
+            entries.append({"part": part.strip(), "answer": text, "session": args.session})
+        state = store.promote_answers(args.id, entries, session=args.session)
+        # What the card *now carries*, read back from the table: the returned state is the
+        # stored card, which does not hold the answers, and printing it alone would show a
+        # card that looks untouched after a write that succeeded.
+        return {"id": state["id"], "version": state["version"],
+                "answers": store.answers_for(state["id"])}
+    if command == "unpromote":
+        state = store.unpromote_answer(args.id, args.part, args.reason, session=args.session)
+        return {"id": state["id"], "version": state["version"],
+                "answers": store.answers_for(state["id"])}
     if command == "link":
         return store.link(args.id, args.relation, args.target, args.reason)
     if command == "split":

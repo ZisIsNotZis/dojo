@@ -65,8 +65,11 @@ ARMS = [
     (
         "earlier-wording-unsearchable",
         "dojo/storage.py",
-        "            found = terms.intersection(lexical_terms(searchable_text(canonical, accepts)))",
-        "            found = terms.intersection(lexical_terms(candidate_text(canonical)))",
+        # The matcher now builds a haystack first (a later slice added the answers for
+        # the reading screen). The arm restores the narrower one: only what the card says
+        # now, with no earlier wording in reach.
+        '            haystack = searchable_text(canonical, accepts)\n',
+        '            haystack = candidate_text(canonical)\n',
         "用换掉之前那句还能找到它",
     ),
     (

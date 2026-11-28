@@ -228,13 +228,21 @@ class ClosingLineTests(unittest.TestCase):
         self.assertTrue(with_card, "结论卡应当在第一问之前就已写入")
         self.assertIs(self.snapshots.index(with_card[0]), 2,
                       "第一问之前就该有卡：第 0/1 次读入是开场两轮")
-        first = with_card[0]
+        # The card's own rows: version, state, snapshots and events. His answers now go
+        # into their own table (`answers`), which is a different fact and is asserted
+        # below -- so this compares the card's part of the library, not the whole file.
+        card_tables = ("candidates", "snapshots")
+        first = {name: with_card[0].get(name) for name in card_tables}
         for later in with_card[1:]:
-            self.assertEqual(first, later, "库在问答过程中被改写了")
+            self.assertEqual(first, {name: later.get(name) for name in card_tables},
+                             "卡片本身在问答过程中被改写了")
         line = self.closing_line(text)
-        self.assertIn("没有写进卡片", line)
-        self.assertIn("卡片是提问前写下的那句", line)
+        self.assertIn("附在卡片", line)
+        self.assertIn("没有改写成卡片的措辞", line)
         self.assertNotIn("补上了", line)
+        # And the answers really are on the card now, which is what the sentence claims.
+        shown = self.store.show(self.store.list_candidates()[0]["id"])
+        self.assertTrue(shown.get("answers"), "回执说附上了，库里却没有")
 
     # ---- the person who leaves early ---------------------------------------------
 
@@ -354,7 +362,10 @@ class ClosingLineTests(unittest.TestCase):
         self.assertIn("你在 情境、失效 上说了原话", line)
         self.assertIn("你说跳过 张力", line)
         self.assertIn("没答出来 代价", line)
-        self.assertIn("没有写进卡片", line)
+        # With no promotion result there is nothing on the card, so the line says the
+        # words stayed in the record and says nothing about the card.
+        self.assertIn("留在本场记录里", line)
+        self.assertNotIn("附在卡片", line)
 
     def test_the_pure_function_does_not_say_all_four_when_they_were_not_asked(self):
         line = closing_text(["情境"], [], ["张力"], unfinished=["代价", "失效"])

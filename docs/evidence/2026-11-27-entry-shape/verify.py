@@ -140,7 +140,10 @@ def main() -> int:
         # The supervisor's receipt: the block used to say the entry would read 合写,
         # but every card field is recorded 系统补 even when all four are answered.
         "不承诺一个记不出来的归属": "合写" not in block,
-        "说了卡片到底算谁的": "仍全算我写的" in block,
+        # Superseded 2026-11-28: the block now also says his answers are attached
+        # to the card, and states which part stays the model's. The reading keeps
+        # asking that the block name who the sentence is, in those words.
+        "说了卡片到底算谁的": "仍算我写的" in block,
         # It must be the block *before* the questions, not the session opening: the
         # opening was already there before this slice and says nothing about parts.
         "在第一个问题之前": QUESTIONS["情境"]["ask"] not in block,

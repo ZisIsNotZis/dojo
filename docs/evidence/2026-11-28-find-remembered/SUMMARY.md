@@ -80,7 +80,10 @@ python3 docs/evidence/2026-11-28-find-remembered/verify.py | grep 逐键
 ## 读数与红臂
 
 ```
-python3 docs/evidence/2026-11-28-find-remembered/verify.py   # 64 项，0 不成立
+python3 docs/evidence/2026-11-28-find-remembered/verify.py   # 65 项，0 不成立
+# 2026-11-28：C 段的原句（半夜别老把人叫起来）现在会通过他留在卡上的原话命中，
+# 所以零重叠那几条改用一个库里真的没有词的问句；同一段另加一条读数，确认
+# 按他的原话也能找到 —— 两件事都是真的，要分开量。
 python3 docs/evidence/2026-11-28-find-remembered/redarm.py   # 22 条臂
 python3 -B -m unittest discover -s tests -q                  # 全量
 ```

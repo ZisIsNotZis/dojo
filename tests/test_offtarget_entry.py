@@ -47,7 +47,9 @@ class TheOffTargetEntryPoint(unittest.TestCase):
         self.assertEqual(0, done.returncode,
                          "the entry point did not pass:\n%s" % done.stdout[-3000:])
         self.assertIn("全部成立。", done.stdout)
-        for phrase in ("说了原话", "答没答到点上", "没有写进卡片"):
+        # The third phrase was 没有写进卡片 until 2026-11-28, when the answers began
+        # reaching the card; the guarantee that survived is the narrower one.
+        for phrase in ("说了原话", "答没答到点上", "附在卡片"):
             self.assertIn(phrase, done.stdout, phrase)
 
     def test_it_is_not_vacuous(self):

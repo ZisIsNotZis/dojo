@@ -100,10 +100,12 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(["情境", "张力", "代价", "失效"], [row["part"] for row in events])
         for row in events:
             self.assertIn(QUESTIONS[row["part"]]["ask"], output)
+            # The row's `promoted` flag is written while the questions run, before
+            # anything is on the card; the session summary is what says what landed.
             self.assertFalse(row["promoted"])
             self.assertTrue(row["collected"])
         end = self.elicitation_end()
-        self.assertEqual([], end["promoted"])
+        self.assertEqual(["情境", "张力", "代价", "失效"], end["promoted"])
         self.assertEqual(["情境", "张力", "代价", "失效"], end["collected"])
         self.assertEqual(4, end["turns"])
         self.assertEqual("系统的", end["authorship"])
@@ -173,10 +175,14 @@ class ElicitationLoopTests(unittest.TestCase):
         head = output[:first_q]
         marker = head.rfind("主持人> ")
         block = head[head.rfind("主持人> ", 0, marker) + len("主持人> "):marker]
-        # The block must match the record in plain words: answers stay in the session,
-        # every card field is still written by the system.
-        self.assertIn("仍全算我写的", block,
+        # The block must match the record in plain words: his answers are kept and now
+        # attached to the card, while the sentence and its conditions stay the system's.
+        # `part_sources` still reads 系统补 for all four, because promotion writes a
+        # separate row and does not put his words into a field.
+        self.assertIn("仍算我写的", block,
                       "the block does not say who the card credits")
+        self.assertEqual("系统补", end["part_sources"]["situation"],
+                         "the field is still the system's, however the answer is kept")
         # The block's other half: "你答的原话会留在本场记录里". Every one of his
         # answers has to be in the trace word for word, or that sentence is false too.
         events = self.elicitation_events()
@@ -214,7 +220,10 @@ class ElicitationLoopTests(unittest.TestCase):
         code, _ = self.run_session(["讲一条做法", "对", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)
         end = self.elicitation_end()
-        self.assertEqual([], end["promoted"])
+        # Two parts were answered before the input ended, so those two sentences are on
+        # the card; the receipt and the trace say which.
+        self.assertEqual(["情境", "张力"], end["promoted"])
+        self.assertEqual({"situation": True, "tension": True}, end["answers_attached"])
         self.assertEqual(["情境", "张力"], end["collected"])
         self.assertEqual([], end["supplied"])
         self.assertEqual(3, end["turns"])  # 情境 1 轮、张力 1 轮、代价第 1 轮就 EOF
@@ -286,9 +295,15 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual(answers, [event["answer"] for event in events])
         self.assertEqual(["situation", "tension", "price", "off"], [event["field"] for event in events])
         self.assertTrue(all(event["collected"] for event in events))
+        # The per-row `promoted` flag keeps its old meaning and stays False: rows are
+        # written while the questions run, before anything is on the card. What the card
+        # carries is the session-level summary below.
         self.assertFalse(any(event["promoted"] for event in events))
         end = self.elicitation_end()
-        self.assertEqual([], end["promoted"])
+        # Premotion attaches the sentence; it still does not judge whether it fits the
+        # part, which is why `part_sources` stays 系统补 even here -- one of these four
+        # answers is about dinner.
+        self.assertEqual(["情境", "张力", "代价", "失效"], end["promoted"])
         self.assertEqual(["情境", "张力", "代价", "失效"], end["collected"])
         self.assertTrue(all(source == "系统补" for source in end["part_sources"].values()))
         self.assertEqual("系统的", end["authorship"])

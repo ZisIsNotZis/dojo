@@ -48,6 +48,10 @@ SLOW_WHEN = "他已经抽身、这条提醒的失败不会当场伤人时"
 SLOW_UNLESS = "提醒必须发生在值班当场、人来不及时接手时"
 DOUBT = "第三个团队里更糟：提醒他根本没看"
 GIST = "半夜别老把人叫起来"
+# The gist above is kept for the record (it is what a person typed in the original walk),
+# but it now matches his stored answer, so the zero-overlap readings below use a phrase
+# with no word at all in this library.
+NO_OVERLAP = "沙漠里的骆驼要怎么排队喝水"
 ABSENT = "量子色动力学里的渐近自由"
 
 CONCLUSION = {"statement": SLOW, "kind": "abstract_idea", "scope": [SLOW_WHEN],
@@ -376,16 +380,29 @@ def main() -> int:
 
     # ---- C: only the gist ----------------------------------------------------------
     heading("C. 只记得大意，说的词库里一个都没有")
+    # Superseded 2026-11-28: GIST ("半夜别老把人叫起来") used to overlap nothing, and
+    # now it legitimately finds the card through his own stored answer -- four answers a
+    # later slice attached to the card are searchable on purpose. So this scene needs a
+    # phrase the library really has no words from, or it would be measuring the fallback
+    # on a screen that is no longer showing one.
     gist_out, gist_err, code = screen(("search", GIST))
     SCREENS["gist"] = gist_err
     print(gist_err)
+    # And the other direction, which is this build's behaviour: the same gist now finds
+    # the card through the answers he gave, and the screen says so rather than pretending
+    # the sentence matched.
+    reading("他对这张卡说过的原话也参与检索（不是只比卡片正文）",
+            mine in gist_err and "你的原话" in gist_err, gist_err[:300])
+
+    none_out, none_err, code = screen(("search", NO_OVERLAP))
+    print(none_err)
     reading("没有字词重叠时，屏幕说清方法：只比字词，不认意思",
-            "只比字词，不认意思" in gist_err)
-    reading("没有把它说成「库里没有这句」", "库里没有这句" not in gist_err)
-    reading("给出另一个办法：最近写下的卡", "最近写下的" in gist_err)
-    reading("并说明那不是按意思找的", "不是按意思找出来的" in gist_err)
-    reading("最近那几张里能看到我这条", mine in gist_err)
-    reading("程序不替我认定哪条是你要找的", "由你看" in gist_err and "不替你挑" in gist_err)
+            "只比字词，不认意思" in none_err)
+    reading("没有把它说成「库里没有这句」", "库里没有这句" not in none_err)
+    reading("给出另一个办法：最近写下的卡", "最近写下的" in none_err)
+    reading("并说明那不是按意思找的", "不是按意思找出来的" in none_err)
+    reading("最近那几张里能看到我这条", mine in none_err)
+    reading("程序不替我认定哪条是你要找的", "由你看" in none_err and "不替你挑" in none_err)
 
     # ---- D: the wording it used to have -------------------------------------------
     heading("D. 记得的是它换掉之前那句话")
