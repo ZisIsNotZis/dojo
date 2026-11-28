@@ -34,7 +34,7 @@ def approvals(store: Store, session: str):
         (ACCEPTANCE_EVENT,),
     ):
         details = json.loads(row["details_json"])
-        if details.get("session") != session or details.get("path") not in {"discuss_conclusion", "accept_draft"}:
+        if details.get("session") != session or details.get("path") not in {"discuss_conclusion", "accept_draft", "review_draft"}:
             continue
         card_id, version = row["candidate_id"], details.get("version")
         snapshot = store.connection.execute(
@@ -48,7 +48,10 @@ def approvals(store: Store, session: str):
         key = (card_id, version)
         if key not in found:
             found[key] = (card, [])
-        found[key][1].append({"event": row["seq"], "agreed_at": details.get("agreed_at")})
+        record = {"event": row["seq"], "agreed_at": details.get("agreed_at")}
+        if details.get("path") == "review_draft":
+            record["draft_review"] = details.get("draft_review")
+        found[key][1].append(record)
     return list(found.values()), unbound
 
 
@@ -68,9 +71,11 @@ def saved_classifications(store: Store, session: str):
 def read_trace(path: Path, session: str):
     """Read a complete session once; the digest describes those same bytes."""
     try:
+        if not path.is_file():
+            return [], None
         with path.open("rb") as source:
             raw = source.read(MAX_TRACE_BYTES + 1)
-        if len(raw) > MAX_TRACE_BYTES:
+        if len(raw) > MAX_TRACE_BYTES or not raw.endswith(b"\n"):
             return [], None
         rows = [json.loads(line) for line in split_lines(raw.decode("utf-8")) if line.strip()]
     except (OSError, ValueError, RecursionError):
@@ -111,6 +116,26 @@ def readback_turns(card, records, rounds):
                 and previous.get("pending_snapshot") == fields(card)):
             return [seq - 1, seq]
     return [seq]
+
+
+def draft_review_turn(card, records, rounds, digest):
+    """Locate the original proposal, not an approval turn (approval lives only in SQLite)."""
+    if digest is None:
+        return None
+    for record in reversed(records):
+        basis = record.get("draft_review")
+        if not isinstance(basis, dict) or basis.get("trace_sha256") != digest or type(basis.get("turn")) is not int:
+            continue
+        for row in rounds:
+            if row["seq"] != basis["turn"]:
+                continue
+            proposal = row.get("pending_snapshot")
+            if (isinstance(proposal, dict) and proposal == row.get("candidate")
+                    and isinstance(proposal.get("scope"), list)
+                    and all(proposal.get(key) == card[key] for key in FIELDS if key != "scope")
+                    and card["scope"][:len(proposal["scope"])] == proposal["scope"]):
+                return row["seq"]
+    return None
 
 
 def _input(card, records, rounds):

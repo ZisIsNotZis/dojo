@@ -761,6 +761,7 @@ class Store:
 
     def accept_draft(
         self, candidate_id: str, session: str | None = None, *, agreed_at: str | None = None,
+        draft_review: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """The session that left an unaccepted draft now accepts that exact wording.
 
@@ -788,7 +789,11 @@ class Store:
                 "claim": "本次讨论会话形成的结论；完整会话原文保存在本地轨迹文件，内容未经独立核验。",
                 "scope_note": "单一会话来源；不构成独立佐证。",
             }]
-            state["confirmation"] = self._confirmation_off(state, "accepted after the session resumed")
+            if draft_review is not None:
+                state["sources"][0]["claim"] = (f"本场第 {draft_review['turn']} 轮的拟写，经会后本地复核留下；"
+                                                 "内容未经独立核验。")
+            else:
+                state["confirmation"] = self._confirmation_off(state, "accepted after the session resumed")
             # r112b: the acceptance is an action, so it is recorded as one. Retrieval
             # reads this event instead of inferring acceptance from the source's shape;
             # `dojo add --source-json` can produce the accepted shape by hand, and a
@@ -797,6 +802,8 @@ class Store:
                 "session": session, ACCEPTANCE_EVENT: True, "path": "accept_draft",
                 DIGEST_FIELD: wording_digest(state), CARD_FIELD: candidate_id,
             }
+            if draft_review is not None:
+                details.update(path="review_draft", draft_review=draft_review)
             # Same fact as `record_acceptance`'s: when the agreement happened, not when
             # this row is written. Omitted when the caller does not know it.
             agreed = _agreed_at(agreed_at)
@@ -1778,6 +1785,7 @@ class Store:
 
     def record_acceptance(
         self, candidate_id: str, session: str | None, *, path: str, agreed_at: str | None = None,
+        draft_review: dict[str, Any] | None = None,
     ) -> int:
         """Record that a user accepted this wording verbatim, on any path that can do so.
 
@@ -1804,6 +1812,8 @@ class Store:
             agreed = _agreed_at(agreed_at)
             if agreed is not None:
                 details[AGREED_AT_FIELD] = agreed
+            if draft_review is not None:
+                details["draft_review"] = draft_review
             return self._event(candidate_id, ACCEPTANCE_EVENT, details)
 
     def _acquisition_events(self, candidate_id: str) -> list[dict[str, Any]]:

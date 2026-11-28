@@ -1004,8 +1004,8 @@ _REVIEW_ACCEPT = "/认可"
 
 
 def _print_review(output: TextIO, candidate: dict[str, Any], original: str | None,
-                  opening: str | None) -> None:
-    """Render the same full proposal the local approval action would write."""
+                  opening: str | None, *, local_draft: bool = False) -> None:
+    """Render the full wording the selected local action would write."""
     def quote(text: str) -> str:
         return json.dumps(text, ensure_ascii=False)
 
@@ -1016,7 +1016,8 @@ def _print_review(output: TextIO, candidate: dict[str, Any], original: str | Non
         print("你当时的原话：这份记录没有可对应的发言。", file=output)
     else:
         print("你在提出这版的那一轮说（逐字）：" + quote(original), file=output)
-    print("主持人拟写（不是你的原话，也未经独立核验）：" + quote(candidate["statement"]), file=output)
+    heading = "待留下的拟写（含你在此补的边界，若有；未经独立核验）：" if local_draft else "主持人拟写（不是你的原话，也未经独立核验）："
+    print(heading + quote(candidate["statement"]), file=output)
     print("  卡片类型：" + candidate["kind"], file=output)
     for label, key in (
         ("适用条件与边界", "scope"),
@@ -1027,8 +1028,9 @@ def _print_review(output: TextIO, candidate: dict[str, Any], original: str | Non
     ):
         values = candidate[key]
         print("  " + label + "：" + ("、".join(map(quote, values)) if values else "这版未列出"), file=output)
-    print("认可上面这一版，单独输入「" + _REVIEW_ACCEPT + "」。要纠正或补充，直接说；认可不等于验证。",
-          file=output, flush=True)
+    if not local_draft:
+        print("认可上面这一版，单独输入「" + _REVIEW_ACCEPT + "」。要纠正或补充，直接说；认可不等于验证。",
+              file=output, flush=True)
 
 
 def _candidate_fields(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -1086,6 +1088,7 @@ def _save_conclusion(
     echo_notices: list[str] | None = None,
     derived_from: str | None = None,
     previous: dict[str, Any] | None = None,
+    draft_review: dict[str, Any] | None = None,
 ) -> tuple[str | None, int | None, str | None]:
     """Bind approval to the full reviewed content, never to a best match or stale ID."""
     echoed = None
@@ -1126,6 +1129,9 @@ def _save_conclusion(
                     "verification": "unknown",
                     "scope_note": "单一会话来源；不构成独立佐证。",
                 }
+                if draft_review is not None:
+                    source["claim"] = (f"本场第 {draft_review['turn']} 轮的拟写，经会后本地复核留下；"
+                                       "内容未经独立核验。")
                 try:
                     saved = store.add(**candidate, session=session, sources=[source], derived_from=derived_from)
                 except DuplicateContent as duplicate:
@@ -1137,7 +1143,8 @@ def _save_conclusion(
                     if (existing.get("sessions") == [session] and len(existing["sources"]) == 1
                             and existing["sources"][0].get("type") == "model_generated"
                             and existing["sources"][0].get("independence_group") == session):
-                        saved = store.accept_draft(existing["id"], session=session, agreed_at=agreed_at)
+                        saved = store.accept_draft(existing["id"], session=session, agreed_at=agreed_at,
+                                                   draft_review=draft_review)
                         accepted_draft = True
                     elif _session_already_saw(store, existing["id"], session):
                         # An exact echo isn't a second arrival or source.
@@ -1151,7 +1158,9 @@ def _save_conclusion(
             # new local action, not a second source; record it even when an earlier
             # acceptance of the same digest exists.
             if not accepted_draft:
-                store.record_acceptance(saved["id"], session, path="discuss_conclusion", agreed_at=agreed_at)
+                store.record_acceptance(saved["id"], session,
+                                        path="review_draft" if draft_review is not None else "discuss_conclusion",
+                                        agreed_at=agreed_at, draft_review=draft_review)
     except (DojoError, OSError, sqlite3.Error) as exc:
         return None, None, str(exc)
     if echoed is not None and echo_notices is not None:
@@ -2678,6 +2687,13 @@ def run_discuss(
                 "elicitation": elicitation_summary() if elicitation["started"] else None,
             })
             trace.close()
+            if not trace.warning and trace_path is not None:
+                from .draft_review import review_hint
+
+                hint = review_hint(trace_path, session, store.path)
+                if hint:
+                    print("找回本场先前的拟写（核对原话、补边界、选择留下或略过；不请求模型）：" + hint,
+                          file=output)
             if trace.warning:
                 print(trace.warning, file=output)
         for error in write_errors:

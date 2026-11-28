@@ -276,6 +276,9 @@ def _parser() -> argparse.ArgumentParser:
     transcript_mode.add_argument("--json", action="store_true", help="输出同样的内容，机器可读")
     transcript_mode.add_argument("--turn", type=int, action="append", help="只看指定轮；可重复指定")
     transcript.add_argument("--trace-sha256", help="定位命令要求的轨迹指纹；仅与 --turn 一起使用")
+    draft_review = sub.add_parser("review-drafts", help="从结束回执找回早先的拟写，核对原话并在本地选择是否留下")
+    draft_review.add_argument("trace", help="结束回执指向的本场轨迹")
+    draft_review.add_argument("--trace-sha256", required=True, help="从结束回执或清单复制的轨迹指纹")
     discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
     # The card is a file too. This flag used to cover only the session record, so the
     # four answers were written onto the card while the screen said they were not kept;
@@ -904,6 +907,10 @@ def main(argv: list[str] | None = None) -> int:
                 max_requests=args.max_requests,max_tools=args.max_tools,retry_distillation=args.retry_distillation,
                 retry_associations=args.retry_associations),ensure_ascii=False,indent=2))
             return 0
+        if args.command == "review-drafts":
+            from .draft_review import run
+
+            return run(_trace_argument(args.trace, db_path), db_path, args.trace_sha256)
         if args.command == "transcript":
             # Read-only and store-free on purpose: the trace is self-contained (that is
             # why `--resume` can rebuild a handout without the library), and a person
@@ -1051,6 +1058,12 @@ def main(argv: list[str] | None = None) -> int:
                     print(line)
                 if not report["cards"]:
                     print("本场没有可列出的卡。")
+                if trace is not None:
+                    from .draft_review import review_hint
+
+                    hint = review_hint(trace, report["session"], db_path)
+                    if hint:
+                        print("找回本场先前的拟写（核对原话、补边界、选择留下或略过；不请求模型）：" + hint)
             else:
                 print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
             return 0

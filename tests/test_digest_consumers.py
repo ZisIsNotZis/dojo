@@ -72,6 +72,12 @@ AUDITED = {
     ('storage.py', 'if any(digest == wanted for digest in digests):'): 'same-bytes',
     # A pasted locator accepts only the trace bytes it was generated against.
     ('transcript.py', 'if len(data) > MAX_TRACE_BYTES or sha256(data).hexdigest() != expected_sha256:'): 'same-bytes',
+    # A review locator names the trace bytes it was printed for. The other two say
+    # the same to the proposal recovered from the trace meanwhile: same file, not
+    # same meaning.
+    ('draft_review.py', 'if digest is None or digest != expected_sha256:'): 'same-bytes',
+    ('draft_review.py', 'if current != digest:'): 'same-bytes',
+    ('distillation.py', 'if not isinstance(basis, dict) or basis.get("trace_sha256") != digest or type(basis.get("turn")) is not int:'): 'same-bytes',
 }
 
 PROSE = '若第二人每天要复核的件数超过其容量，则流量并未真正转移。'

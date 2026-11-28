@@ -52,18 +52,31 @@ class Readback:
                 if key in entries:
                     card, records = entries[key]
                     turns = distillation.readback_turns(card, records, rounds)
+                    label = f"回看对照卡 {key[0]} v{key[1]} 的原话"
                     if turns:
-                        return self._anchor(f"回看对照卡 {key[0]} v{key[1]} 的原话", path, digest, turns)
+                        return self._anchor(label, path, digest, turns)
+                    local_turn = distillation.draft_review_turn(card, records, rounds, digest)
+                    if local_turn is not None:
+                        return self._local_anchor(label, path, digest, local_turn)
         return None
 
     def _anchor(self, label, path, digest, turns):
         scope = "拟稿所在轮与认可轮" if len(turns) == 2 else "仅定位到认可轮"
         return f"  {label}（{scope}）：" + self._command(path, digest, turns)
 
+    def _local_anchor(self, label, path, digest, turn):
+        return (f"  {label}（拟稿所在轮；会后认可另记在库里）："
+                + self._command(path, digest, [turn]))
+
     def lines(self, card, records, verdict):
         turns = distillation.readback_turns(card, records, self.rounds)
+        local_turn = distillation.draft_review_turn(card, records, self.rounds, self.digest)
         if turns:
             yield self._anchor("回看本场原话", self.trace, self.digest, turns)
+        elif local_turn is not None:
+            yield self._local_anchor("回看本场原话", self.trace, self.digest, local_turn)
+        elif any(record.get("draft_review") is not None for record in records):
+            yield "  认可发生在会后；未能在给定轨迹定位原拟写，不以其他版本的原话替代。"
         else:
             yield "  无法在给定轨迹定位这一版的认可轮；不以其他版本的原话替代。"
         if verdict["of"]:
