@@ -1644,6 +1644,44 @@ class DiscussTests(unittest.TestCase):
         self.assertIsNone(row["error"])
         self.assertIn("finish_reason", row)
 
+    def test_a_blank_reply_is_retried_once_and_never_with_the_same_bytes(self):
+        # The real adapter raises `empty_content` (live.py) when `content` is only
+        # whitespace; a dict-shaped fake answer with a blank string would instead be
+        # rejected as `schema_violation`, which is a different branch.
+        class BlankThenAnswer:
+            def __init__(self):
+                self.messages = []
+
+            def complete(self, messages):
+                self.messages.append(messages)
+                if len(self.messages) <= 2:
+                    raise LiveError("model endpoint returned empty message content",
+                                    kind="empty_content")
+                return result("继续。")
+
+        client = BlankThenAnswer()
+        output = io.StringIO()
+        code = run_discuss(
+            self.store, client=client,
+            read_line=read_lines(["第一轮", "第二轮再说一次"]), output=output,
+        )
+
+        self.assertEqual(0, code)
+        _, records = self.trace_records()
+        first = records[0]
+        # The decisive reading first: one blank reply costs one extra request, not two.
+        # Under the old rule (`empty_content` in the generic set, two retries) this is 3.
+        self.assertEqual(2, first["requests_sent"])
+        self.assertEqual("invalid_output", first["reason"])
+        self.assertEqual("empty_content", first["error"]["kind"])
+        # And the retry is not a copy of the request that just failed.
+        first_attempt, retry = client.messages[0], client.messages[1]
+        self.assertNotEqual(first_attempt[-1]["content"], retry[-1]["content"])
+        # The person's own line still reaches the retry unchanged.
+        self.assertIn("第一轮", retry[-1]["content"])
+        # The turn is open again rather than the session ending.
+        self.assertEqual("第二轮再说一次", records[1]["user"])
+
     def test_retry_exhaustion_records_invalid_output_and_keeps_conversation_open(self):
         invalid = {**result("格式错误", CONCLUSION), "extra": True}
         client = FakeClient([invalid, invalid, invalid, result("继续讨论。")])

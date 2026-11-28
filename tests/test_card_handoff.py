@@ -584,6 +584,26 @@ class ResumeTests(HandoffCase):
                       "claimed_firsthand", "unverified"):
             self.assertIn(piece, wire, piece)
 
+    def test_resume_keeps_attached_answers_after_the_library_changes(self):
+        card = self.narrowed_card()
+        original = "只有拿到真实样本才试这一条。"
+        later = "这是另一次补上的不同答复。"
+        self.store.promote_answers(card, [{"part": "情境", "answer": original}])
+        path = self.first_half(card)
+        self.store.unpromote_answer(card, "情境", "更正后续材料")
+        self.store.promote_answers(card, [{"part": "情境", "answer": later}])
+        client = FakeClient([{"answer": "接着说。", "candidate": None, "user_stance": "neutral"}])
+        output = io.StringIO()
+        self.assertEqual(0, run_discuss(
+            self.store, client=client, resume=path,
+            read_line=read_lines(["继续"]), output=output, environ={},
+        ))
+        wire = json.dumps(client.calls[0], ensure_ascii=False)
+        for surface in (output.getvalue(), wire):
+            self.assertIn(original, surface)
+            self.assertNotIn(later, surface)
+            self.assertIn("他这样做过两次", surface)
+
     def test_resume_keeps_the_version_this_conversation_started_with(self):
         """The card changes between the two halves. The session must not change with it.
 

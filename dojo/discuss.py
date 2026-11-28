@@ -1782,6 +1782,10 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         sources = row.get("sources")
         if isinstance(sources, list):
             handed["sources"] = sources
+        # Older traces have no answer snapshot. Do not backfill from the current card.
+        attached = answers_module.stored(row)
+        if attached:
+            handed["answers"] = attached
         if isinstance(row.get("revision_basis"), dict):
             handed_basis = dict(row["revision_basis"])
         # Absent on rows written before this build: then nothing is printed about
@@ -2113,6 +2117,7 @@ def run_discuss(
                 # and so a trace stays readable without the library at all.
                 "acceptance": handed_acceptance or None,
                 "derivation": handed_derivation,
+                "answers": answers_module.stored(handed),
                 "sources": [
                     {key: record[key] for key in ("id", "type", "verification", "claim", "scope_note")
                      if key in record}
@@ -2812,6 +2817,8 @@ def run_discuss(
             {"role": "user", "content": context},
         ]
         invalid_retries = 0
+        # Empty completions get at most one corrective retry per turn.
+        blank_retries = 0
         transient_retries = 0
         consecutive_connection_failures = 0
         round_echo_refused: list[str] = []
@@ -2830,12 +2837,16 @@ def run_discuss(
         raw_response = ""
         finish_reason: str | None = None
         terminal_failure = False
+        # What the last rejected reply actually was, so a retry can say it. Set in
+        # the failure branch below, read only when a retry is due.
+        last_rejection = ""
         while requests_sent < MAX_MODEL_REQUESTS:
             messages = [dict(message) for message in base_messages]
             messages.extend(dict(message) for message in tool_messages)
             if invalid_retries:
                 messages[-1]["content"] += (
-                    "\n\n纠正指令：上一次返回未通过约定的 JSON 契约；请只返回一个合法 JSON 对象，不要代码块围栏。"
+                    "\n\n纠正指令：上一次" + last_rejection
+                    + "请只返回一个合法 JSON 对象，不要代码块围栏。"
                 )
             requests_sent += 1
             request_started = time.monotonic()
@@ -3037,8 +3048,19 @@ def run_discuss(
                     # about, so this round ends without a retry. The session stays open:
                     # the connection recovered, so the user can put the turn again.
                     break
-                if kind in {"empty_content", "not_json", "schema_violation", "truncated", "unknown"} and invalid_retries < 2:
+                if kind == "empty_content":
+                    if blank_retries or invalid_retries >= 2:
+                        break
+                    blank_retries += 1
                     invalid_retries += 1
+                    last_rejection = "只返回了空白内容，没有返回任何可读文字。"
+                    note("回复没有可读内容，尝试纠正一次")
+                    if requests_sent < MAX_MODEL_REQUESTS:
+                        continue
+                    break
+                if kind in {"not_json", "schema_violation", "truncated", "unknown"} and invalid_retries < 2:
+                    invalid_retries += 1
+                    last_rejection = "返回未通过约定的 JSON 契约；"
                     note(f"输出不合格（{kind}），第 {invalid_retries} 次重试")
                     if requests_sent < MAX_MODEL_REQUESTS:
                         continue
