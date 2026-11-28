@@ -74,6 +74,32 @@ class StoreTests(unittest.TestCase):
         self.assertEqual("challenges", final["relations"][0]["type"])
         self.assertEqual([1, 2, 3, 4, 5, 6], [item["version"] for item in self.store.history("d-one")["versions"]])
 
+    def test_adoption_retry_requires_the_whole_original_ask(self):
+        self.add(statement="开始时的模拟表述")
+        self.add("d-target", "等待采纳的原卡")
+        self.store.confirm("d-target", "模拟可讨论")
+        self.store.revise("d-target", "当前版模拟表述", "收窄到新版")
+        self.store.link("d-one", "narrows", "d-target", "模拟改写依据")
+        link, = self.store.show("d-target", include_incoming_links=True)["incoming_links"]
+        seq = link["sequence"]
+        ask = dict(statement="采纳后的模拟表述", reason="采纳模拟收窄", session="s-a",
+                   scope=["模拟范围甲"])
+        adopted = self.store.revise("d-target", adopt_link_sequence=seq, **ask)
+        self.assertEqual(4, adopted["version"])
+        first_revise = self.store.history("d-target")["events"][-1]
+        replay = self.store.revise("d-target", adopt_link_sequence=seq, **ask)
+        history = self.store.history("d-target")
+        self.assertEqual(4, replay["version"])
+        self.assertEqual({"link_sequence": seq, "repeat_of": first_revise["sequence"], "adopted_version": 4,
+                          "current_version": 4}, replay["adoption_replay"])
+        for field, value in (("statement", ask["statement"] + "x"), ("reason", "不同理由"),
+                             ("session", None), ("scope", ["模拟范围乙"])):
+            with self.subTest(field=field), self.assertRaises(DojoError):
+                self.store.revise("d-target", adopt_link_sequence=seq, **{**ask, field: value})
+        self.assertEqual(adopted, self.store.show("d-target")["candidate"])
+        self.assertEqual("revise.repeat", history["events"][-1]["event"])
+        self.assertEqual(history, self.store.history("d-target"))
+
     def test_invalid_link_and_malformed_split_are_atomic(self):
         self.add()
         self.add("d-two", "另一个候选")

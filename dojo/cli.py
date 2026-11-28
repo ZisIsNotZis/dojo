@@ -117,8 +117,9 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "explicitly use one already-registered link to this card's current version in "
             "this revision; the number is show's incoming_links[].sequence. This does not "
-            "copy its source, wording, relation or approval onto the card, and a stale, "
-            "unknown or non-link event is refused"
+            "copy its source, wording, relation or approval onto the card. Resubmitting an "
+            "already-applied request returns its adoption receipt without rewriting the card; "
+            "otherwise a stale, unknown or non-link event is refused"
         ),
     )
 
@@ -585,8 +586,12 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         sequences = args.adopt_link or []
         if len(sequences) > 1:
             raise DojoError("一次改写只能用 --adopt-link 指定一条关联；不会从多条中默认选一条")
-        return store.revise(args.id, args.statement, args.reason,
-                            adopt_link_sequence=sequences[0] if sequences else None)
+        revised = store.revise(args.id, args.statement, args.reason,
+                               adopt_link_sequence=sequences[0] if sequences else None)
+        if receipt := revised.get("adoption_replay"):
+            print(f"关联 #{receipt['link_sequence']} 已在修订 #{receipt['repeat_of']} 生效（v{receipt['adopted_version']}）；"
+                  f"当前是 v{receipt['current_version']}，这次重试没有改写卡片。", file=sys.stderr)
+        return revised
     if command == "alias":
         return store.alias(args.id, args.wording, args.reason)
     if command == "promote":

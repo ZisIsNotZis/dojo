@@ -521,8 +521,31 @@ class CliEndToEndTests(unittest.TestCase):
         self.assertEqual(selected, adopted["sequence"])
         expected_adoption = {"sequence": changed["sequence"], "version": 3, "reason": "纳入桌面条件"}
         self.assertEqual({**expected_adoption, "is_current": True}, adopted["adopted_by"])
+        replay_args = ("revise", "claim", "--statement", revised["statement"],
+                       "--reason", "纳入桌面条件", "--adopt-link", str(selected))
+
+        def check_replay(before):
+            reply = self.run_cli(*replay_args)
+            self.assertEqual({"link_sequence": selected, "repeat_of": changed["sequence"],
+                              "adopted_version": 3, "current_version": before["candidate"]["version"]},
+                             reply.pop("adoption_replay"))
+            self.assertEqual(before["candidate"], reply)
+            after = self.run_cli("show", "claim", "--history")
+            repeat = after["history"]["events"].pop()
+            self.assertEqual(before, after)
+            self.assertEqual("revise.repeat", repeat["event"])
+            self.assertEqual({**changed["details"], "version": reply["version"], "effect": "unchanged",
+                              "adopted_version": 3, "repeat_of": changed["sequence"]}, repeat["details"])
+
+        check_replay(read)
         self.run_cli("revise", "claim", "--statement", "普通的新修订", "--reason", "不再采纳任何关联")
-        final = self.run_cli("show", "claim")
+        final = self.run_cli("show", "claim", "--history")
+        check_replay(final)
+        unchanged = self.db.read_bytes()
+        different = self.run_cli(*replay_args[:5], "不同理由", *replay_args[6:], success=False)
+        self.assertEqual(2, different.returncode)
+        self.assertIn("不是原请求", different.stderr)
+        self.assertEqual(unchanged, self.db.read_bytes())
         adopted, = [edge for edge in final["incoming_links"] if "adopted_by" in edge]
         self.assertEqual({**expected_adoption, "is_current": False}, adopted["adopted_by"])
 

@@ -984,8 +984,6 @@ class Store:
 
     def _adoptable_link(self, state: dict[str, Any], sequence: int) -> None:
         """Check under the same writer lock as the new revision."""
-        if type(sequence) is not int or not 1 <= sequence <= 2**63 - 1:
-            raise DojoError("--adopt-link 需要正整数关联事件编号（sequence）")
         row = self.connection.execute(
             "SELECT seq,candidate_id,details_json,created_at FROM events WHERE seq=? AND event='link'",
             (sequence,),
@@ -1002,8 +1000,7 @@ class Store:
             raise DojoError(f"关联 #{sequence} 指向 v{target['version']}，当前是 v{state['version']}；"
                             "请重新核对并登记对当前版本的关联")
 
-    def _link_adoptions(self, candidate_id: str) -> dict[int, dict[str, Any]]:
-        adoptions = {}
+    def _link_adoption_events(self, candidate_id: str) -> Iterator[tuple[int, dict[str, Any]]]:
         for row in self.connection.execute(
             "SELECT seq,details_json FROM events WHERE candidate_id=? AND event='revise' ORDER BY seq",
             (candidate_id,),
@@ -1015,10 +1012,36 @@ class Store:
             if (isinstance(details, dict) and type(details.get("adopt_link_sequence")) is int
                     and type(details.get("version")) is int and isinstance(details.get("reason"), str)
                     and details.get("effect") != "unchanged"):
-                adoptions[details["adopt_link_sequence"]] = {
-                    "sequence": row["seq"], "version": details["version"], "reason": details["reason"],
-                }
-        return adoptions
+                yield row["seq"], details
+
+    def _link_adoptions(self, candidate_id: str) -> dict[int, dict[str, Any]]:
+        return {
+            details["adopt_link_sequence"]: {
+                "sequence": seq, "version": details["version"], "reason": details["reason"],
+            }
+            for seq, details in self._link_adoption_events(candidate_id)
+        }
+
+    def _replay_link_adoption(
+        self, state: dict[str, Any], sequence: int, request: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        # Find a committed adoption on this exact card, not just wording that
+        # happens to match. Never infer a request from older, partial ledger rows.
+        for seq, details in self._link_adoption_events(state["id"]):
+            if details["adopt_link_sequence"] != sequence:
+                continue
+            if details.get("request") != request:
+                raise DojoError(f"关联 #{sequence} 已在修订 #{seq} 用于 v{details['version']}；"
+                                "这次不是原请求。若要另作改写，请重新核对当前版本")
+            receipt = {"link_sequence": sequence, "repeat_of": seq,
+                       "adopted_version": details["version"], "current_version": state["version"]}
+            self._event(state["id"], "revise" + REPEAT_EVENT_SUFFIX, {
+                **details, "version": state["version"], "effect": "unchanged",
+                "repeat_of": seq, "adopted_version": details["version"],
+            })
+            # Receipt metadata is command output only; it is not part of the card.
+            return {**state, "adoption_replay": receipt}
+        return None
 
     def show(self, candidate_id: str, *, include_incoming_links: bool = False) -> dict[str, Any]:
         state, path = self.resolve(candidate_id)
@@ -1165,8 +1188,21 @@ class Store:
             "contradictions": contradictions,
             "unknowns": unknowns,
         }
+        # The whole ask, not the state it produces or merely the field names.
+        request = {"statement": statement, "reason": reason, "kind": kind,
+                   **revised_fields, "session": session}
+        if adopt_link_sequence is not None:
+            if type(adopt_link_sequence) is not int or not 1 <= adopt_link_sequence <= 2**63 - 1:
+                raise DojoError("--adopt-link 需要正整数关联事件编号（sequence）")
+            request["adopt_link_sequence"] = adopt_link_sequence
         with self.transaction():
             state = self._get(_id(candidate_id))
+            if adopt_link_sequence is not None:
+                # Serialize lookup and first adoption behind the same writer lock.
+                # An exact retry acknowledges history even if the card changed.
+                replay = self._replay_link_adoption(state, adopt_link_sequence, request)
+                if replay is not None:
+                    return replay
             self._active(state)
             old_statement = state["statement"]
             if adopt_link_sequence is not None:
@@ -1196,19 +1232,8 @@ class Store:
                     details["changed_fields"].append("kind")
                 if session is not None:
                     details["session"] = session
-            # The whole ask, field by field: the sentence, the reason, and every
-            # optional input the caller actually supplied -- `scope` included. Keeping
-            # only `changed_fields` (the *names* of what moved) lost the values, so a
-            # request for "all viewports" matched an earlier one for "narrow screens"
-            # that shared a statement and a reason.
-            request = {
-                "statement": statement, "reason": reason,
-                "kind": kind, "premises": premises, "scope": scope,
-                "alternatives": alternatives, "contradictions": contradictions,
-                "unknowns": unknowns, "session": session,
-            }
             if adopt_link_sequence is not None:
-                details["adopt_link_sequence"] = request["adopt_link_sequence"] = adopt_link_sequence
+                details["adopt_link_sequence"] = adopt_link_sequence
             state = self._write(state, "revise", details, request)
         return state
 
