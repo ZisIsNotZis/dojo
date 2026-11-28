@@ -104,12 +104,28 @@ ARMS = [
         "命令行不再能手动造出一条「讨论留下的」边",
     ),
     (
-        # The supervisor's scale reproducer, restored: the reverse lookup asks the table.
+        # The supervisor's first scale reproducer, restored: the reverse lookup reads the
+        # candidate table once per row. Setting `last_scan` to None *and* not passing the
+        # index is exactly the code that measured 301/601 -- an earlier version of this
+        # arm cleared only `last_scan`, left the index in place, and crashed on a list
+        # that did not exist instead of going red on the reading.
         "the-reverse-lookup-reads-the-whole-table-per-row",
         [("dojo/storage.py",
           "        everything = getattr(self, \"last_scan\", []) if for_reading else []\n",
-          "        everything = None if for_reading else []\n")],
-        "300 张和 600 张的库上，候选表都只读一次",
+          "        everything = None if for_reading else []\n"),
+         ("dojo/storage.py",
+          "        later_index = self.derivation_index(everything) if for_reading else {}\n",
+          "        later_index = {}\n")],
+        "300 张和 600 张的库上，候选表都只读一次，且那条边照样印出来",
+    ),
+    (
+        # The supervisor's second one: the table read once, but every row walks every
+        # card. Restoring the per-row lookup brings the O(n^2) walk back.
+        "the-reverse-lookup-walks-every-card-per-row",
+        [("dojo/storage.py",
+          "        later_index = self.derivation_index(everything) if for_reading else {}\n",
+          "        later_index = {}\n")],
+        "600 张卡的一次屏幕检索只建一次反向索引",
     ),
     (
         "the-reading-keys-leak-into-the-model-payload",

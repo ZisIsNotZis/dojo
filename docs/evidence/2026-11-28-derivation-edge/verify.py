@@ -341,6 +341,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     # ---- D4: one table read per search, not one per row ----------------------------
     heading("D4. 检索随库变大仍然一次读完候选表")
     scans = {}
+    carried_edges: list[Any] = []
     for size in (300, 600):
         big = root / ("scale-%d.sqlite3" % size)
         ledger = _store(big, readonly=False)
@@ -354,6 +355,14 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
                              statement=("Observe railway inspection during the quiet shift "
                                         "for platform %d." % offset)),
                         "add", {})
+            # Exactly one edge, so the per-row lookup is actually reached. With an
+            # edge-free library the reading-screen path skips the lookup entirely and a
+            # restored per-row table read would stay invisible. The child deliberately
+            # says nothing the query looks for, so the fixture stays <size> cards and the
+            # withheld count below stays honest.
+            ledger.add("Evening handover checklist for the night shift.",
+                       "abstract_idea", candidate_id="sample-child",
+                       derived_from="sample-0000")
         finally:
             ledger.close()
         reader = _store(big)
@@ -369,11 +378,51 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
         finally:
             reader.close()
         scans[size] = count[0]
-        reading("%d 张卡的库上检索仍能跑完" % size, len(found_big["withheld"]) == size, str(len(found_big["withheld"])))
+        # The edge has to survive the scale path too. Without this the count alone is a
+        # reading no arm can move: the screen refuses to read the table when its snapshot
+        # is missing, so "one read" stays true even with the lookup gutted. This is the
+        # half a broken lookup actually breaks.
+        edge_rows = [row for row in found_big["withheld"] if row["id"] == "sample-0000"]
+        carried_edges.append([item["id"] for item in
+                              (edge_rows[0].get("derived_later") or [])] if edge_rows else None)
+        # The fixture is exactly <size> cards. Its one child says "evening round" and
+        # shares no word with the query, so it is neither a result nor a withheld row.
+        reading("%d 张卡的库上检索仍能跑完" % size, len(found_big["withheld"]) == size,
+                str(len(found_big["withheld"])))
     # The supervisor measured 301 and 601 on the released candidate: one per result row,
     # over a library holding no such edge at all.
-    reading("300 张和 600 张的库上，候选表都只读一次",
-            scans == {300: 1, 600: 1}, str(scans))
+    reading("300 张和 600 张的库上，候选表都只读一次，且那条边照样印出来",
+            scans == {300: 1, 600: 1}
+            and carried_edges == [["sample-child"], ["sample-child"]],
+            str((scans, carried_edges)))
+    # The supervisor's second measurement: with the table read once, a per-row walk over
+    # every card was still O(n^2) (217 -> 513 ms on 2400 cards, no edge in the library).
+    # A screen now builds the reverse index once. What is checkable without a clock is
+    # that the walk does not happen per row: counting the calls shows one build.
+    heading("D5. 反向边的索引每屏只建一次")
+    builds = [0]
+    original_index = _store(db).__class__.derivation_index
+
+    def counting_index(states):
+        builds[0] += 1
+        return original_index(states)
+
+    bigdb = root / "scale-600.sqlite3"
+    reader = _store(bigdb)
+    try:
+        reader.__class__.derivation_index = staticmethod(counting_index)
+        reader.retrieve("railway", limit=10, for_reading=True)
+        plain_big = reader.retrieve("railway", limit=10)
+    finally:
+        reader.__class__.derivation_index = staticmethod(original_index)
+        reader.close()
+    # One on the reading path, none on the model-facing one: the model's list never
+    # carries the reverse edges, so it must not pay for them either.
+    reading("600 张卡的一次屏幕检索只建一次反向索引", builds[0] == 1, str(builds[0]))
+    reading("给模型的那次检索根本不建反向索引",
+            all("derived_later" not in row for row in plain_big.get("results") or []))
+
+    # ---- E: machine output unchanged ------------------------------------------------
 
     # ---- E: machine output unchanged ------------------------------------------------
     heading("E. 给模型的那条路没有多出东西")

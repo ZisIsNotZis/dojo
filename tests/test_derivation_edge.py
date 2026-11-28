@@ -173,6 +173,67 @@ class DerivationEdgeTest(unittest.TestCase):
         self.assertFalse({"derived_later", "derivation"} & set(plain_rows[0]))
 
 
+class ResumeReplayTest(unittest.TestCase):
+    """A handout row with no derivation key must replay, and must claim nothing.
+
+    The full suite caught this and the evidence walk could not: a resumed session replays
+    the `handout` row through `_load_resume_trace`, and the key added for the derivation
+    basis was read without being initialised -- so every resume raised
+    `UnboundLocalError` (13 suites went red at once). Rows written before the key existed
+    are exactly the rows a resume has to keep working on.
+    """
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        # The trace validator insists on the program's own session-id shape.
+        self.path = Path(self.directory.name) / ("discuss-" + "a" * 32 + ".jsonl")
+
+    def write(self, handout: dict, *, ending: dict | str | None = None) -> None:
+        handout = {"revision_basis": None, **handout}
+        # The program's own round shape: the validator names every key it needs, and a
+        # hand-built row that leaves one out is refused as "格式不符" before the handout
+        # is ever reached.
+        rows = [
+            {"event": "round", "seq": 1, "at": "2026-11-28T00:00:00+00:00",
+             "user": "你好", "answer": "你好。", "candidate": None, "stance": "neutral",
+             "reason": "no_pending", "decision": "none", "requests_sent": 1,
+             "pending_after": None},
+            {"event": "handout", **handout},
+            {"event": "session_end", "reason": "eof", "saved": [], "requests_sent": 1},
+        ]
+        self.path.write_text(
+            "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+            encoding="utf-8")
+
+    def test_a_handout_row_written_before_the_key_existed_still_resumes(self) -> None:
+        self.write({"candidate": "d-x", "statement": "这句。", "status": "draft",
+                    "at": "2026-11-28T00:00:00+00:00"})
+        state = discuss._load_resume_trace(self.path)
+        self.assertIsNone(state["handed_derivation"])
+        self.assertEqual(state["handed"]["id"], "d-x")
+
+    def test_a_recorded_derivation_survives_the_replay(self) -> None:
+        self.write({"candidate": "d-x", "statement": "这句。", "status": "draft",
+                    "at": "2026-11-28T00:00:00+00:00", "derivation": "d-origin"})
+        self.assertEqual(discuss._load_resume_trace(self.path)["handed_derivation"], "d-origin")
+
+    def test_the_resumed_handout_says_the_same_thing_the_live_one_did(self) -> None:
+        self.write({"candidate": "d-x", "statement": "这句。", "status": "draft",
+                    "at": "2026-11-28T00:00:00+00:00", "derivation": "d-origin",
+                    # `fields` deliberately carries only the content fields; the handout
+                    # rebuilds the edge from the row's own derivation, which is why this
+                    # test has no `relations` in `fields`.
+                    "fields": {"statement": "这句。", "kind": "abstract_idea",
+                               "scope": ["某个范围"]}})
+        state = discuss._load_resume_trace(self.path)
+        screen = discuss.handoff_block(state["handed"], state["handed_basis"],
+                                       derivation=state["handed_derivation"],
+                                       database="/tmp/lib.sqlite3")
+        self.assertIn("讨论里写下的", screen)
+        self.assertIn("--db /tmp/lib.sqlite3 show d-origin", screen)
+
+
 class HandoffTest(unittest.TestCase):
     """What a later session is told, in words, from the same fact."""
 

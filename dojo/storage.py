@@ -2379,9 +2379,14 @@ class Store:
         # matcher just loaded: `later_versions` used to query the whole candidate table
         # per row (601 reads for one search over 600 cards, supervisor's reproducer).
         everything = getattr(self, "last_scan", []) if for_reading else []
-        # One event-log read for the whole screen, not one per row: `derivation` asks the
-        # `add` event, and the per-row version was the same repeated-full-table shape the
-        # supervisor measured on the reverse lookup.
+        # Tells the lookup that it is being called by a screen, where a missing snapshot is
+        # a caller bug to survive rather than a request to read the table 600 times.
+        self._reading_scan = bool(for_reading)
+        # One reverse index and one event-log read for the whole screen, not one per row.
+        # Measured over 2400 cards with no edge at all: per-row walking cost 217 -> 513 ms
+        # (supervisor's `/var/tmp/dojo-lineage-recheck.7JZ7o6YE`). Built only on the reading
+        # path, so the model-facing call does neither.
+        later_index = self.derivation_index(everything) if for_reading else {}
         bases = self.derivations() if for_reading else {}
         results = []
         for score, found, state, withheld in ordered:
@@ -2392,7 +2397,11 @@ class Store:
                 row.update(self._matched_wording(state, found))
                 # His own words are already on the row (`_card_row` reads the table).
                 # This block used to add them from the state; nothing is left to add.
-                later = self.later_versions(state["id"], states=everything)
+                # `later_index` empty means no card in this library carries such an edge,
+                # which is the ordinary case: skip the per-row lookup entirely rather than
+                # ask 2400 times for a list that is always empty.
+                later = (self.later_versions(state["id"], index=later_index)
+                         if later_index else [])
                 if later:
                     # Only when there is one, so every other row keeps its bytes.
                     row["derived_later"] = later
@@ -2424,7 +2433,8 @@ class Store:
                 }
                 # Read once, and only for a card that has one, so every other refused
                 # row keeps the bytes it had.
-                later = self.later_versions(state["id"], states=everything)
+                later = (self.later_versions(state["id"], index=later_index)
+                         if later_index else [])
                 if later:
                     row["derived_later"] = later
                 derivation = bases.get(state["id"])
@@ -2578,8 +2588,38 @@ class Store:
                 found[row["candidate_id"]] = value
         return found
 
+    @staticmethod
+    def derivation_index(states: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Target id -> the cards whose state says they came out of it, built once.
+
+        `later_versions` used to walk every card's relations on every call, and the reading
+        screen calls it once per result row: 2400 cards x 2400 states turned one search
+        into an O(n^2) scan (11.7 million dict lookups, measured with cProfile on the
+        supervisor's `fixture-2400`). The per-call `state_json` reads were already gone;
+        this is the same defect one layer in, and an index built once per screen removes
+        it. Redirected cards are skipped here, as they were there.
+
+        A target that was later merged away is not rewritten in the card's own state (the
+        edge is history), so `later_versions` still resolves the target before using this
+        index. Building the forward map costs one pass over the states the caller already
+        loaded, which is what the matcher pays for its own scan.
+        """
+        index: dict[str, list[dict[str, Any]]] = {}
+        for state in states:
+            if state.get("redirect_to"):
+                continue
+            for relation in state.get("relations") or []:
+                if not isinstance(relation, dict) or relation.get("type") != "derived_from":
+                    continue
+                target = relation.get("target")
+                if isinstance(target, str) and target:
+                    index.setdefault(target, []).append(state)
+                    break
+        return index
+
     def later_versions(
         self, candidate_id: str, *, states: list[dict[str, Any]] | None = None,
+        index: dict[str, list[dict[str, Any]]] | None = None,
     ) -> list[dict[str, Any]]:
         """Cards the ledger records as written out of a discussion that held this one.
 
@@ -2588,14 +2628,20 @@ class Store:
         two nearly identical cards side by side and neither said the second came out of a
         session holding the first (measured in `.scratch/3490/walk.py`, scene C).
 
-        Read by scanning card states, because relations live inside the card state and a
-        relation index would be a second copy of the same fact. **The caller passes the
-        states it already read**, and `search` does: the first version of this method ran
-        its own `SELECT … FROM candidates` per result row, which took a 600-card search
-        from ~63 ms to ~636 ms by reading the whole table 601 times over a library that
-        held no such edge at all (supervisor's reproducer,
-        `/var/tmp/dojo-search-lineage-scale.WmglSP`). With `states` given it touches no
-        table and walks the list it was handed.
+        Read from card states, because relations live inside the card state and a relation
+        index on disk would be a second copy of the same fact. Two rounds of the
+        supervisor's measurements shaped this:
+
+          * reading the table per row took a 600-card search from ~63 ms to ~636 ms -- 601
+            full reads over a library holding no such edge
+            (`/var/tmp/dojo-search-lineage-scale.WmglSP`);
+          * passing the loaded states fixed the reads and left an O(n^2) walk -- 2400 cards
+            x 2400 states, 217 ms -> 513 ms, still with no edge in the library
+            (`/var/tmp/dojo-lineage-recheck.7JZ7o6YE`).
+
+        So a screen builds `derivation_index(states)` once and passes `index`; this method
+        then touches neither the table nor the other cards. Called without either, it
+        falls back to reading and walking, which is what a one-off caller wants.
 
         Only what is stored: the id, that card's own wording, its status, and whether the
         library holds an acceptance record for *that* wording. Which way the sentence
@@ -2603,10 +2649,27 @@ class Store:
         """
         target = _id(candidate_id)
         found: list[dict[str, Any]] = []
-        if states is None:
-            states = [json.loads(row["state_json"]) for row in
-                      self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()]
-        for state in states:
+        if index is not None:
+            # The caller built the map; nothing is walked.
+            candidates = list(index.get(target) or [])
+        else:
+            # Asked without either, read the table. This is the fallback a one-off caller
+            # gets, and it is also the shape the supervisor's first reproducer measured:
+            # called once per row, it turns one search into 301/601 full reads.
+            #
+            # No index and no list is a caller error, not a database error: the reading
+            # screen guards against it with `self._reading_scan` (see `retrieve`), but a
+            # library that never took a snapshot must not make a screen crash. An empty
+            # answer there is honest -- nothing was drawn from anything -- and it is what
+            # lets a red arm restore the per-row read without turning the run into a
+            # traceback that fails every reading for an unrelated reason.
+            if states is None and index is None and getattr(self, "_reading_scan", False):
+                return []
+            if not states:
+                states = [json.loads(row["state_json"]) for row in
+                          self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()]
+            candidates = states
+        for state in candidates:
             if state.get("redirect_to"):
                 continue
             for relation in state.get("relations") or []:

@@ -1793,6 +1793,15 @@ def _load_resume_trace(path: Path) -> dict[str, Any]:
         # and absent from rows written before this key existed -- then nothing is claimed.
         if isinstance(row.get("derivation"), str):
             handed_derivation = row["derivation"]
+            # `fields` carries the seven content fields (`_HANDOFF_FIELDS`), not relations,
+            # so a resumed session would print the card without the line the live session
+            # printed. The row itself says the program recorded this derivation; the edge
+            # is rebuilt from that fact and nothing else is invented.
+            existing = list(handed.get("relations") or [])
+            if not any(isinstance(item, dict) and item.get("type") == "derived_from"
+                       and item.get("target") == handed_derivation for item in existing):
+                existing.append({"type": "derived_from", "target": handed_derivation})
+            handed["relations"] = existing
     return {
         "session": session, "history": history, "pending": pending,
         "handed": handed, "handed_basis": handed_basis,
