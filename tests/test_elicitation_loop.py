@@ -91,7 +91,7 @@ class ElicitationLoopTests(unittest.TestCase):
 
     def test_a_written_rule_is_followed_by_the_four_questions_in_order(self):
         answers = ["上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了", "第一次觉得亏是没人再复核", "有一次我照着做反而漏了"]
-        code, output = self.run_session(["讲一条做法", "/认可", *answers])
+        code, output = self.run_session(["讲一条做法", "/认可", *answers, "/附答 情境 张力 代价 失效"])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         self.assertEqual(["情境", "张力", "代价", "失效"], [row["part"] for row in events])
@@ -221,10 +221,9 @@ class ElicitationLoopTests(unittest.TestCase):
         code, _ = self.run_session(["讲一条做法", "/认可", "上次是把一套检查交给别人的时候", "检查的活搬走了，我自己判断少了"])
         self.assertEqual(0, code)
         end = self.elicitation_end()
-        # Two parts were answered before the input ended, so those two sentences are on
-        # the card; the receipt and the trace say which.
-        self.assertEqual(["情境", "张力"], end["promoted"])
-        self.assertEqual({"situation": True, "tension": True}, end["answers_attached"])
+        # EOF retains the two answers in the trace but authorizes no attachment.
+        self.assertEqual([], end["promoted"])
+        self.assertEqual({}, end["answers_attached"])
         self.assertEqual(["情境", "张力"], end["collected"])
         self.assertEqual([], end["supplied"])
         self.assertEqual(3, end["turns"])  # 情境 1 轮、张力 1 轮、代价第 1 轮就 EOF
@@ -234,6 +233,30 @@ class ElicitationLoopTests(unittest.TestCase):
         self.assertEqual("系统补", end["part_sources"]["off"])
         self.assertEqual("系统的", end["authorship"])
         self.assertEqual(set(end["part_sources"]), set(end["unanchored"]))
+
+    def test_card_edit_between_preview_and_choice_refuses_attachment(self):
+        output = io.StringIO()
+        inputs = read_lines(["讲一条做法", "/认可", "上次是这样", "跳过", "跳过", "跳过",
+                             "/附答 情境"])
+
+        def read_line(prompt):
+            line = inputs(prompt)
+            if line == "/附答 情境":
+                self.assertIn("附答核对", output.getvalue())
+                ident = self.store.list_candidates()[0]["id"]
+                editor = Store(self.store.path)
+                try:
+                    editor.revise(ident, "从另一处同时改成了一条别的说法。", "另一个终端编辑")
+                finally:
+                    editor.close()
+            return line
+
+        self.assertEqual(0, run_discuss(self.store, client=FakeClient([PROPOSE]),
+                                       read_line=read_line, output=output))
+        self.assertIn("卡片已不是问答针对的那一版", output.getvalue())
+        self.assertEqual([], self.elicitation_end()["promoted"])
+        ident = self.store.list_candidates()[0]["id"]
+        self.assertEqual({}, self.store.answers_for(ident))
 
     def test_nothing_is_filled_when_the_person_answers_nothing(self):
         code, _ = self.run_session(["讲一条做法", "/认可", "", "", "", "", "", "", "", ""])
@@ -290,7 +313,7 @@ class ElicitationLoopTests(unittest.TestCase):
             "昨天上线时，我为了复核系统回执多花了半小时。",
             "上周系统拿不到现场数据时就该停，不能继续自动检查。",
         ]
-        code, _ = self.run_session(["讲一条做法", "/认可", *answers])
+        code, _ = self.run_session(["讲一条做法", "/认可", *answers, "/附答 情境 张力 代价 失效"])
         self.assertEqual(0, code)
         events = self.elicitation_events()
         self.assertEqual(answers, [event["answer"] for event in events])

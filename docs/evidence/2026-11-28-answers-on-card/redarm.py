@@ -29,10 +29,8 @@ ARMS = [
         # The whole slice, undone: the questions are asked and nothing reaches the card.
         "answers-never-reach-the-card",
         "dojo/discuss.py",
-        "            if rows:\n"
-        "                try:\n",
-        "            if False:\n"
-        "                try:\n",
+        '            if offer_attachment and stopped_at is None and trace_is_open:',
+        '            if False:',
         "四件的原话都在卡上，各在自己的那一栏",
     ),
     (
@@ -108,8 +106,8 @@ ARMS = [
         # not about privacy, and the reading is what makes that visible.
         "no-trace-keeps-his-words-on-the-card-anyway",
         "dojo/discuss.py",
-        "                promote_answers_onto_card() if trace is not None else\n",
-        "                promote_answers_onto_card() if True else\n",
+        '            if offer_attachment and stopped_at is None and trace_is_open:',
+        '            if offer_attachment and stopped_at is None:',
         "show 读不到任何一条他的原话",
     ),
     (
@@ -182,16 +180,6 @@ ARMS = [
         "相对路径也解析成绝对路径",
     ),
     (
-        # Review: a stored path was echoed without checking it still exists, so moving
-        # the library with its `sessions/` printed a command that exited 2.
-        "a-moved-record-is-still-printed-as-the-old-path",
-        "dojo/answers.py",
-        '            found, where = commands.locate_record(record, database)\n',
-        '            from pathlib import Path as _P\n'
-        '            found, where = _P(record), "as-stored"\n',
-        "搬走之后屏幕上那条命令仍存在且能跑",
-    ),
-    (
         # Review: the opening promised nothing would be kept while an accepted card, whose
         # sentence may be the person's own words, was still written to the library.
         "the-quiet-promise-is-wider-than-the-code",
@@ -209,7 +197,7 @@ ARMS = [
         "dojo/discuss.py",
         "                    entry[\"recorded\"] = _answer_reached_the_file(trace_path, part, answer)\n",
         "                    entry[\"recorded\"] = True\n",
-        "每条回看命令打开的记录都真的有那句原话",
+        "记录中断后仍保留已获选择的四句，但只第一句实际写进轨迹",
     ),
     (
         # Review: a session number typed into `promote` made a hand-kept sentence look
@@ -221,21 +209,11 @@ ARMS = [
         "手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
     ),
     (
-        # Review's finding on fdd55ff, put back: the record column holds the time the
-        # answer was promoted instead of the path of the session that said it, so `show`
-        # offers a field a reader cannot open and the screen prints no way back.
-        "the-record-of-a-session-is-a-timestamp-not-a-place",
-        "dojo/discuss.py",
-        '                entry["trace"] = str(commands.absolute(trace_path))\n',
-        '                entry["trace"] = str(datetime.now(timezone.utc).isoformat())\n',
-        "每条回答的 trace 是一个真存在、能打开的记录文件",
-    ),
-    (
         # A hand-kept sentence borrows a session and a moment it never had.
         "a-hand-kept-answer-claims-a-conversation",
         "dojo/answers.py",
         '        from_discussion = item.get("provenance") == "discussion"\n',
-        '        from_discussion = True\n',
+        '        from_discussion = bool(item.get("session"))\n',
         "手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
     ),
     (

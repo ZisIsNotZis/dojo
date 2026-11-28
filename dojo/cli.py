@@ -15,7 +15,7 @@ from typing import Any
 from . import commands
 from .compare import run_compare
 from .demo import freeze_materials, run_demo, write_demo_summary
-from .discuss import _load_resume_trace, run_discuss
+from .discuss import DRAFT_HANDOFF_REFUSAL, _load_resume_trace, run_discuss
 from .finding import search_screen
 from .live import LiveConfig, LiveError, run_chat
 from .pipeline import distill, run_pipeline
@@ -295,12 +295,14 @@ def _parser() -> argparse.ArgumentParser:
     # four answers were written onto the card while the screen said they were not kept;
     # the flag now covers both, and `promote` is the way to keep them on purpose.
     discuss.add_argument("--no-trace", action="store_true",
-                         help="不创建轨迹文件，也不把你在这场说的话存到任何地方（包括卡片上；要存就用 promote）")
-    discuss.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案")
+                         help="不写会话轨迹，也不在场内附上追问回答；仍可保存明确认可的卡片")
+    profile = discuss.add_mutually_exclusive_group()
+    profile.add_argument("--with-profile", action="store_true", help="仅在自己的会话中启用：读取并可能追加个人档案（默认关闭）")
+    profile.add_argument("--no-profile", action="store_true", help="本场既不读取也不写入人物档案（默认）")
     discuss.add_argument("--resume", metavar="TRACE", help="从既有轨迹续跑同一会话并追加写入")
     discuss.add_argument(
         "--card", metavar="ID", default=None,
-        help="把库里已有的一张卡交给这一场（屏幕说清是哪句、有没有改过；本场只是重复它不算新来源）",
+        help="把库里的一张卡交给新场；讨论拟写须先认可，重复卡片不算新来源",
     )
     discuss.add_argument(
         "--verbose", action="store_true",
@@ -615,11 +617,11 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
         # stored card, which does not hold the answers, and printing it alone would show a
         # card that looks untouched after a write that succeeded.
         return {"id": state["id"], "version": state["version"],
-                "answers": store.answers_for(state["id"])}
+                "answers": store.card_answers(state["id"])}
     if command == "unpromote":
         state = store.unpromote_answer(args.id, args.part, args.reason, session=args.session)
         return {"id": state["id"], "version": state["version"],
-                "answers": store.answers_for(state["id"])}
+                "answers": store.card_answers(state["id"])}
     if command == "link":
         return store.link(args.id, args.relation, args.target, args.reason)
     if command == "split":
@@ -1035,7 +1037,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.card:
                 try:
                     with closing(Store(db_path, readonly=True)) as probe:
-                        probe.show(args.card)
+                        shown = probe.show(args.card)
+                        if probe.local_discussion_draft(shown["candidate"]):
+                            print(DRAFT_HANDOFF_REFUSAL, file=sys.stderr)
+                            return 2
                 except (DojoError, OSError) as exc:
                     print(f"无法开始讨论：这张卡读不出来（{exc}）；未发送网络请求。", file=sys.stderr)
                     return 2
@@ -1062,7 +1067,7 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
             return run_discuss(
-                store, config=config, no_trace=args.no_trace, no_profile=args.no_profile,
+                store, config=config, no_trace=args.no_trace, no_profile=not args.with_profile,
                 resume=Path(args.resume).expanduser() if args.resume else None,
                 verbose=args.verbose, card=args.card,
             )

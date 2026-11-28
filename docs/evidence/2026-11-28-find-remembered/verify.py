@@ -143,7 +143,7 @@ def main() -> int:
          "user_stance": "neutral"},
     ]
     out, err, code = screen(("discuss",), stdin="提醒太多了，我想让系统盯着\n/认可\n"
-                            "他下班以后就不看群了\n团队就我们几个\n有一次半夜没人看\n就这些\n")
+                            "他下班以后就不看群了\n团队就我们几个\n有一次半夜没人看\n就这些\n/附答 情境 张力 代价 失效\n")
     if code:
         print(out[-1500:], err[-1500:])
         return 1

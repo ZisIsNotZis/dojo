@@ -165,7 +165,7 @@ class OffTargetAnswerTests(unittest.TestCase):
         narrower claim, and is what is checked here: the answers do not become the card's
         sentence or its fields, and the field's author does not change.
         """
-        code, text = self.run_session([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
+        code, text = self.run_session([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF, "/附答 代价"])
         self.assertEqual(0, code)
         line = self.closing_line(text)
         self.assertIn("附在卡片", line)
@@ -309,20 +309,9 @@ class OffTargetAnswerTests(unittest.TestCase):
         # are, and it must not pretend the session had no trace at all either.
         self.assertNotIn("留在本场记录里", line)
         self.assertIn("轨迹中途写入失败", line)
-        # And the card must not offer a way back for a sentence its record lacks. Review on
-        # this slice found every answer after the failure still printing 回看说这句的那一场,
-        # with the command opening a file that holds only the first one.
+        # A failed trace does not itself authorize an attachment; EOF is still decline.
+        self.assertIn("附答核对", text)
         answers = self.store.answers_for(self.store.list_candidates()[0]["id"])
-        self.assertTrue(answers, "the answers themselves are still attached")
-        recorded = {key: item.get("recorded") for key, item in answers.items()}
-        self.assertIn(0, recorded.values(),
-                      "at least one answer did not reach the file: " + str(recorded))
-        # The screen that would offer the command is the card's own block, so render it
-        # from the same rows the receipt just used.
-        from dojo import answers as answers_module
-        screen = "\n".join(answers_module.screen_lines({"answers": answers},
-                                                       database=self.store.path))
-        self.assertIn("没有写进那一场的记录文件", screen)
-        self.assertNotIn("回看说这句的那一场", screen)
+        self.assertEqual({}, answers)
 if __name__ == "__main__":
     unittest.main()

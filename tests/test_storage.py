@@ -858,11 +858,8 @@ class StoreTests(unittest.TestCase):
         self.assertNotIn("unaccepted_draft", after["d-draft"])
         self.assertEqual({"id", "version", "status", "statement", "kind"}, set(after["d-draft"]))
 
-    def test_search_tells_an_unaccepted_draft_from_a_conclusion_too(self):
-        """r111c: `dojo search` is the screen a person types to find what the library
-        holds. A card the user accepted and a card a facilitator merely unblocked
-        both come back `status: discussable`, so the screen could hand an unaccepted
-        draft back as settled. The marker is added by value, only when true."""
+    def test_discussion_draft_needs_exact_acceptance_even_when_confirmed(self):
+        """A facilitator's status change does not release the author's draft text."""
         # Two discussable single-source cards, identical except for who wrote them:
         # the control is a card whose one source is not the model's wording.
         self.add(candidate_id="d-other-source", statement="交接前先写下当前版本的范围，能减少返工。",
@@ -872,14 +869,13 @@ class StoreTests(unittest.TestCase):
                  sources=[{"type": "model_generated", "claim": "会话结束时仍是待处理草稿的候选；用户没有明确认可这版措辞。",
                            "independence_group": "sess-a", "verification": "unverified"}], session="sess-a")
         self.store.confirm("d-other-source", "可讨论")
-        # A facilitator -- not the user -- unblocks the draft. It becomes retrievable.
+        # Confirming it does not authorize the current discussion wording.
         self.store.confirm("d-draft", "主持人认为可以先拿出来讨论", "facilitator-2")
         rows = {row["id"]: row for row in self.store.retrieve("交接 范围 自行车 制动力")["results"]}
-        self.assertEqual({"d-other-source", "d-draft"}, set(rows), "the draft must still be retrievable")
-        self.assertIs(True, rows["d-draft"].get("unaccepted_draft"))
-        self.assertEqual("discussable", rows["d-draft"]["status"])
-        self.assertNotIn("unaccepted_draft", rows["d-other-source"],
-                         "a card that is not a model-written draft keeps exactly the keys it had before")
+        self.assertEqual({"d-other-source"}, set(rows))
+        reading = self.store.retrieve("自行车 制动力", for_reading=True)
+        self.assertNotIn("d-draft", json.dumps(reading))
+        self.assertTrue(is_unaccepted_draft(self.store.show("d-draft")["candidate"]))
         # Accepting that exact wording makes the card stop being an unaccepted draft.
         # `accept_draft` rewrites the source; it does not touch `status`, so this card
         # (already confirmed above) stays discussable and now reads as settled -- which
@@ -890,6 +886,22 @@ class StoreTests(unittest.TestCase):
         settled = {row["id"]: row for row in self.store.retrieve("自行车 制动力")["results"]}
         self.assertIn("d-draft", settled)
         self.assertNotIn("unaccepted_draft", settled["d-draft"])
+
+    def test_an_explicit_challenge_does_not_release_a_rewritten_discussion_draft(self):
+        session = 'discuss-' + 'a' * 32
+        self.add(candidate_id='d-disputed', statement='练琴只在试音室记时。', session=session,
+                 sources=[{'type': 'unknown', 'claim': '讨论形成的结论',
+                           'independence_group': session, 'verification': 'unknown'}])
+        self.store.record_acceptance('d-disputed', session, path='discuss_conclusion')
+        challenged = self.store.challenge('d-disputed', '多人预约时不能采用。')
+        self.assertFalse(self.store.local_discussion_draft(challenged))
+        reading = self.store.retrieve('试音室', for_reading=True)
+        self.assertEqual(['d-disputed'], [row['id'] for row in reading['withheld']])
+        self.assertEqual([], self.store.retrieve('试音室')['results'])
+        self.store.revise('d-disputed', '任何场所都适合计时。', '新的假设，尚未核对')
+        revised = self.store.challenge('d-disputed', '多人预约时不能采用。')
+        self.assertTrue(self.store.local_discussion_draft(revised))
+        self.assertNotIn('d-disputed', json.dumps(self.store.retrieve('任何场所', for_reading=True)))
 
     def test_a_same_shape_card_nobody_accepted_is_not_searchable(self):
         """The negative control, built to be indistinguishable by shape.
@@ -2101,14 +2113,8 @@ class StoreTests(unittest.TestCase):
         self.assertNotIn("acceptance_path", chat["d-chat-none"],
                          "a card with no acceptance must not gain an empty route")
 
-    def test_chat_context_says_the_wording_was_never_accepted(self):
-        """#1831: `status=discussable` covers both an accepted wording and an unblocked one.
-
-        `list` and `retrieve` already carried `unaccepted_draft`; the chat hand-off did
-        not, so the model could not tell "nobody has agreed to this wording" from
-        "accepted". The accepted card is the control: if the key appeared on it too, it
-        would say nothing about acceptance.
-        """
+    def test_chat_context_contains_only_the_accepted_discussion_wording(self):
+        """The model never sees an unaccepted proposal even if it was confirmed."""
         for card, accepted in (("d-chat-nobody", False), ("d-chat-yes", True)):
             self.add(candidate_id=card, statement=f"{card} 的交接范围先写下来。", scope=["交接"],
                      session=f"sess-{card}",
@@ -2121,8 +2127,9 @@ class StoreTests(unittest.TestCase):
         query = "交接范围"
         search = {r["id"]: r for r in self.store.retrieve(query)["results"]}
         chat = {i["id"]: i for i in live._retrieval_for_prompt(self.store, query)["results"]}
-        self.assertIs(True, chat["d-chat-nobody"].get("unaccepted_draft"))
-        self.assertIs(True, search["d-chat-nobody"].get("unaccepted_draft"))
+        self.assertNotIn("d-chat-nobody", chat)
+        self.assertNotIn("d-chat-nobody", search)
+        self.assertIn("d-chat-yes", search)
         self.assertNotIn("unaccepted_draft", chat["d-chat-yes"],
                          "an accepted wording must not be handed over as unaccepted")
 

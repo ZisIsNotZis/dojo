@@ -214,9 +214,9 @@ class ClosingLineTests(unittest.TestCase):
 
         Dumping every table at every turn shows the card is written before the first
         question and never rewritten: all snapshots are identical. The line must
-        therefore say the answers stayed out of the card, and say the card predates them.
+        say what the user chose to attach while leaving the card's wording unchanged.
         """
-        code, text = self.run_session(MIXED)
+        code, text = self.run_session((*MIXED, "/附答 情境"))
         self.assertEqual(0, code)
         self.assertTrue(self.snapshots, "no snapshot was taken")
         # The first snapshots are taken before the card exists (they cover the rounds
@@ -370,13 +370,22 @@ class ClosingLineTests(unittest.TestCase):
         for answer in ALL_FOUR:
             self.assertNotIn(answer, stored)
 
-    def test_a_trace_that_produced_a_file_still_attaches_the_answers(self):
-        """The withholder is the request, not a failure: a normal session still attaches."""
+    def test_a_trace_alone_is_not_authorization_to_attach(self):
         code, text = self.run_session(ALL_FOUR)
         self.assertEqual(0, code)
-        self.assertIn("附在卡片", self.closing_line(text))
+        self.assertIn("附答核对", text)
+        self.assertIn("没有把任何问答原话附到卡片上", self.closing_line(text))
+        self.assertEqual([], self.recorded()["promoted"])
         card = self.store.list_candidates()[0]["id"]
-        self.assertEqual(4, len(self.store.answers_for(card)))
+        self.assertEqual({}, self.store.answers_for(card))
+
+    def test_invalid_attachment_selection_is_all_or_nothing(self):
+        code, text = self.run_session((*MIXED, "/附答 情境 张力"))
+        self.assertEqual(0, code)
+        self.assertIn("整次不附", text)
+        self.assertEqual([], self.recorded()["promoted"])
+        card = self.store.list_candidates()[0]["id"]
+        self.assertEqual({}, self.store.answers_for(card))
 
     def test_with_the_trace_on_the_skipped_parts_are_still_recorded(self):
         code, _ = self.run_session((SKIP,) * 4)

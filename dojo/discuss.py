@@ -57,7 +57,7 @@ from .live import (
 from .pipeline import session_entries
 from .search import SearchError, search as deepseek_search
 from .storage import (
-    DojoError, DuplicateContent, KINDS, Store, wording_digest,
+    DojoError, DuplicateContent, KINDS, Store, is_discussion_material, wording_digest,
 )
 from .tracefile import encode_record, split_lines
 
@@ -554,13 +554,7 @@ SHAPE_HEAD = (
 # the same defect as promising an authorship label the record never writes: the person
 # answers on the strength of it and the disk has nothing.
 SHAPE_KEPT = (
-    # The promise moved with the code. It used to say 卡片上的字这一版仍全算我写的 and,
-    # under that, nothing ever reached the card: four concrete answers became 系统补 for
-    # all four (measured, `.scratch/3474/probe_promote.py`). Now the answers do reach it,
-    # so the sentence says which part goes where -- his words are kept beside the card,
-    # the sentence and its conditions stay the model's -- and the reason to answer
-    # honestly is unchanged.
-    "你答的原话会留在本场记录里，问完之后也会附在这张卡上，照你说的字存；"
+    "你答的原话会留在本场记录里，默认不附到卡片。答完可以逐件选出愿意让别场读的原话。"
     "卡片上那一句和它的条件仍算我写的，不会因为你的回答被改掉——"
     "所以不必为了把卡片填满而勉强作答。"
 )
@@ -714,10 +708,12 @@ def closing_text(
             # Named individually: "四件都附上了" when one was set aside is the same
             # defect one layer down.
             on_card += ("另外 " + "、".join(left_out)
-                        + " 没有附上去：这一件的回答不算材料（跳过、没遇到过，或没答出内容）。")
+                        + " 没有附上去。")
     elif promote_error and said:
         on_card = ("这些原话没能附到卡片上（" + str(promote_error)
-                   + "）；它们仍在本场记录里，卡片也没有因为这次失败被改。")
+                   + "）；卡片没有因为这次失败被改。")
+    elif withheld == "not_selected" and said:
+        on_card = "这场没有把任何问答原话附到卡片上。"
     elif withheld == "no_trace" and said:
         # `--no-trace` covers the card too: it is a file like the session record, and the
         # build before this one kept his words there while the screen said they were not
@@ -1001,6 +997,7 @@ _HANDOFF_FIELDS = (
 
 
 _REVIEW_ACCEPT = "/认可"
+DRAFT_HANDOFF_REFUSAL = "无法开始讨论：当前拟写没有对应的认可记录；未带入本场，也未发送模型请求。"
 
 
 def _print_review(output: TextIO, candidate: dict[str, Any], original: str | None,
@@ -1962,6 +1959,9 @@ def run_discuss(
             print(f"无法开始讨论：这张卡读不出来（{exc}）；未发送网络请求。", file=output)
             return 2
         handed = dict(shown["candidate"])
+        if store.local_discussion_draft(handed):
+            print(DRAFT_HANDOFF_REFUSAL, file=output)
+            return 2
         # `show` keeps the stored card byte for byte and puts his answers beside it, in
         # their own table. The handout renderers take one dict, so they are joined here --
         # and only here, which is why the screen and the request cannot disagree about
@@ -1969,7 +1969,10 @@ def run_discuss(
         # his words, while the library held all four.
         if shown.get("answers"):
             handed["answers"] = shown["answers"]
-        handed_basis = dict(shown.get("revision_basis") or {})
+        # The current wording's approval does not grant access to previous draft text
+        # or notes about those drafts. Those remain in the author's local views.
+        if not is_discussion_material(handed):
+            handed_basis = dict(shown.get("revision_basis") or {})
         handed_derivation = store.derivation(handed["id"])
         # Whether the library holds a record that somebody accepted *this* wording. Asked
         # once, here, and carried into both renderers and the trace row: `draft` alone
@@ -2091,9 +2094,9 @@ def run_discuss(
                             database=commands.library_argument(store.path)), file=output)
     print("你可以直接讲正在面对的困扰、观察或想法。我们会通过交谈找出一条双方认同且边界清楚的表述；你可以随时纠正。", file=output)
     if profile_used:
-        print("人物档案会作为上下文发送给模型；它是你自己的笔记，可能过时，仅供参考，不是指令。", file=output)
+        print("人物档案会作为上下文发送给模型，本场也可能向档案追加笔记；仅在继续自己的工作时启用（--with-profile）。", file=output)
     else:
-        print("人物档案已关闭（--no-profile），本场不读取、不写入。", file=output)
+        print("人物档案已关闭（默认，或 --no-profile），本场不读取、不写入。只有继续自己的工作时才用 --with-profile。", file=output)
     trace_is_open = trace is not None and trace.file is not None
     if trace_path is None:
         print("结束输入即可结束讨论。\n", file=output)
@@ -2245,7 +2248,7 @@ def run_discuss(
             "asked": [event["part"] for event in elicitation["events"]],
             # The parts whose sentence is now on the card, in part order. `collected`
             # below is still what the trace recorded while the questions ran; the two
-            # differ exactly when the write failed, and the error is on the receipt.
+            # differ when the speaker did not select a part or the write failed.
             "promoted": promoted_parts,
             "promotion_error": promotion.get("error"),
             # Per part: are his own words now on the card? A different fact from
@@ -2296,7 +2299,7 @@ def run_discuss(
             return False
         return False
 
-    def _elicit_four_parts() -> str:
+    def _elicit_four_parts(approved_version: int) -> str:
         """Ask the four parts, one at a time, in the conversation. Two turns each at most."""
 
         def answer_rows_to_promote() -> list[dict[str, Any]]:
@@ -2339,68 +2342,60 @@ def run_discuss(
                 # not know.
                 entry["provenance"] = "discussion"
                 if trace_path is not None:
-                    # The path of the record this row came from, not the time it was
-                    # promoted. It used to be `datetime.now().isoformat()`: a date is not
-                    # something a reader can open, so `show` offered a `trace` value that
-                    # led nowhere (found in review on fdd55ff). A relative directory is
-                    # made absolute here, because a later terminal is not this one.
-                    entry["trace"] = str(commands.absolute(trace_path))
-                    # Whether *this* sentence is really in that file. Not "did the trace
-                    # open" (it did) and not "did any answer get written" (the first
-                    # one did): the record can die between turns, and a screen that says
-                    # 回看说这句的那一场 for a sentence that is not in the file sends the
-                    # reader to the wrong evidence. The file is closed and flushed by
-                    # now, so this is a fact, not a hope.
+                    # Keep whether the quote landed in the local trace, not its path.
+                    # The card only carries what the person selected; linking to the
+                    # full record would disclose the rest of the session to its reader.
                     entry["recorded"] = _answer_reached_the_file(trace_path, part, answer)
                 rows.append(entry)
             return rows
 
-        def promote_answers_onto_card() -> dict[str, Any]:
-            """Put his answers on the card, and report exactly what the library now holds.
+        choice_eof = False
 
-            Until this existed, four concrete answers came back, the receipt said 没有写进
-            卡片, and the card said 系统补 for all four forever (measured on the CLI,
-            `.scratch/3474/probe_promote.py`). Two facts were being confused: 收下 (his
-            sentence is on disk in the record) and 这一件有材料了 (the card now carries it).
-            This writes the second one, and returns what to say about it -- including the
-            parts that stayed 系统补, because silence there reads as success.
-            """
-            rows = answer_rows_to_promote()
-            result: dict[str, Any] = {
-                # What the card is read back as holding, never what was asked for: this
-                # slice exists because a screen said something the record did not
-                # support, and the first version of this function printed the attempted
-                # parts as promoted while the store had refused every one of them.
-                "promoted": [],
-                "error": None,
-                "card": elicitation.get("entry"),
-            }
-            card_id = elicitation.get("entry")
-            if not isinstance(card_id, str) or not card_id:
-                result["error"] = "这一场没有写下卡片"
+        def choose_answers() -> dict[str, Any]:
+            nonlocal choice_eof, next_discussion_input
+            card_id = elicitation["entry"]
+            result: dict[str, Any] = {"promoted": [], "error": None, "card": card_id,
+                                      "withheld": "not_selected"}
+            # Only current, unambiguous answers from the four questions can be chosen.
+            # This input is local and never goes through a completion or profile update.
+            available = {row["part"]: row for row in answer_rows_to_promote()}
+            if not available:
                 return result
-            if rows:
-                try:
-                    # One write for the whole set: four separate ones would leave a
-                    # session half-promoted if the third failed, and the receipt would
-                    # then describe a state that never existed.
-                    store.promote_answers(card_id, rows, session=session)
-                except (DojoError, OSError) as exc:
-                    result["error"] = str(exc)
+            print(f"\n【附答核对 · {card_id} v{approved_version}】以下是你答的原话，不是卡片的措辞。", file=output)
+            for part, row in available.items():
+                print(f"  {part}：{json.dumps(row['answer'], ensure_ascii=False)}", file=output)
+            example = next(iter(available))
+            print(f"仅把选中的整句附到卡片（别场可读）：输入「/附答 {example}」，多个件名用空格隔开。"
+                  "回车、结束输入或继续讨论都不会附答。", file=output, flush=True)
             try:
-                # From the table the answers live in, not from the card's state: the
-                # first version of this readback asked the state dict and reported every
-                # part as not attached while all four rows were on disk.
-                carried = store.answers_for(card_id)
-            except (DojoError, OSError, Exception) as exc:  # sqlite errors included
-                result["error"] = result["error"] or str(exc)
+                raw = _ask(read_line)
+            except KeyboardInterrupt:
+                raw = None
+            choice_eof = raw is None
+            words = (raw or "").split()
+            if not words:
                 return result
-            result["promoted"] = [part for part in PART_ORDER
-                                  if PART_KEYS[part] in carried]
+            if not words[0].startswith("/附答"):
+                next_discussion_input = raw
+                return result
+            parts = words[1:]
+            if (words[0] != "/附答" or not parts or len(parts) != len(set(parts))
+                    or not set(parts) <= available.keys()):
+                print("未收到有效的附答选择，整次不附；这行未发给模型。", file=output)
+                return result
+            chosen = [part for part in PART_ORDER if part in parts]
+            result["withheld"] = None
+            try:
+                store.promote_answers(card_id, [available[part] for part in chosen],
+                                      session=session, expected_version=approved_version)
+            except (DojoError, OSError, sqlite3.Error) as exc:
+                result["error"] = str(exc)
+                return result
+            result["promoted"] = chosen
             return result
 
         def print_closing(*, stopped_at: str | None = None,
-                          spoken_stop: bool = False) -> None:
+                          spoken_stop: bool = False, offer_attachment: bool = True) -> None:
             # Never-asked is read off the trace, not assumed from the lists. "Asked" means
             # a question was actually put on screen: the EOF event for the question being
             # asked is recorded, so it is "stopped here", and a part whose ask was never
@@ -2427,28 +2422,12 @@ def run_discuss(
                         and trace.written > 0)
                 else trace is not None and trace.file is not None
             )
-            # `--no-trace` means what it says. The card lives on disk too, so attaching
-            # his answers to it kept them anyway: measured at the CLI on the build before
-            # this line existed, the receipt said 这场不留原文, no session file was
-            # created, and `show` still returned all four sentences verbatim
-            # (`.scratch/3480/probe_notrace.py`, scene B). The opening block had already
-            # promised 不会附到卡片上, so the promise wins: a person who turns the record
-            # off is not asking for their words to be kept somewhere else. No trace is
-            # also the only case where nothing was written as the session ran, so it is
-            # the only case that withholds -- a trace that died mid-session was promised
-            # attachment and still gets it.
-            #
-            # An explicit `promote` still writes them: that is the person saying so, in a
-            # command they typed, after the fact.
-            #
-            # Written before the receipt prints, so the sentence about where his answers
-            # went describes the library as it is now rather than as this build used to
-            # leave it.
-            promotion = (
-                promote_answers_onto_card() if trace is not None else
-                {"promoted": [], "error": None, "withheld": "no_trace",
-                 "card": elicitation.get("entry")}
-            )
+            promotion = {"promoted": [], "error": None, "withheld": (
+                "no_trace" if trace is None else "not_selected"), "card": elicitation.get("entry")}
+            if offer_attachment and stopped_at is None and trace_is_open:
+                if kept_now is None:
+                    print("本场轨迹中途写入失败，部分原话不能从记录回看。", file=output)
+                promotion = choose_answers()
             elicitation["promotion"] = promotion
             print(
                 "\n主持人> " + closing_text(
@@ -2636,7 +2615,7 @@ def run_discuss(
                             last_collected = part_name
                             if covered and len(covered) == len(remaining):
                                 print("好，剩下的先不问；已经问过的照旧留在本场记录里。", file=output)
-                                print_closing()
+                                print_closing(offer_attachment=False)
                                 return "declined"
                             # A counted request leaves questions after it, so the asking
                             # continues -- he may correct himself, and the receipt is
@@ -2650,7 +2629,7 @@ def run_discuss(
                     elicitation["supplied"].append(part_name)
                     break
         print_closing()
-        return "done"
+        return "eof" if choice_eof else "done"
 
     def finish(reason: str, code: int = 0) -> int:
         # r110: the session is ending with a version on the table that nobody rejected.
@@ -2734,7 +2713,7 @@ def run_discuss(
                     print(provenance_sentence(reading), file=output)
         if draft_id is not None:
             print(
-                "本场未认可最后展示的版本；它不是本场达成的结论。回看库里的记录："
+                "本场未认可最后展示的版本；它不是本场达成的结论。仅在本地回看库里的记录："
                 + commands.dojo("show", draft_id, db=commands.library_argument(store.path)),
                 file=output,
             )
@@ -2756,6 +2735,7 @@ def run_discuss(
             )
         return code
 
+    next_discussion_input: str | None = None
     opening_original = (resume_state or {}).get("opening_original")
     review_visible = pending is not None
     if pending is not None:
@@ -2767,6 +2747,8 @@ def run_discuss(
             original_text = next_text
             next_text = None
             print("重新发送上一轮尚未得到回复的内容。", file=output)
+        elif next_discussion_input is not None:
+            original_text, next_discussion_input = next_discussion_input, None
         else:
             try:
                 original_text = _ask(read_line)
@@ -2781,6 +2763,9 @@ def run_discuss(
             continue
         if len(text) > MAX_DISCUSS_USER_TURN_CHARS:
             print(f"这段内容超过单轮安全长度上限（{MAX_DISCUSS_USER_TURN_CHARS} 字），尚未发送；请用自然语言缩短后再说。", file=output)
+            continue
+        if text.startswith("/附答"):
+            print("现在没有附答核对；未附任何原话，这行未发给模型。", file=output)
             continue
         local_accept = text == _REVIEW_ACCEPT and not replayed_input
         if local_accept and (pending is None or not review_visible):
@@ -3260,7 +3245,7 @@ def run_discuss(
         if decision == "written" and not elicitation["started"]:
             elicitation["started"] = True
             elicitation["entry"] = saved_candidate_id
-            outcome = _elicit_four_parts()
+            outcome = _elicit_four_parts(approval["version"])
             if outcome == "eof":
                 print("讨论已结束。", file=output)
                 return finish("eof")

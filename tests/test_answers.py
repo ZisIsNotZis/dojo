@@ -76,6 +76,15 @@ class Promotion(unittest.TestCase):
         self.assertEqual(1, held["situation"]["recorded"])
         self.assertEqual("manual", held["price"]["provenance"])
         self.assertEqual(0, held["price"]["recorded"])
+        shown = self.store.show(self.card)["answers"]
+        self.assertEqual("问一", held["situation"]["question"])
+        self.assertNotIn("trace", shown["situation"])
+        self.assertNotIn("question", shown["situation"])
+        self.assertEqual(held["situation"]["answer"], shown["situation"]["answer"])
+        row, = self.store.retrieve("夜里报警", for_reading=True)["withheld"]
+        self.assertNotIn("trace", row["answers"]["situation"])
+        self.assertNotIn("question", row["answers"]["situation"])
+        self.assertEqual(shown["situation"], row["answers"]["situation"])
 
     def test_a_row_without_provenance_stays_unknown_rather_than_guessed(self):
         self.store.promote_answers(self.card, self.answers(), session="s1")
@@ -99,6 +108,26 @@ class Promotion(unittest.TestCase):
         again[0]["provenance"] = "discussion"
         self.store.promote_answers(self.card, again, session="s1")
         self.assertEqual("discussion", self.store.answers_for(self.card)["situation"]["provenance"])
+
+    def test_legacy_automatic_quotes_stay_local_until_explicitly_selected(self):
+        entries = self.answers()
+        entries[0]["provenance"] = "discussion"
+        entries[1]["provenance"] = "manual"
+        self.store.promote_answers(self.card, entries, session="s1")
+        self.store.connection.execute("ALTER TABLE answers DROP COLUMN selected")
+        self.store.connection.commit()
+        before = Path(self.store.path).read_bytes()
+        shown = self.store.show(self.card)
+        self.assertEqual(entries[0]["answer"], shown["local_answers"]["situation"]["answer"])
+        self.assertEqual({"price"}, set(shown["answers"]))
+        self.assertEqual({"price"}, set(self.store.card_answers(self.card)))
+        reading = self.store.retrieve("夜里报警", for_reading=True)
+        self.assertNotIn(entries[0]["answer"], json.dumps(reading, ensure_ascii=False))
+        self.assertEqual(before, Path(self.store.path).read_bytes())
+        # Select the same exact words, not a manufactured edit to make them eligible.
+        self.store.promote_answers(self.card, entries[:1], session="s1", expected_version=1)
+        self.assertEqual(entries[0]["answer"], self.store.card_answers(self.card)["situation"]["answer"])
+        self.assertNotIn("local_answers", self.store.show(self.card))
 
     def test_the_words_are_stored_verbatim_with_their_origin(self):
         self.store.promote_answers(self.card, self.answers(), session="s1")
@@ -225,35 +254,20 @@ class TheWordsOnAScreen(unittest.TestCase):
     def test_a_card_with_no_answers_prints_no_line_at_all(self):
         self.assertEqual([], answers_module.screen_lines({"statement": "一句话"}))
 
-    def test_each_answer_offers_a_command_that_opens_its_own_record(self):
-        """The way back has to be a file a reader can open, with the library named.
-
-        On fdd55ff the stored `trace` was `datetime.now().isoformat()` -- the time it was
-        promoted -- so `show` handed a reader a field they could not open (found in
-        review). The value is now the session's record path, and the screen turns it into
-        a paste-able `transcript` command carrying this library.
-        """
+    def test_legacy_trace_path_never_reaches_reader_screen(self):
         card = self.card()
         card["answers"]["situation"]["provenance"] = "discussion"
-        # A real file: the screen now resolves the stored path before printing a command,
-        # because a moved library makes the stored one stale (the reviewer moved both and
-        # the printed command exited 2).
-        root = Path(self.temp.name)
-        record = root / "sessions" / "discuss-abc.jsonl"
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text("{}\n", encoding="utf-8")
-        card["answers"]["situation"]["trace"] = str(record)
-        text = "\n".join(answers_module.screen_lines(card, database=str(root / "lib.sqlite3")))
-        self.assertIn("transcript", text)
-        self.assertIn("discuss-abc.jsonl", text)
-        self.assertIn("lib.sqlite3", text)
-        self.assertIn("回看说这句的那一场", text)
+        card["answers"]["situation"]["trace"] = "/abs/sessions/discuss-abc.jsonl"
+        text = "\n".join(answers_module.screen_lines(card))
+        self.assertIn("来自会话 s1", text)
+        self.assertNotIn("transcript", text)
+        self.assertNotIn("discuss-abc.jsonl", text)
 
     def test_a_hand_kept_answer_is_named_as_hand_kept_not_as_a_conversation(self):
         """`promote` typed by hand has no session and no moment; it must not borrow one."""
         card = self.card()
         card["answers"]["situation"] = {"answer": "那次是周三", "provenance": "manual"}
-        text = "\n".join(answers_module.screen_lines(card, database="/abs/lib.sqlite3"))
+        text = "\n".join(answers_module.screen_lines(card))
         self.assertIn("手工附上", text)
         self.assertNotIn("transcript", text)
         self.assertNotIn("来自会话", text)
@@ -277,20 +291,12 @@ class TheWordsOnAScreen(unittest.TestCase):
         row["provenance"] = "discussion"
         row["trace"] = "/abs/sessions/discuss-abc.jsonl"
         row["recorded"] = 0
-        text = "\n".join(answers_module.screen_lines(card, database="/abs/lib.sqlite3"))
+        text = "\n".join(answers_module.screen_lines(card))
         self.assertIn("没有写进那一场的记录文件", text)
         self.assertNotIn("回看说这句的那一场", text)
         self.assertNotIn("transcript", text)
         # The session id is still named, so the sentence is not orphaned.
         self.assertIn("s1", text)
-
-    def test_a_session_that_kept_no_record_says_so_instead_of_nothing(self):
-        card = self.card()
-        card["answers"]["situation"]["provenance"] = "discussion"
-        card["answers"]["situation"]["trace"] = ""
-        text = "\n".join(answers_module.screen_lines(card))
-        self.assertIn("没有留下记录文件", text)
-        self.assertNotIn("transcript", text)
 
     def test_the_note_counts_and_does_not_judge(self):
         note = answers_module.screen_note(self.card())

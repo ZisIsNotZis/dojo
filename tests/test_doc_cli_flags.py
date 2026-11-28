@@ -342,7 +342,7 @@ class GuideRouteRuns(unittest.TestCase):
         scripts = guide_scripts(guide_text())
         self.assertTrue(scripts, 'guide has no runnable `sh` block')
         for index, block in enumerate(scripts):
-            self.run_block(block, 'sh block %d' % index)
+            self.run_block(block, 'sh block %d' % index, env=self.scratch_env())
 
     def test_the_guide_states_the_numbers_its_own_commands_produce(self):
         """Direction D: read the prose claims off the executed output, not off a copy."""

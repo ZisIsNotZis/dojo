@@ -120,7 +120,7 @@ def main() -> int:
     root = Path(temp.name)
     library = Library(root / "a")
     try:
-        code, text = library.run([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF])
+        code, text = library.run([OFF_SITUATION, ON_TENSION, OFF_PRICE, OFF_OFF, "/附答 代价"])
         rows = {row["part"]: row for row in library.rows()
                 if row.get("event") == "elicitation" and row.get("turn") == 1}
         line = closing(text)

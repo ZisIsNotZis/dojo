@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -60,6 +59,7 @@ ANSWERS = {
 }
 # The stub proposes once; the next input approves the version shown on screen locally.
 OPENING = ["聊一下值班提醒", "/认可"]
+ATTACH = ["/附答 情境 张力 代价 失效"]
 # None of these three words appears in the card's own sentence, so a match on them can only
 # have come from his answer -- which is what makes the search reading meaningful.
 HIS_QUERY = "没发出来 路上 才发现"
@@ -142,7 +142,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     # ---- A: the session -----------------------------------------------------------
     heading("A. 一场讨论，四件都答了")
     first = dojo(["--db", str(db), "discuss"],
-                 stdin_text="\n".join(OPENING + list(ANSWERS.values())) + "\n", env=env)
+                 stdin_text="\n".join(OPENING + list(ANSWERS.values()) + ATTACH) + "\n", env=env)
     receipt = next((line for line in first.stdout.splitlines()
                     if line.startswith("主持人> ") and "四件问完了" in line), "")
     print("回执：\n  " + (receipt or "（没有回执）"))
@@ -162,27 +162,11 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
             {key: item.get("answer") for key, item in carried.items()} == ANSWERS,
             json.dumps({key: item.get("answer") for key, item in carried.items()},
                        ensure_ascii=False))
-    reading("每条回答的 trace 是一个真存在、能打开的记录文件",
-            bool(carried) and all(item.get("trace") and Path(item["trace"]).is_file()
-                                  for item in carried.values()),
-            json.dumps({key: item.get("trace") for key, item in carried.items()},
-                       ensure_ascii=False))
-    # On fdd55ff this field was `datetime.now().isoformat()`: a timestamp where a reader
-    # expected a place, so the one thing it was for -- getting back to the session -- was
-    # impossible (found in review). The screen has to turn it into a command that runs.
-    back = dojo(["--db", str(db), "search", HIS_QUERY], env=env).stderr
-    back_line = next((line.split("回看说这句的那一场：", 1)[1].strip()
-                      for line in back.splitlines() if "回看说这句的那一场：" in line), "")
-    reading("屏幕给每条原话印出回看那一场的命令", bool(back_line), back[:400])
-    if back_line:
-        # Pasted as printed, from a directory that is not the library's: the same test
-        # #3419 established for every printed command.
-        pasted = subprocess.run(shlex.split(back_line), cwd=str(root), env=env,
-                                text=True, capture_output=True, timeout=120)
-        reading("照抄那条命令能打开那一场，且里面有他的话",
-                pasted.returncode == 0 and all(words in pasted.stdout
-                                               for words in ANSWERS.values()),
-                pasted.stderr[-400:])
+    back = dojo(["--db", str(db), "search", HIS_QUERY], env=env)
+    reading("卡与检索不把整场轨迹交给读者",
+            bool(carried) and all("trace" not in item for item in carried.values())
+            and " transcript " not in back.stderr and ".jsonl" not in back.stdout,
+            back.stderr[:400])
     reading("每条回答都带着它是哪个会话说的",
             all(item.get("session") for item in carried.values()),
             json.dumps(carried, ensure_ascii=False)[:300])
@@ -287,46 +271,6 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     reading("卡的状态没有因为附上回答而变成可讨论",
             shown["candidate"]["status"] == "draft", shown["candidate"]["status"])
 
-    # ---- D1b: the way back survives moving the library ------------------------------
-    # Review: with the library and `sessions/` moved together and the session directory
-    # repointed, `search` still found the card and the answers were still on it, but the
-    # freshly printed command pointed at the old directory and exited 2.
-    heading("D1b. 库和 sessions 一起搬走之后，回看命令仍能打开")
-    # A real move, not a copy: the old directory has to be gone, or the stored path still
-    # works and the reading would be green for the wrong reason (my first version copied,
-    # and the old path resolved). The library this scene uses is a dedicated one so the
-    # earlier scenes are not disturbed.
-    moved_root = root / "moved"
-    moved_root.mkdir()
-    moved_db = moved_root / "library.sqlite3"
-    moved_sessions = moved_root / "sessions"
-    shutil.copy2(db, moved_db)
-    original_sessions = db.parent / "sessions"
-    stashed: Path | None = None
-    if original_sessions.is_dir():
-        shutil.copytree(original_sessions, moved_sessions)
-        # Hidden for the length of this reading, then restored: the stored absolute paths
-        # must really be stale (a copy leaves them readable), and the later scenes need
-        # this directory back.
-        stashed = db.parent / "sessions-away"
-        original_sessions.rename(stashed)
-    moved_env = dict(env, DOJO_SESSIONS=str(moved_sessions))
-    moved_screen = dojo(["--db", str(moved_db), "search", HIS_QUERY], env=moved_env).stderr
-    moved_line = next((line.split("回看说这句的那一场：", 1)[1].strip()
-                       for line in moved_screen.splitlines()
-                       if "回看说这句的那一场：" in line), "")
-    if moved_line:
-        moved_run = subprocess.run(shlex.split(moved_line), cwd=str(root), env=moved_env,
-                                   text=True, capture_output=True, timeout=120)
-        reading("搬走之后屏幕上那条命令仍存在且能跑",
-                Path(shlex.split(moved_line)[-1]).is_file() and moved_run.returncode == 0
-                and all(words in moved_run.stdout for words in ANSWERS.values()),
-                moved_run.stderr[-400:])
-    else:
-        reading("搬走之后屏幕上那条命令仍存在且能跑", False, "没有印出命令")
-    if stashed is not None:
-        stashed.rename(original_sessions)
-
     # ---- D1c: a relative session directory -------------------------------------------
     # Review: `DOJO_SESSIONS=meeting notes` is a normal thing to type, and the command
     # printed from it carried that relative path -- pasting it in another terminal opened
@@ -388,7 +332,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
         "sys.exit(d.run_discuss(Store(%r), read_line=lambda prompt: input()))\n"
     ) % (str(ROOT), str(broken_db))
     broken = subprocess.run([sys.executable, "-c", breaker],
-                            input="\n".join(OPENING + list(ANSWERS.values())) + "\n",
+                            input="\n".join(OPENING + list(ANSWERS.values()) + ATTACH) + "\n",
                             text=True, capture_output=True, env=broken_env, cwd=str(ROOT),
                             timeout=300)
     reading("记录写坏的那一场仍跑完了", broken.returncode == 0, broken.stderr[-600:])
@@ -402,23 +346,9 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
         key: item.get("recorded") for key, item in broken_rows.items()}))
     broken_screen = dojo(["--db", str(broken_db), "search", "冷库温度报警"],
                          env=broken_env).stderr if broken_id else ""
-    # The property is a match, not a count of zero: the first answer *is* in the file and
-    # deserves its command; the rest are not. Every command printed must land on a record
-    # that really contains the sentence printed above it -- that is what review found
-    # broken, and it is the only version of this check that can tell the two apart.
-    offered, unmatched, pending = 0, 0, None
-    for line in broken_screen.splitlines():
-        if "：「" in line and "他的话" not in line:
-            pending = line.split("：「", 1)[1].split("」", 1)[0]
-        elif "回看说这句的那一场：" in line and pending:
-            offered += 1
-            opened = subprocess.run(shlex.split(line.split("回看说这句的那一场：", 1)[1].strip()),
-                                    text=True, capture_output=True, cwd=str(root), env=broken_env,
-                                    timeout=120)
-            if pending not in opened.stdout:
-                unmatched += 1
-    reading("每条回看命令打开的记录都真的有那句原话",
-            offered > 0 and unmatched == 0, f"{offered} 条命令，{unmatched} 条对不上")
+    reading("记录中断后仍保留已获选择的四句，但只第一句实际写进轨迹",
+            set(broken_rows) == set(ANSWERS) and set(missing) == {"tension", "price", "off"}
+            and " transcript " not in broken_screen, str(missing))
     reading("记录里没有的那几句，屏幕说出原因而不是给一条命令",
             "没有写进那一场的记录文件" in broken_screen, broken_screen[-700:])
 
@@ -499,7 +429,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     REPLIES.extend([{"answer": "那我们把这句当成现在这一版。", "candidate": CONCLUSION,
                      "user_stance": "neutral"}])
     quiet = dojo(["--db", str(quiet_db), "discuss", "--no-trace"],
-                 stdin_text="\n".join(OPENING + list(ANSWERS.values())) + "\n", env=quiet_env)
+                 stdin_text="\n".join(OPENING + list(ANSWERS.values()) + ATTACH) + "\n", env=quiet_env)
     quiet_receipt = next((line for line in quiet.stdout.splitlines()
                           if line.startswith("主持人> ") and "四件问完了" in line), "")
     print("回执：\n  " + (quiet_receipt or "（没有回执）"))
@@ -558,6 +488,7 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
         reading("手工 promote 顺手给了会话号，也没有被说成一场 --no-trace 讨论",
                 typed.get("provenance") == "manual"
                 and "手工附上的" in typed_screen
+                and "来自会话 s-hand" not in typed_screen
                 and "没有留下记录文件" not in typed_screen,
                 typed_screen[:400] or sessioned.stderr[-300:])
         reading("手工附上的那句不带会话和时刻，也不假装有记录文件",

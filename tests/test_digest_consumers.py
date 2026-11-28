@@ -70,6 +70,9 @@ AUDITED = {
     # r112d: the read-only report asks the same byte-identity question per card, to
     # print "accepted wording is the current one" rather than infer it. No semantics.
     ('storage.py', 'if any(digest == wanted for digest in digests):'): 'same-bytes',
+    # The discussion handoff may look past a separately filed challenge. Across
+    # any other transition it must stop on changed wording, even a synonymous edit.
+    ('storage.py', 'if previous is None or (previous != digest and version not in challenges):'): 'same-bytes',
     # A pasted locator accepts only the trace bytes it was generated against.
     ('transcript.py', 'if len(data) > MAX_TRACE_BYTES or sha256(data).hexdigest() != expected_sha256:'): 'same-bytes',
     # A review locator names the trace bytes it was printed for. The other two say

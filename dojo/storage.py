@@ -1075,9 +1075,11 @@ class Store:
         # His own words, for the surface a person opens directly. Beside `candidate` for
         # the same reason the keys above are: `candidate` is the stored state byte for
         # byte, and the answers are a different table.
-        answers = self.answers_for(state["id"])
+        answers, local_answers = self._answer_views(state["id"])
         if answers:
-            payload["answers"] = {key: dict(item) for key, item in answers.items()}
+            payload["answers"] = answers
+        if local_answers:
+            payload["local_answers"] = local_answers
         if include_incoming_links:
             incoming = self.incoming_links(path[0])
             if incoming:
@@ -1243,6 +1245,7 @@ class Store:
         answers: list[dict[str, Any]],
         *,
         session: str | None = None,
+        expected_version: int | None = None,
     ) -> dict[str, Any]:
         """Keep his own words on the card, one entry per part, exactly as he said them.
 
@@ -1277,6 +1280,8 @@ class Store:
         with self.transaction():
             state = self._get(_id(candidate_id))
             self._active(state)
+            if expected_version is not None and state["version"] != expected_version:
+                raise DojoError("卡片已不是问答针对的那一版，未附任何原话")
             current = self.answers_for(candidate_id)
             merged: dict[str, Any] = dict(current)
             changed: list[str] = []
@@ -1284,8 +1289,12 @@ class Store:
             for entry in clean:
                 key = entry["field"]
                 previous = current.get(key)
-                if isinstance(previous, dict) and previous.get("answer") == entry["answer"]:
-                    continue
+                if (isinstance(previous, dict) and self._answer_selected(previous)
+                        and previous.get("answer") == entry["answer"]):
+                    # A version-bound discussion decision names this session's exact
+                    # utterance, not just equivalent text from an earlier speaker.
+                    if expected_version is None or all(previous.get(k) == v for k, v in entry.items()):
+                        continue
                 if isinstance(previous, dict):
                     replaced[key] = previous
                 merged[key] = entry
@@ -1301,11 +1310,11 @@ class Store:
                 entry = merged[key]
                 self.connection.execute(
                     "INSERT INTO answers(candidate_id,field,answer,session,at,question,trace,"
-                    "promoted_at,provenance,recorded) VALUES(?,?,?,?,?,?,?,?,?,?) "
+                    "promoted_at,provenance,recorded,selected) VALUES(?,?,?,?,?,?,?,?,?,?,1) "
                     "ON CONFLICT(candidate_id,field) DO UPDATE SET answer=excluded.answer, "
                     "session=excluded.session, at=excluded.at, question=excluded.question, "
                     "trace=excluded.trace, promoted_at=excluded.promoted_at, "
-                    "provenance=excluded.provenance, recorded=excluded.recorded",
+                    "provenance=excluded.provenance, recorded=excluded.recorded, selected=excluded.selected",
                     (
                         state["id"], key, entry["answer"], entry.get("session"),
                         entry.get("at"), entry.get("question"), entry.get("trace"),
@@ -1367,6 +1376,7 @@ class Store:
             promoted_at TEXT NOT NULL,
             provenance TEXT,
             recorded INTEGER,
+            selected INTEGER,
             PRIMARY KEY(candidate_id, field)
         );
     """
@@ -1383,6 +1393,8 @@ class Store:
         # answer). This is what lets the screen promise a way back only for a sentence
         # that is really in the file.
         "recorded": "INTEGER",
+        # No inferred consent for automatic or ambiguous attachments in old libraries.
+        "selected": "INTEGER",
     }
 
     def _ensure_answers_table(self) -> None:
@@ -1456,6 +1468,25 @@ class Store:
                 continue
             present.add(name)
 
+    @staticmethod
+    def _answer_selected(row: dict[str, Any]) -> bool:
+        return row.get("selected") == 1 or row.get("provenance") == "manual"
+
+    def _answer_views(self, candidate_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        selected: dict[str, Any] = {}
+        local: dict[str, Any] = {}
+        for key, item in self.answers_for(candidate_id).items():
+            destination = selected if self._answer_selected(item) else local
+            fields = ("answer", "session", "at", "provenance", "recorded")
+            if destination is local:
+                fields += ("question", "promoted_at")
+            destination[key] = {field: item[field] for field in fields if field in item}
+        return selected, local
+
+    def card_answers(self, candidate_id: str) -> dict[str, dict[str, Any]]:
+        """Only expressly attached quotes, without whole-session locators."""
+        return self._answer_views(candidate_id)[0]
+
     def answers_for(self, candidate_id: str) -> dict[str, dict[str, Any]]:
         """His stored answers for one card, by field key, in part order.
 
@@ -1471,7 +1502,7 @@ class Store:
         # read what is there rather than failing the whole screen over two optional facts.
         present = {row["name"] for row in
                    self.connection.execute("PRAGMA table_info(answers)")}
-        extra = [name for name in ("provenance", "recorded") if name in present]
+        extra = [name for name in ("provenance", "recorded", "selected") if name in present]
         rows = self.connection.execute(
             "SELECT field,answer,session,at,question,trace,promoted_at"
             + ("" if not extra else "," + ",".join(extra))
@@ -1485,6 +1516,7 @@ class Store:
                 "at": row["at"],
                 "provenance": row["provenance"] if "provenance" in extra else None,
                 "recorded": row["recorded"] if "recorded" in extra else None,
+                **({"selected": row["selected"]} if "selected" in extra and row["selected"] is not None else {}),
                 "question": row["question"],
                 "trace": row["trace"],
                 "promoted_at": row["promoted_at"],
@@ -1834,6 +1866,38 @@ class Store:
             state["confirmation"] = self._confirmation_off(state, reason)
             state = self._write(state, "withdraw", {"reason": reason}, {"reason": reason})
         return state
+
+    def local_discussion_draft(
+        self, state: dict[str, Any], events: list[dict[str, Any]] | None = None,
+    ) -> bool:
+        """A discussion's proposed wording is local until this wording is accepted."""
+        if not is_discussion_material(state):
+            return False
+        candidate_id = state["id"]
+        if events is None:
+            events = self._acquisition_events(candidate_id)
+        snapshot_digest = self._snapshot_digest(candidate_id)
+        if is_accepted_conclusion(state, events, snapshot_digest):
+            return False
+        if state.get("status") != "challenged":
+            return True
+        # A manually filed challenge is an explicit addition to reference material,
+        # not a new host proposal. Walk back past challenges and content-preserving
+        # changes only; a revision of the underlying wording still needs approval.
+        challenges = {event["details"].get("version") for event in events
+                      if event["event"] == "challenge" and event["details"].get("effect") != "unchanged"}
+        digest = wording_digest(state)
+        approved = {_accepted_wording_digest(event, snapshot_digest, candidate_id) for event in events} - {None}
+        if not approved:
+            return True
+        for version in range(state["version"], 1, -1):
+            previous = snapshot_digest(version - 1)
+            if previous is None or (previous != digest and version not in challenges):
+                break
+            if previous in approved:
+                return False
+            digest = previous
+        return True
 
     def has_acceptance(self, candidate_id: str, state: dict[str, Any] | None = None) -> bool:
         """Whether some path recorded that a user accepted this card's wording.
@@ -2383,6 +2447,7 @@ class Store:
         self.last_scan = [json.loads(row["state_json"]) for row in
                           self.connection.execute("SELECT state_json FROM candidates ORDER BY id").fetchall()]
         matches: dict[str, tuple[int, set[str], dict[str, Any], dict[str, Any] | None]] = {}
+        local_only: set[str] = set()
         for state in self.last_scan:
             try:
                 canonical, _chain = self.resolve(state["id"])
@@ -2398,13 +2463,19 @@ class Store:
             # alone would let it back into search. That is S5, and it is why this is an
             # `and`, not just a call.
             accepts = self._acquisition_events(canonical["id"])
+            if self.local_discussion_draft(canonical, accepts):
+                local_only.add(canonical["id"])
+                continue
             kept = canonical["status"] == "discussable" or (
                 canonical["status"] == "draft"
                 and is_accepted_conclusion(canonical, accepts, self._snapshot_digest(canonical["id"]))
             )
             if not kept and not include_withheld:
                 continue
-            haystack = searchable_text(canonical, accepts)
+            # The author can see prior versions locally. A current approval is not
+            # permission to quote earlier, potentially unapproved wording in search.
+            haystack = (candidate_text(canonical) if is_discussion_material(canonical)
+                        else searchable_text(canonical, accepts))
             if include_answers:
                 # His own answers are on the card now, so the words *he* used have to
                 # reach it -- that is the point of keeping them (see `dojo/answers.py`).
@@ -2417,7 +2488,7 @@ class Store:
                 # counterexample found the card only through the word 系统 in its
                 # sentence, scoring 1 instead of 4.
                 extra = " ".join(str(item.get("answer", ""))
-                                 for item in self.answers_for(canonical["id"]).values())
+                                 for item in self.card_answers(canonical["id"]).values())
                 if extra:
                     haystack += " " + extra
             found = terms.intersection(lexical_terms(haystack))
@@ -2427,9 +2498,11 @@ class Store:
             previous = matches.get(canonical["id"])
             if previous is None or len(found) > previous[0]:
                 matches[canonical["id"]] = (len(found), found, canonical, withheld)
+        if local_only:
+            self.last_scan = [state for state in self.last_scan if state["id"] not in local_only]
         return sorted(matches.values(), key=lambda item: (-item[0], item[2]["id"]))
 
-    def recently_written(self, limit: int = 3) -> list[dict[str, Any]]:
+    def recently_written(self, limit: int = 3, *, for_reading: bool = False) -> list[dict[str, Any]]:
         """The cards whose wording entered this library most recently, newest first.
 
         Read from `snapshots.created_at` of the version that first carried each card's
@@ -2455,6 +2528,8 @@ class Store:
             except DojoError:
                 continue
             if state.get("redirect_to") or len(chain) > 1:
+                continue
+            if for_reading and self.local_discussion_draft(state):
                 continue
             basis = self.time_basis(state["id"], state)
             when = basis.get("versioned_at")
@@ -2594,8 +2669,6 @@ class Store:
                 row = {
                     **self._card_row(state, score, found),
                     **self._matched_wording(state, found),
-                    **({"answers": {key: dict(item) for key, item in _stored_answers(state).items()}}
-                       if _stored_answers(state) else {}),
                     # The reason is a record code plus counts; what it is called on
                     # screen is `finding.py`'s decision, not this method's.
                     "refused": withheld,
@@ -2625,7 +2698,7 @@ class Store:
 
     def _recent_rows(self, limit: int) -> list[dict[str, Any]]:
         """Recent cards with the gate's verdict on each, for the screen's fallback."""
-        recent = self.recently_written(limit)
+        recent = self.recently_written(limit, for_reading=True)
         bases = self.derivations([state["id"] for state in recent]) if recent else {}
         rows: list[dict[str, Any]] = []
         for state in recent:
@@ -2651,7 +2724,7 @@ class Store:
         copies of this block would drift, and the one that drifted quietly would be the
         one a person reads about the sentence he was looking for (#3436).
         """
-        answers = self.answers_for(state["id"])
+        answers = self.card_answers(state["id"])
         row: dict[str, Any] = {
             "id": state["id"],
             "version": state["version"],
@@ -2680,7 +2753,8 @@ class Store:
         # #1929: a card he revised carried the reason it changed only in the ledger,
         # so this row described the sentence and hid how it got that way. Added by
         # value, only when a revision of *this* wording exists.
-        row.update(self.revision_basis(state["id"], state))
+        if not is_discussion_material(state):
+            row.update(self.revision_basis(state["id"], state))
         # r111c: `status` is `discussable` for a conclusion the user accepted and
         # equally for a card a facilitator merely unblocked, so this screen could
         # hand back an unaccepted draft as settled. Judged by the value, and only
@@ -2934,7 +3008,7 @@ class Store:
         # story I told", not "this is the sentence I remember".
         in_answers = bool(found & lexical_terms(
             " ".join(str(item.get("answer", ""))
-                     for item in self.answers_for(state["id"]).values())
+                     for item in self.card_answers(state["id"]).values())
         ))
         matched_in: list[str] = []
         if in_sentence:
@@ -2952,7 +3026,9 @@ class Store:
         # has always meant and what the rewrite note keys on.
         on_current = bool(found & lexical_terms(candidate_text(state)))
         earlier_hit = None
-        for earlier in earlier_wordings(state, self._acquisition_events(state["id"])):
+        history = (() if is_discussion_material(state)
+                   else earlier_wordings(state, self._acquisition_events(state["id"])))
+        for earlier in history:
             if found & lexical_terms(earlier):
                 earlier_hit = earlier
                 break
@@ -3277,6 +3353,14 @@ def content_key(statement: str, kind: str, fields: dict[str, list[str]]) -> str:
         "kind": kind,
         **{field: sorted(normalized(value) for value in fields.get(field, [])) for field in CONTENT_FIELDS},
     })
+
+
+def is_discussion_material(state: dict[str, Any]) -> bool:
+    """Discussion provenance also survives source attachment or a wording revision."""
+    return is_unaccepted_draft(state) or any(
+        re.fullmatch(r"discuss-[0-9a-f]{32}", str(source.get("independence_group") or ""))
+        for source in state.get("sources", [])
+    )
 
 
 def is_unaccepted_draft(state: dict[str, Any]) -> bool:
@@ -3783,20 +3867,6 @@ def independence(state: dict[str, Any], events: list[dict[str, Any]] | None = No
 # #3436's second round measured an entry claiming "对上 8 个词" over a sentence that
 # shared none of them, because its condition line was the phrase being searched.
 BOUNDARY_FIELDS = ("premises", "scope", "alternatives", "contradictions", "unknowns")
-
-
-def _stored_answers(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """The card's stored answers, by field key, with malformed entries dropped.
-
-    Answers live in their own table (`Store.answers_for`), so a state dict does not carry
-    them; a retrieval row does, because `Store` puts them there when it builds the row.
-    This reader therefore serves the row path only, and `answers.stored` serves either.
-
-    Imported lazily: `dojo.answers` imports `PART_KEYS_BY_FIELD` from this module, so a
-    top-level import here would close the circle.
-    """
-    from .answers import stored
-    return stored(state)
 
 
 def answers_text(state: dict[str, Any]) -> str:

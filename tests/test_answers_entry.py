@@ -55,8 +55,8 @@ class TheAnswersEntryPoint(unittest.TestCase):
             shutil.copytree(ROOT / name, work / name)
         path = work / "dojo" / "discuss.py"
         source = path.read_text(encoding="utf-8")
-        anchor = "            if rows:\n                try:\n"
-        stripped = source.replace(anchor, "            if False:\n                try:\n", 1)
+        anchor = '            if offer_attachment and stopped_at is None and trace_is_open:'
+        stripped = source.replace(anchor, '            if False:', 1)
         self.assertNotEqual(source, stripped, "the promotion call was not found to change")
         path.write_text(stripped, encoding="utf-8")
         done = self.run_entry(work)
@@ -65,6 +65,16 @@ class TheAnswersEntryPoint(unittest.TestCase):
                          % done.stdout[-2000:])
         self.assertIn("不成立", done.stdout)
         self.assertNotIn("0 不成立", done.stdout)
+
+    def test_public_discuss_author_recovery_and_reader_handoff(self):
+        with tempfile.TemporaryDirectory(prefix="discuss-retention-entry.") as tmp:
+            done = subprocess.run(
+                [sys.executable, "-B", "scripts/verify_discuss_retention.py",
+                 "--output", str(Path(tmp) / "evidence")], cwd=ROOT, env=clean_env(),
+                capture_output=True, text=True, encoding="utf-8", timeout=60,
+            )
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("明确留下含补注的版本后才可跨场借用", done.stdout)
 
     def test_the_docs_name_the_commands_they_claim(self):
         summary = (EVIDENCE / "SUMMARY.md").read_text(encoding="utf-8")
