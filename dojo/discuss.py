@@ -54,6 +54,7 @@ from .live import (
     OpenAICompatibleClient,
     _validate_model_content,
 )
+from .pipeline import session_entries
 from .search import SearchError, search as deepseek_search
 from .storage import (
     DojoError, DuplicateContent, KINDS, Store, wording_digest,
@@ -2681,6 +2682,25 @@ def run_discuss(
                 print(trace.warning, file=output)
         for error in write_errors:
             print(f"本场结论未能写入：{error}", file=output)
+        database = commands.library_argument(store.path)
+        has_readback = bool(saved_ids or draft_id)
+        if has_readback:
+            try:
+                entries, unbound = session_entries(store, session)
+            except (DojoError, sqlite3.Error, OSError, ValueError):
+                print("暂时无法统计本场版本；可稍后打开本场清单。", file=output)
+            else:
+                approved = sum(status == "approved" for _, _, status in entries)
+                drafts = sum(status == "unaccepted_draft" for _, _, status in entries)
+                print(f"本场留下：{approved} 个已认可版本，{drafts} 份未认可草稿。认可的是当时的表述，不是独立验证。",
+                      file=output)
+                if unbound or any(status == "unproven" for _, _, status in entries):
+                    print("另有无法确认为本场已认可版本的记录，详见清单。", file=output)
+            print("稍后看本场留下的版本和草稿（只读，不请求模型）：" + commands.dojo(
+                "distill", "--session", session, "--text", db=database,
+            ), file=output)
+        else:
+            print("本场没有留下认可版本或待看草稿。", file=output)
         if saved_ids:
             print("本场结论卡片 ID：" + "、".join(saved_ids), file=output)
             # #1774: this is the other place a reader turned group entries into people.
@@ -2715,10 +2735,6 @@ def run_discuss(
                                 db=commands.library_argument(store.path)),
                 file=output,
             )
-        if saved_ids:
-            print("打开本场提炼清单（只读）：" + commands.dojo(
-                "distill", "--session", session, "--text", db=commands.library_argument(store.path),
-            ), file=output)
         return code
 
     opening_original = (resume_state or {}).get("opening_original")

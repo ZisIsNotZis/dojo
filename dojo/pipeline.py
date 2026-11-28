@@ -201,16 +201,8 @@ def _approved_verdict(store: Store, session: str, card: dict[str, Any]) -> dict[
     return _verdict(pass_locate(store, card).proposals)
 
 
-def distill(store: Store, session: str) -> dict[str, Any]:
-    """What one session's conclusions amount to, as a list a person reads.
-
-    Approved entries read immutable discussion snapshots, not the current card.
-    Locate/challenge compare those snapshots to the current library. Classification
-    is a previously saved proposal; this list does not call a model.
-    """
-    session = str(session or "").strip()
-    if not session:
-        raise ValueError("a session ID is required; the distillation list is over one session's cards")
+def session_entries(store: Store, session: str):
+    """Local inventory shared by the exit receipt and the full readback."""
     approved, unbound = distillation.approvals(store, session)
     approved_ids = {card["id"] for card, _ in approved}
     entries = [(card, records, "approved") for card, records in approved]
@@ -218,6 +210,15 @@ def distill(store: Store, session: str) -> dict[str, Any]:
         if card["id"] not in approved_ids:
             status = "unaccepted_draft" if is_unaccepted_draft(card) else "unproven"
             entries.append((card, [], status))
+    return entries, unbound
+
+
+def distill(store: Store, session: str) -> dict[str, Any]:
+    """Read immutable approvals, other local entries, and any saved proposals."""
+    session = str(session or "").strip()
+    if not session:
+        raise ValueError("a session ID is required; the distillation list is over one session's cards")
+    entries, unbound = session_entries(store, session)
     classified = distillation.saved_classifications(store, session)
     report: dict[str, Any] = {
         "session": session, "cards": [], "lines": [],
@@ -238,7 +239,15 @@ def distill(store: Store, session: str) -> dict[str, Any]:
         if classification is None and status != "unaccepted_draft":
             report["unavailable"]["classify"] = "只读清单没有发请求；未判定不是认可、验证或内容分类。"
         kind = classification["kind"] if classification is not None else None
-        kind_label = distillation.LABELS[kind] + "（模型提议）" if kind else "kind 未判定"
+        recorded_label = distillation.LABELS.get(card["kind"], "类型未记")
+        if kind:
+            kind_label = distillation.LABELS[kind] + "（模型提议）"
+        elif status == "approved":
+            kind_label = recorded_label + "（讨论时拟写）"
+        elif status == "unaccepted_draft":
+            kind_label = recorded_label + "（草稿拟写）"
+        else:
+            kind_label = "kind 未判定"
         kind_conflict = bool(kind and card["kind"] and kind != card["kind"])
         if kind_conflict:
             kind_label = "判类待核"
@@ -264,13 +273,15 @@ def distill(store: Store, session: str) -> dict[str, Any]:
         if status == "unproven":
             line += " [没有本场认可记录]"
         report["lines"].append(line)
-        if status == "approved":
-            if verdict.get("of_scope"):
-                report["lines"].append(f"  对照卡 v{verdict['of_version']} 的范围：" + "；".join(verdict["of_scope"]))
-            for field, label in (("scope", "范围"), ("premises", "前提"), ("alternatives", "替代解释"),
-                                 ("contradictions", "相反情形"), ("unknowns", "认可时留下的未知")):
+        if status != "unproven" and verdict.get("of_scope"):
+            report["lines"].append(f"  对照卡 v{verdict['of_version']} 的范围：" + "；".join(verdict["of_scope"]))
+        if status in {"approved", "unaccepted_draft"}:
+            unknown_label = "认可时留下的未知" if status == "approved" else "草稿注明的未知"
+            for field, label in (("scope", "范围"), ("premises", "前提"), ("alternatives", "其他解释或做法"),
+                                 ("contradictions", "相反情形"), ("unknowns", unknown_label)):
                 if card[field]:
                     report["lines"].append(f"  {label}：" + "；".join(card[field]))
+        if status == "approved":
             if classification is None:
                 report["lines"].append("  已认可此版本；尚无带原话的分类提议。")
             else:

@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import shlex
 import shutil
 import subprocess
 import sys
@@ -246,6 +247,58 @@ class Run:
         return trace, session, ident, user_seq
 
 
+def verify_close(run, trace, session, ident):
+    """A person closes stdin, then copies commands from the screens. No pipeline yet."""
+    screen = (run.out / "discuss.stdout.txt").read_text(encoding="utf-8")
+    assert "本场留下：3 个已认可版本，1 份未认可草稿" in screen, screen
+    path, = [Path(line.split(run.helper.PREFIX, 1)[1]) for line in screen.splitlines()
+             if line.startswith(run.helper.PREFIX) and not line.endswith("（--no-trace）。")][-1:]
+    same(path.read_bytes(), trace.read_bytes(), "original trace matches the archived transcript")
+    digests = [hashlib.sha256(p.read_bytes()).digest() for p in (run.db, path)]
+    events = run.cli("events")
+    workdir = run.temp / "later terminal"
+    workdir.mkdir()
+    other_library = workdir / "different default.sqlite3"
+
+    def unexpected(*_):
+        raise AssertionError("no model request belongs to the local reader")
+
+    with loopback(unexpected) as (endpoint, calls, _):
+        # Copy the visible command (including --db) from another working directory.
+        env = {**run.env, "DOJO_LLM_BASE_URL": endpoint, "DOJO_DB": str(other_library),
+               "PYTHONPATH": str(run.repo), "PYTHONDONTWRITEBYTECODE": "1"}
+
+        def paste(text, label, artifact):
+            command, = [line.split("：", 1)[1] for line in text.splitlines() if line.startswith(label)]
+            result = subprocess.run(shlex.split(command), env=env, cwd=workdir, text=True,
+                                    encoding="utf-8", capture_output=True, timeout=20)
+            (run.out / artifact).write_text(result.stdout, encoding="utf-8")
+            same(result.returncode, 0, f"pasting {command}: {result.stderr}")
+            return result.stdout
+
+        label = "稍后看本场留下的版本和草稿"
+        local = paste(screen, label, "close-reader.txt")
+        transcript = paste(screen, "回看这一场说了什么", "close-transcript.txt")
+        same(paste(transcript, "看本场留下的版本和草稿", "close-reader-via-transcript.txt"),
+             local, "transcript leads to the same session and reader output")
+        same(paste(screen, label, "close-reader-repeat.txt"), local, "open command can be repeated")
+        same(calls, [], "none of these routes calls a model")
+    assert not other_library.exists(), "copying the command created the other default library"
+    same([hashlib.sha256(p.read_bytes()).digest() for p in (run.db, path)], digests,
+         "reading never changes original library or trajectory bytes")
+    same(run.cli("events"), events, "reading does not add events")
+    assert session in local and "模型提议）" not in local, local
+    for i, (card, label) in enumerate(zip(CARDS, ("可试做法", "经验陈述", "待确认问题")), 1):
+        assert f"{ident} v{i} {label}（讨论时拟写） [本场认可快照]：{card['statement']}" in local, local
+        assert all(value in local for value in (*card["scope"], *card["unknowns"])), local
+    draft = CARDS[-1]
+    for value in ("[未认可草稿]：" + draft["statement"], *draft["scope"], *draft["unknowns"]):
+        assert value in local, local
+    data = run.cli("distill", "--session", session)
+    assert all(card["classification"] is None for card in data["cards"]), data
+    print("PASS ordinary EOF: pasted both readback paths, 3 approved versions and 1 draft, zero model calls or writes.")
+
+
 def verify_pipeline(run, old, trace, session, ident, user_seq):
     out = run.out
     command = ["pipeline", "--session", session, "--classify", "--trace", trace]
@@ -395,6 +448,7 @@ def main():
             same(run.old(), old, "earlier neighbor stays unchanged")
             print(f"Discussion CLI: three approvals {ident} v1–v3, one EOF draft. Readouts: {out}")
         else:
+            verify_close(run, trace, session, ident)
             verify_pipeline(run, old, trace, session, ident, user_seq)
 
 

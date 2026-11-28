@@ -293,7 +293,9 @@ def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
     if view["saved"]:
         lines.append("这一场写下的卡片：" + "、".join(view["saved"]))
         lines.append("这几张卡是写下的那几句；四件回答没有改写它们，回看也不说它们已被认可。")
-        lines.append("    逐张看：" + _card_command(database, view["saved"][0]))
+        lines.append("    看当前库记录（不是本场认可历史）：" + _card_command(database, view["saved"][0]))
+        if view["draft"]:
+            lines.append("最后展示的待定版本没有得到本场认可：" + view["draft"] + "。")
     elif view["draft"]:
         # A draft ID may point at an already-stored wording. The trace can speak
         # for this session, not for recognition by any other session.
@@ -340,6 +342,10 @@ def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
         lines.append("卡片命令带的是这个库：" + str(commands.absolute(database)))
     lines.append("")
     lines.append("这些话是材料，不是结论：回看只说你说过什么，不判哪句答到了点上，也不代表你认可了哪条结论。")
+    if view["complete"] and view["session"] and (view["saved"] or view["draft"]):
+        lines.append("看本场留下的版本和草稿（需要原库，只读，不请求模型）：" + commands.dojo(
+            "distill", "--session", view["session"], "--text", db=commands.library_argument(database),
+        ))
     if view.get("resumable"):
         # Never print a command that is going to be refused.
         lines.append("这一份不能接着谈：" + view["resumable"] + "。")
