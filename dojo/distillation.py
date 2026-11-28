@@ -1,18 +1,18 @@
 """Bind M2 classification proposals to accepted snapshots and local user turns."""
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Any
 
 from .live import LiveConfig, LiveError, OpenAICompatibleClient
 from .storage import ACCEPTANCE_EVENT, CARD_FIELD, DIGEST_FIELD, KINDS, Store, wording_digest
-from .tracefile import split_lines
+from .tracefile import MAX_TRACE_BYTES, split_lines
 
 FIELDS = ("statement", "kind", "premises", "scope", "alternatives", "contradictions", "unknowns")
 LABELS = {"application": "可试做法", "experience_claim": "经验陈述", "question": "待确认问题",
           "abstract_idea": "抽象想法", "counterexample": "反例"}
-MAX_TRACE_BYTES = 16_000_000
 MAX_BATCH = 8
 MAX_REQUEST_BYTES = 72_000
 MAX_TEXT_CHARS = 1600
@@ -65,23 +65,52 @@ def saved_classifications(store: Store, session: str):
     return values
 
 
-def _read_trace(path: Path, session: str):
+def read_trace(path: Path, session: str):
+    """Read a complete session once; the digest describes those same bytes."""
     try:
         with path.open("rb") as source:
             raw = source.read(MAX_TRACE_BYTES + 1)
         if len(raw) > MAX_TRACE_BYTES:
-            return []
+            return [], None
         rows = [json.loads(line) for line in split_lines(raw.decode("utf-8")) if line.strip()]
     except (OSError, ValueError, RecursionError):
-        return []
+        return [], None
     if (not rows or any(not isinstance(row, dict) for row in rows)
             or rows[-1].get("event") != "session_end" or rows[-1].get("session") != session):
-        return []
+        return [], None
     rounds = [row for row in rows if "seq" in row and not row.get("event")]
     seqs = [row["seq"] for row in rounds]
     if any(type(seq) is not int or seq < 1 for seq in seqs) or seqs != sorted(set(seqs)):
+        return [], None
+    return rounds, sha256(raw).hexdigest()
+
+
+def _matches_approval(row, card, times):
+    # Wording alone could match a different approval of the same statement.
+    approval = row.get("approval")
+    return (isinstance(approval, dict) and approval.get("id") == card["id"]
+            and type(approval.get("version")) is int and approval["version"] == card["version"]
+            and isinstance(approval.get("agreed_at"), str) and approval["agreed_at"] in times
+            and isinstance(row.get("user"), str) and row["user"].strip() == "/认可"
+            and row.get("stance") == "accept" and row.get("candidate") == fields(card))
+
+
+def readback_turns(card, records, rounds):
+    """Anchor the acceptance and, only if adjacent and recorded, its draft turn."""
+    times = {record["agreed_at"] for record in records if record["agreed_at"]}
+    matches = [i for i, row in enumerate(rounds) if _matches_approval(row, card, times)]
+    if len(matches) != 1:
         return []
-    return rounds
+    i = matches[0]
+    seq = rounds[i]["seq"]
+    if i:
+        previous = rounds[i - 1]
+        user = previous.get("user")
+        if (previous["seq"] == seq - 1 and isinstance(user, str) and user.strip()
+                and not user.lstrip().startswith("/") and previous.get("candidate") == fields(card)
+                and previous.get("pending_snapshot") == fields(card)):
+            return [seq - 1, seq]
+    return [seq]
 
 
 def _input(card, records, rounds):
@@ -90,13 +119,7 @@ def _input(card, records, rounds):
     times = {record["agreed_at"] for record in records if record["agreed_at"]}
     turns = []
     for row in rounds:
-        approval = row.get("approval")
-        if (isinstance(approval, dict) and approval.get("id") == card["id"]
-                and type(approval.get("version")) is int and approval["version"] == card["version"]
-                and isinstance(approval.get("agreed_at"), str) and approval["agreed_at"] in times
-                and isinstance(row.get("user"), str)
-                and row["user"].strip() == "/认可"
-                and row.get("stance") == "accept" and row.get("candidate") == fields(card)):
+        if _matches_approval(row, card, times):
             if not turns:
                 return None
             return {"id": card["id"], "version": card["version"], **fields(card),
@@ -184,7 +207,7 @@ def classify(store: Store, session: str, trace: Path | None, *, dry_run: bool):
         if not approved:
             entry["unavailable"] = "找不到可核对的本场认可快照；不判定草稿。"
         return entry
-    rounds = _read_trace(trace, session)
+    rounds, _ = read_trace(trace, session)
     batch = []
     missing = []
     oversized = []

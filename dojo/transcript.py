@@ -20,13 +20,14 @@ Three things this view refuses to do:
 """
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Any
 
 from . import commands
 from .elicit import PART_KEYS, PART_ORDER, classify_answer
-from .tracefile import split_lines
+from .tracefile import MAX_TRACE_BYTES, split_lines
 
 
 def reclassify(said: str, part: str | None = None) -> str:
@@ -54,10 +55,17 @@ PART_READINGS = {
 }
 
 
-def load(path: Path) -> dict[str, Any]:
+def load(path: Path, *, expected_sha256: str | None = None) -> dict[str, Any]:
     """Parse one trace into the facts this view shows. Read-only, no store needed."""
     try:
-        raw = path.read_text(encoding="utf-8")
+        if expected_sha256 is None:
+            raw = path.read_text(encoding="utf-8")
+        else:
+            with path.open("rb") as source:
+                data = source.read(MAX_TRACE_BYTES + 1)
+            if len(data) > MAX_TRACE_BYTES or sha256(data).hexdigest() != expected_sha256:
+                raise TranscriptError("轨迹与清单定位时不同；请重新打开清单核对")
+            raw = data.decode("utf-8")
     except OSError as exc:
         raise TranscriptError(f"读不出来：{exc}") from None
     except UnicodeDecodeError:
@@ -175,15 +183,16 @@ def load(path: Path) -> dict[str, Any]:
     # that is not a session id, or a trace with no ending are all readable here and none
     # of them is resumable, and the reader should learn that from this screen, not from
     # a second refusal after copying the command.
-    try:
-        from .discuss import _load_resume_trace
+    resumable: str | None = None
+    if expected_sha256 is None:
+        try:
+            from .discuss import _load_resume_trace
 
-        _load_resume_trace(path)
-        resumable: str | None = None
-    except ValueError as exc:
-        resumable = str(exc)
-    except Exception as exc:  # pragma: no cover - a validator crash is not a verdict
-        resumable = f"无法续跑轨迹：{exc}"
+            _load_resume_trace(path)
+        except ValueError as exc:
+            resumable = str(exc)
+        except Exception as exc:  # pragma: no cover - a validator crash is not a verdict
+            resumable = f"无法续跑轨迹：{exc}"
 
     return {
         "session": path.stem,
@@ -228,6 +237,20 @@ def _card_command(database: str | Path | None, candidate_id: str) -> str:
     (#3419: measured `candidate not found` on a draft the session had just written).
     """
     return commands.dojo("show", candidate_id, db=commands.library_argument(database))
+
+
+def render_turns(view: dict[str, Any], numbers: list[int]) -> str:
+    """A location in the transcript, not a judgment about what it supports."""
+    selected = set(numbers)
+    turns = [turn for turn in view["turns"] if type(turn["seq"]) is int and turn["seq"] in selected]
+    if len(turns) != len(selected) or {turn["seq"] for turn in turns} != selected:
+        raise TranscriptError("指定轮次缺失或编号不唯一；请回到清单核对")
+    lines = [f"会话 {view['session']} 的原话定位（仅列指定轮次的用户原话；完整上下文见本场 transcript）"]
+    if not view["complete"]:
+        lines.append("这份轨迹未完整结束；下面只显示已写下的部分。")
+    for turn in turns:
+        lines.append(f"  [{turn['seq']}] 你说：{turn['said']}")
+    return "\n".join(lines) + "\n"
 
 
 def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
@@ -344,7 +367,8 @@ def render(view: dict[str, Any], *, database: str | Path | None = None) -> str:
     lines.append("这些话是材料，不是结论：回看只说你说过什么，不判哪句答到了点上，也不代表你认可了哪条结论。")
     if view["complete"] and view["session"] and (view["saved"] or view["draft"]):
         lines.append("看本场留下的版本和草稿（需要原库，只读，不请求模型）：" + commands.dojo(
-            "distill", "--session", view["session"], "--text", db=commands.library_argument(database),
+            "distill", "--session", view["session"], "--text", "--trace", commands.absolute(view["path"]),
+            db=commands.library_argument(database),
         ))
     if view.get("resumable"):
         # Never print a command that is going to be refused.

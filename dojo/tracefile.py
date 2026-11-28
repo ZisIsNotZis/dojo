@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+MAX_TRACE_BYTES = 16_000_000
+
 # The three code points `str.splitlines()` counts as a line break that are legal unescaped
 # inside a JSON string. `\v`, `\f` and `\x1c`-`\x1e` are also line breaks for
 # `splitlines()`, but `json.dumps` already escapes them as control characters.

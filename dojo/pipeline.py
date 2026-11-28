@@ -16,7 +16,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import distillation
+from . import commands, distillation
+from .readback import Readback
 from .storage import (
     NEGATIONS, Store, content_key, is_unaccepted_draft, normalize_wording, wording_equivalent,
 )
@@ -86,7 +87,7 @@ def pass_locate(store: Store, card: dict[str, Any]) -> PassResult:
             proposals.append({
                 "type": "variant", "of": other["id"], "of_version": other["version"],
                 "of_scope": other["scope"],
-                "reason": "措辞等价但内容不同（条件、前提或未知不同）；建议 link，不 merge",
+                "reason": "措辞接近，但内容不完全相同；是否关联要比较适用边界",
             })
     if not proposals:
         proposals.append({"type": "new", "of": None, "reason": "没有措辞等价的邻居；按新主张处理"})
@@ -213,13 +214,14 @@ def session_entries(store: Store, session: str):
     return entries, unbound
 
 
-def distill(store: Store, session: str) -> dict[str, Any]:
+def distill(store: Store, session: str, *, trace: Path | None = None) -> dict[str, Any]:
     """Read immutable approvals, other local entries, and any saved proposals."""
     session = str(session or "").strip()
     if not session:
         raise ValueError("a session ID is required; the distillation list is over one session's cards")
     entries, unbound = session_entries(store, session)
     classified = distillation.saved_classifications(store, session)
+    readback = Readback(store, session, trace) if trace is not None else None
     report: dict[str, Any] = {
         "session": session, "cards": [], "lines": [],
         "counts": {"new": 0, "variant": 0, "duplicate": 0},
@@ -273,14 +275,14 @@ def distill(store: Store, session: str) -> dict[str, Any]:
         if status == "unproven":
             line += " [没有本场认可记录]"
         report["lines"].append(line)
-        if status != "unproven" and verdict.get("of_scope"):
-            report["lines"].append(f"  对照卡 v{verdict['of_version']} 的范围：" + "；".join(verdict["of_scope"]))
         if status in {"approved", "unaccepted_draft"}:
             unknown_label = "认可时留下的未知" if status == "approved" else "草稿注明的未知"
             for field, label in (("scope", "范围"), ("premises", "前提"), ("alternatives", "其他解释或做法"),
                                  ("contradictions", "相反情形"), ("unknowns", unknown_label)):
                 if card[field]:
                     report["lines"].append(f"  {label}：" + "；".join(card[field]))
+        if status != "unproven" and verdict.get("of_scope"):
+            report["lines"].append(f"  对照卡 v{verdict['of_version']} 的范围：" + "；".join(verdict["of_scope"]))
         if status == "approved":
             if classification is None:
                 report["lines"].append("  已认可此版本；尚无带原话的分类提议。")
@@ -309,6 +311,14 @@ def distill(store: Store, session: str) -> dict[str, Any]:
                 if quotes_by_turn and not cited_turns:
                     report["lines"].append("  旧判类记录未保存原话上下文；请按轨迹核对。")
                 report["lines"].append(f"  轨迹：{classification['trace']}（第 {classification['approval_seq']} 轮认可）")
+        if readback is not None and status == "approved":
+            report["lines"].extend(readback.lines(card, records, verdict))
         for proposal in challenges:
             report["lines"].append(f"  挑战提议 → {proposal['of']}：{proposal['reason']}")
+    approved = [entry for entry in report["cards"] if entry["approval_status"] == "approved"]
+    if readback is not None and approved:
+        report["lines"].append("取舍由你：可以按原边界留用，也可以暂不采用；这两种都不用改库。")
+        if any(entry["of"] for entry in approved):
+            report["lines"].append("要关联而不合并：先核对双方原话，再自行选择关系、核对当前卡并另行写入。用法："
+                                   + commands.dojo("link", "--help"))
     return report

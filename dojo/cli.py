@@ -26,7 +26,7 @@ DEFAULT_DB = DEFAULT_HOME / "dojo.sqlite3"
 DEFAULT_EXPORTS = DEFAULT_HOME / "exports"
 
 
-def _trace_argument(value: str, database: str | None = None) -> Path:
+def _trace_argument(value: str, database: str | Path | None = None) -> Path:
     """The record file a reader asked to see, found even if the library moved.
 
     A printed command carries an absolute path, which is right when it is printed and
@@ -201,6 +201,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     distill_parser.add_argument("--session", required=True, help="the session whose approved versions to list")
     distill_parser.add_argument("--text", action="store_true", help="print a human-readable list instead of JSON")
+    distill_parser.add_argument("--trace", help="本场原轨迹：仅在本地定位原话，不请求模型")
 
     export = sub.add_parser("export", help="create a new isolated B (no seed) or C (selected excerpt) prompt")
     export.add_argument("--mode", choices=["b", "c"], required=True)
@@ -271,9 +272,10 @@ def _parser() -> argparse.ArgumentParser:
         description="只读：不改库、不写轨迹、不请求模型。轨迹写到一半断了也能读，并会说明断在哪。",
     )
     transcript.add_argument("trace", help="一场讨论的轨迹：sessions/discuss-<32 位十六进制>.jsonl")
-    transcript.add_argument(
-        "--json", action="store_true", help="输出同样的内容，机器可读",
-    )
+    transcript_mode = transcript.add_mutually_exclusive_group()
+    transcript_mode.add_argument("--json", action="store_true", help="输出同样的内容，机器可读")
+    transcript_mode.add_argument("--turn", type=int, action="append", help="只看指定轮；可重复指定")
+    transcript.add_argument("--trace-sha256", help="定位命令要求的轨迹指纹；仅与 --turn 一起使用")
     discuss = sub.add_parser("discuss", help="自然语言协作讨论；会话原文仅写入本地轨迹")
     # The card is a file too. This flag used to cover only the session record, so the
     # four answers were written onto the card while the screen said they were not kept;
@@ -907,9 +909,14 @@ def main(argv: list[str] | None = None) -> int:
             # why `--resume` can rebuild a handout without the library), and a person
             # looking back may be on a machine where the library has moved. Opening a
             # store here would create one for a question about a file.
-            from .transcript import TranscriptError, load, render
+            from .transcript import TranscriptError, load, render, render_turns
             try:
-                view = load(_trace_argument(args.trace, args.db))
+                if args.trace_sha256 is not None and not args.turn:
+                    raise TranscriptError("--trace-sha256 只用于 --turn 定位")
+                view = load(_trace_argument(args.trace, db_path), expected_sha256=args.trace_sha256)
+                if args.turn:
+                    sys.stdout.write(render_turns(view, args.turn))
+                    return 0
             except TranscriptError as exc:
                 print(f"无法回看：{exc}。", file=sys.stderr)
                 return 2
@@ -1036,7 +1043,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "distill":
             store = Store(db_path, readonly=True)
-            report = distill(store, args.session)
+            trace = _trace_argument(args.trace, db_path) if args.trace else None
+            report = distill(store, args.session, trace=trace)
             if args.text:
                 print(f"本场提炼清单 · {report['session']}（近邻与挑战是提议；认可不等于独立验证）")
                 for line in report["lines"]:

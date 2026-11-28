@@ -2697,7 +2697,9 @@ def run_discuss(
                 if unbound or any(status == "unproven" for _, _, status in entries):
                     print("另有无法确认为本场已认可版本的记录，详见清单。", file=output)
             print("稍后看本场留下的版本和草稿（只读，不请求模型）：" + commands.dojo(
-                "distill", "--session", session, "--text", db=database,
+                "distill", "--session", session, "--text",
+                *(("--trace", commands.absolute(trace_path)) if trace_path is not None else ()),
+                db=database,
             ), file=output)
         else:
             print("本场没有留下认可版本或待看草稿。", file=output)

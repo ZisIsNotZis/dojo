@@ -70,6 +70,8 @@ AUDITED = {
     # r112d: the read-only report asks the same byte-identity question per card, to
     # print "accepted wording is the current one" rather than infer it. No semantics.
     ('storage.py', 'if any(digest == wanted for digest in digests):'): 'same-bytes',
+    # A pasted locator accepts only the trace bytes it was generated against.
+    ('transcript.py', 'if len(data) > MAX_TRACE_BYTES or sha256(data).hexdigest() != expected_sha256:'): 'same-bytes',
 }
 
 PROSE = '若第二人每天要复核的件数超过其容量，则流量并未真正转移。'

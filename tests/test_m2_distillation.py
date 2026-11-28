@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dojo.distillation import MAX_TEXT_CHARS, _input, _validated, fields
+from dojo.distillation import MAX_TEXT_CHARS, _input, _validated, fields, readback_turns
 from dojo.pipeline import distill
 from dojo.storage import Store
 
@@ -23,13 +23,22 @@ class M2DistillationTests(unittest.TestCase):
         when = '2026-11-28T10:00:00+00:00'
         rounds = []
         for index, card in enumerate((first, middle, final)):
-            rounds.extend(({'seq': 2 * index + 1, 'user': f'原话 {index + 1}'},
+            rounds.extend(({'seq': 2 * index + 1, 'user': f'原话 {index + 1}',
+                            'candidate': fields(card), 'pending_snapshot': fields(card)},
                            {'seq': 2 * index + 2, 'user': '/认可', 'stance': 'accept', 'candidate': fields(card),
                             'approval': {'id': card['id'], 'version': card['version'], 'agreed_at': when}}))
         result = _input(final, [{'agreed_at': when}], rounds)
         self.assertEqual(6, result['approval_seq'])
         self.assertEqual({'seq': 5, 'text': '原话 3'}, result['turns'][-1])
         self.assertIsNone(_input(final, [{'agreed_at': when}], rounds[:-1]))
+        records = [{'agreed_at': when}]
+        self.assertEqual([1, 2], readback_turns(first, records, rounds))
+        self.assertEqual([5, 6], readback_turns(final, records, rounds))
+        # Missing draft marker or whole round must never point back at v1's identical text.
+        self.assertEqual([6], readback_turns(final, records, [*rounds[:4], rounds[5]]))
+        rounds[4].pop('pending_snapshot')
+        self.assertEqual([6], readback_turns(final, records, rounds))
+        self.assertEqual([], readback_turns(final, records, rounds[:-1]))
 
     def test_exact_echo_is_an_approval_but_not_a_new_claim_or_source(self):
         store = self.store
