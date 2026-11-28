@@ -83,7 +83,9 @@ ARMS = [
         # The supervisor's provenance reproducer, restored: the type name decides.
         "a-hand-typed-edge-is-called-a-discussion",
         [("dojo/storage.py",
-          "                    \"basis\": (\"discussion\" if self.derivation(state[\"id\"]) == target\n"
+          "                    \"basis\": (\"discussion\"\n"
+          "                              if (derivations.get(state[\"id\"]) if derivations is not None\n"
+          "                                  else self.derivation(state[\"id\"])) == target\n"
           "                              else \"recorded_relation\"),\n",
           "                    \"basis\": \"discussion\",\n")],
         "库里原本就有的手打边，屏幕不再说这是一场讨论",

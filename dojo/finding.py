@@ -310,6 +310,13 @@ def _later_lines(row: dict[str, Any], database: str | Any) -> list[str]:
     if recorded:
         lines.append("  库里记着与这条有关的关系（不是一场讨论留下的，也不表示谁写下了谁）：")
         lines.extend(_later_card_lines(recorded, database, indent="    "))
+    # The list is capped so the screen does not pay a `time_basis` read per edge; the total
+    # is a fact about the library, so it is counted rather than left out. Five shown out of
+    # forty would otherwise read as "five".
+    total = row.get("derived_later_total")
+    if isinstance(total, int) and total > len(later):
+        lines.append("  还有 " + str(total - len(later)) + " 张连着这条的卡没印在这里，"
+                     "可以看这张卡本身（show）。")
     return lines
 
 

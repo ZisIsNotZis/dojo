@@ -66,10 +66,10 @@ python3 -m dojo --db /tmp/lineage.sqlite3 link <A> --relation derived_from --tar
 ## 3. 严格的版本
 
 ```bash
-python3 docs/evidence/2026-11-28-derivation-edge/verify.py   # 41 项读数
+python3 docs/evidence/2026-11-28-derivation-edge/verify.py   # 43 项读数
 python3 docs/evidence/2026-11-28-derivation-edge/redarm.py   # 11 条红臂
-python3 -B -m unittest tests.test_derivation_edge             # 16 项
-python3 -B -m unittest discover -s tests -q                  # 全量（1391 项）
+python3 -B -m unittest tests.test_derivation_edge             # 18 项
+python3 -B -m unittest discover -s tests -q                  # 全量（1393 项）
 ```
 
 `redarm.py` 会先确认 `verify.py` 是绿的，再逐条还原一处行为，要求**指定的那一项**变红。它自己也会
@@ -83,4 +83,6 @@ python3 -B -m unittest discover -s tests -q                  # 全量（1391 项
   `candidate.sqlite` 直接用这一版读，屏幕印「库里记着与这条有关的关系」，不再说这是一场讨论。
 - 第二次规模：`/var/tmp/dojo-lineage-recheck.7JZ7o6YE`——2400 张卡、一条关系都没有。
   现在屏幕检索在交替 A/B 下与基线持平（中位数 233–241 ms 对 234–247 ms），结果数一致；
-  `verify.py` 的 D4/D5 两段把「表只读一次」与「索引只建一次」都固定成读数。
+  `verify.py` 的 D4/D5/D5b 三段把「表只读一次」「索引只建一次」「有边比无边的固定代价是
+  有界的」固定成读数。
+- 边很多时：屏幕只印 5 条并把剩下的数出来（`.scratch/3490/edge_scaling.py`）。

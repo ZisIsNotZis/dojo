@@ -399,6 +399,60 @@ def walk(db: Path, env: dict[str, str], root: Path) -> int:
     # every card was still O(n^2) (217 -> 513 ms on 2400 cards, no edge in the library).
     # A screen now builds the reverse index once. What is checkable without a clock is
     # that the walk does not happen per row: counting the calls shows one build.
+    # D5b: the cost has to be flat in the NUMBER OF EDGES, not just in the card count.
+    # None of the earlier reproducers could see this: they were edge-free libraries, and the
+    # first version of this fixture confused "more edges" with "more cards". Same card
+    # count, one library joined and one not: the joined one may cost a fixed number of
+    # statements more, and that number must not grow with the edge count.
+    heading("D5b. 语句数随边数增长吗（卡片数不变）")
+    def joined_fixture(name: str, extra: int, join: bool) -> int:
+        path = root / name
+        ledger = _store(path, readonly=False)
+        try:
+            one = ledger.add("Observe railway inspection during the quiet shift.",
+                             "abstract_idea", candidate_id="sample-0000")
+            with ledger.transaction():
+                for offset in range(1, 300):
+                    ledger._insert_candidate(
+                        dict(one, id="sample-%04d" % offset,
+                             statement=("Observe railway inspection during the quiet shift "
+                                        "for platform %d." % offset)), "add", {})
+            for offset in range(extra):
+                ledger.add("Evening handover checklist, item %d." % offset, "abstract_idea",
+                           candidate_id="later-%04d" % offset,
+                           **({"derived_from": "sample-0000"} if join else {}))
+        finally:
+            ledger.close()
+        reader2 = _store(path)
+        counter = [0]
+        reader2.connection.set_trace_callback(
+            lambda _q: counter.__setitem__(0, counter[0] + 1))
+        try:
+            reader2.retrieve("railway", limit=10, for_reading=True)
+        finally:
+            reader2.close()
+        return counter[0]
+
+    plain_small = joined_fixture("edges-none-600.sqlite3", 600, False)
+    joined_small = joined_fixture("edges-600.sqlite3", 600, True)
+    # **The comparison has to hold the card count.** One card carries at most one
+    # `derived_from`, so "more edges" always means "more cards" -- an earlier version of
+    # this reading compared 600 edges against 1200 and read +1800 statements, which was the
+    # matcher's own per-card work (a `resolve` and an event read for every card), not the
+    # lineage code. Edge count cannot be varied on its own here, and a reading that says
+    # otherwise is measuring something else.
+    reading("同样 900 张卡，有边比无边的固定代价是有界的（≤ 20 条语句）",
+            0 <= joined_small - plain_small <= 20, str((plain_small, joined_small)))
+    # The cap is what keeps the per-edge read bounded, and the remainder is counted: a
+    # screen showing 5 of 600 must say so rather than pretend the library holds five.
+    capped = _store(root / "edges-600.sqlite3").retrieve("railway", limit=10, for_reading=True)
+    anchor = next((row for row in capped["withheld"] if row["id"] == "sample-0000"), None)
+    reading("600 条反向边上，屏幕只印 5 条并把剩下的数出来",
+            bool(anchor) and len(anchor.get("derived_later") or []) == 5
+            and anchor.get("derived_later_total") == 600,
+            str((len(anchor.get("derived_later") or []) if anchor else None,
+                 anchor.get("derived_later_total") if anchor else None)))
+
     heading("D5. 反向边的索引每屏只建一次")
     builds = [0]
     original_index = _store(db).__class__.derivation_index

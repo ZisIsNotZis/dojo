@@ -171,8 +171,16 @@ def _new_id(prefix: str) -> str:
 # the two facts it adds are how to *read* the edge, and that wording belongs to the
 # screen -- `handoff_for_model` says the same thing in the session where it matters.
 READING_ROW_KEYS = (
-    "matched_on", "matched_wording", "matched_in", "answers", "derived_later", "derivation",
+    "matched_on", "matched_wording", "matched_in", "answers", "derived_later",
+    "derived_later_total", "derivation",
 )
+# How many later versions one entry itemises. Each one costs a `time_basis` read (its own
+# wording's date and acceptance), and a library that really holds many edges would otherwise
+# pay that for every edge on every row: measured at 0/200/600 edges on 600 cards, one search
+# went 56 -> 96 -> 149 ms with the count of statements growing by ~12 per edge
+# (`.scratch/3490/edge_scaling.py`). Five is what a reader can take in beside one sentence;
+# the rest is **counted**, never silently dropped, the same rule `SCREEN_SOURCE_LINES` uses.
+SCREEN_LATER = 5
 # The four parts `discuss` asks, by the field key the card stores. Declared beside the
 # reading keys because three layers have to agree on the vocabulary: `discuss` writes the
 # answers, `storage` orders and searches them, and `finding`/`discuss` print them. The
@@ -2400,11 +2408,16 @@ class Store:
                 # `later_index` empty means no card in this library carries such an edge,
                 # which is the ordinary case: skip the per-row lookup entirely rather than
                 # ask 2400 times for a list that is always empty.
-                later = (self.later_versions(state["id"], index=later_index)
+                later = (self.later_versions(state["id"], index=later_index,
+                                             derivations=bases)
                          if later_index else [])
                 if later:
-                    # Only when there is one, so every other row keeps its bytes.
-                    row["derived_later"] = later
+                    # Only when there is one, so every other row keeps its bytes. The
+                    # total is on the row separately because the list is capped: "five more"
+                    # and "two more" must not print the same.
+                    row["derived_later"] = [item for item in later
+                                            if not item.get("counted_only")]
+                    row["derived_later_total"] = len(later)
                 derivation = bases.get(state["id"])
                 if derivation:
                     row["derivation"] = derivation
@@ -2433,10 +2446,13 @@ class Store:
                 }
                 # Read once, and only for a card that has one, so every other refused
                 # row keeps the bytes it had.
-                later = (self.later_versions(state["id"], index=later_index)
+                later = (self.later_versions(state["id"], index=later_index,
+                                             derivations=bases)
                          if later_index else [])
                 if later:
-                    row["derived_later"] = later
+                    row["derived_later"] = [item for item in later
+                                            if not item.get("counted_only")]
+                    row["derived_later_total"] = len(later)
                 derivation = bases.get(state["id"])
                 if derivation:
                     row["derivation"] = derivation
@@ -2590,7 +2606,7 @@ class Store:
 
     @staticmethod
     def derivation_index(states: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-        """Target id -> the cards whose state says they came out of it, built once.
+        """Resolved target id -> the cards whose state says they came out of it, built once.
 
         `later_versions` used to walk every card's relations on every call, and the reading
         screen calls it once per result row: 2400 cards x 2400 states turned one search
@@ -2600,10 +2616,27 @@ class Store:
         it. Redirected cards are skipped here, as they were there.
 
         A target that was later merged away is not rewritten in the card's own state (the
-        edge is history), so `later_versions` still resolves the target before using this
-        index. Building the forward map costs one pass over the states the caller already
-        loaded, which is what the matcher pays for its own scan.
+        edge is history), so the redirect is followed **here, in memory**, and the entry is
+        filed under the card that survived. Resolving through the database per edge was the
+        third shape of the same defect: the supervisor's first two reproducers measured a
+        full table read and a full state walk per row, and `later_versions` used to add two
+        more queries per edge-bearing card (`resolve`, plus `history` for the basis) -- fine
+        on the hand-tended libraries this slice was measured on, quadratic on a library that
+        actually holds many edges. One pass over the states now answers all of it.
         """
+        by_id = {state.get("id"): state for state in states if isinstance(state.get("id"), str)}
+
+        def survivor(identifier: str) -> str:
+            seen: set[str] = set()
+            current = identifier
+            while current in by_id and current not in seen:
+                seen.add(current)
+                target = by_id[current].get("redirect_to")
+                if not isinstance(target, str) or not target:
+                    return current
+                current = target
+            return current
+
         index: dict[str, list[dict[str, Any]]] = {}
         for state in states:
             if state.get("redirect_to"):
@@ -2613,13 +2646,14 @@ class Store:
                     continue
                 target = relation.get("target")
                 if isinstance(target, str) and target:
-                    index.setdefault(target, []).append(state)
+                    index.setdefault(survivor(target), []).append(state)
                     break
         return index
 
     def later_versions(
         self, candidate_id: str, *, states: list[dict[str, Any]] | None = None,
         index: dict[str, list[dict[str, Any]]] | None = None,
+        derivations: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Cards the ledger records as written out of a discussion that held this one.
 
@@ -2675,12 +2709,21 @@ class Store:
             for relation in state.get("relations") or []:
                 if not isinstance(relation, dict) or relation.get("type") != "derived_from":
                     continue
-                if self.resolve(relation.get("target"))[0]["id"] != target:
+                # With an index the entry is already filed under the surviving target; only
+                # the fallback has to resolve, because only the fallback reads raw states.
+                if index is None and self.resolve(relation.get("target"))[0]["id"] != target:
                     continue
                 # `basis` is the fact the sentence on screen has to hang on: the
                 # ledger's add row says the program wrote this edge, or it does not.
                 # A hand-typed relation is still a relation, and still shown -- but as
                 # what it is, not as a discussion.
+                if len(found) >= SCREEN_LATER:
+                    # Counted, not read: the `time_basis` cost is per listed card, and the
+                    # caller prints the remainder as a number.
+                    found.append({"id": state["id"], "statement": state.get("statement"),
+                                  "status": state.get("status"), "version": state.get("version"),
+                                  "counted_only": True})
+                    continue
                 found.append({
                     "id": state["id"],
                     "statement": state.get("statement"),
@@ -2688,7 +2731,11 @@ class Store:
                     "version": state.get("version"),
                     "sources": state.get("sources") or [],
                     "acceptance": self.time_basis(state["id"], state),
-                    "basis": ("discussion" if self.derivation(state["id"]) == target
+                    # The caller's one-query map when it has one; `derivation` (a full event
+                    # read for this card) only when it does not.
+                    "basis": ("discussion"
+                              if (derivations.get(state["id"]) if derivations is not None
+                                  else self.derivation(state["id"])) == target
                               else "recorded_relation"),
                 })
                 break

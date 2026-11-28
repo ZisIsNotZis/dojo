@@ -23,7 +23,7 @@ from pathlib import Path
 
 from dojo import discuss
 from dojo.finding import search_screen
-from dojo.storage import DojoError, Store
+from dojo.storage import SCREEN_LATER, DojoError, Store
 
 
 def card(store: Store, identifier: str, statement: str, **fields) -> dict:
@@ -57,6 +57,25 @@ class DerivationEdgeTest(unittest.TestCase):
                                derived_from="d-origin", sources=[source], session="s-one")
         self.assertEqual(len(child["sources"]), 1)
         self.assertEqual(child["sessions"], ["s-one"])
+
+    def test_a_merged_target_files_the_edge_under_the_survivor(self) -> None:
+        """Resolved in memory, not through the database: one pass answers every edge.
+
+        The target may have been merged after the edge was written (the edge is history and
+        is not rewritten), so the index files it under whichever card survived.
+        """
+        card(self.store, "d-old", "被合并掉的那一句。")
+        card(self.store, "d-keep", "留下来的那一句。")
+        child = self.store.add("从旧的那条长出来的。", "abstract_idea", scope=["范围"],
+                               derived_from="d-old")
+        self.store.merge("d-old", "d-keep", confirmed=True, reason="同一条")
+        states = [json.loads(row["state_json"]) for row in
+                  self.store.connection.execute(
+                      "SELECT state_json FROM candidates ORDER BY id").fetchall()]
+        index = self.store.derivation_index(states)
+        self.assertEqual([item["id"] for item in index.get("d-keep") or []], [child["id"]])
+        self.assertEqual([item["id"] for item in
+                          self.store.later_versions("d-keep", index=index)], [child["id"]])
 
     def test_a_card_cannot_come_out_of_itself(self) -> None:
         with self.assertRaises(DojoError):
@@ -155,6 +174,25 @@ class DerivationEdgeTest(unittest.TestCase):
             self.store.connection.set_trace_callback(None)
         self.assertEqual(reads[0], 1)
         self.assertEqual(len(result["withheld"]), 200)
+
+    def test_many_later_versions_are_capped_on_screen_and_counted(self) -> None:
+        """The cap is what keeps one search's cost bounded as edges accumulate.
+
+        Without it every listed card costs its own `time_basis` read (snapshots + events),
+        and a library that really holds many edges pays it on every row. The remainder is
+        counted, never dropped: "five shown" and "five exist" must not print the same.
+        """
+        card(self.store, "d-anchor", "原来那一句。")
+        self.store.confirm("d-anchor", "worth discussing")
+        for offset in range(12):
+            self.store.add("后来那一句 %d。" % offset, "abstract_idea", scope=["范围"],
+                           derived_from="d-anchor")
+        result = self.store.retrieve("原来", limit=10, for_reading=True)
+        row = next(row for row in result["results"] if row["id"] == "d-anchor")
+        self.assertEqual(len(row["derived_later"]), SCREEN_LATER)
+        self.assertEqual(row["derived_later_total"], 12)
+        screen = "\n".join(search_screen(result, database=str(self.db)))
+        self.assertIn("还有 7 张连着这条的卡没印在这里", screen)
 
     def test_a_reading_row_carries_the_basis_and_the_model_row_does_not(self) -> None:
         card(self.store, "d-origin", "原来那一句。")
