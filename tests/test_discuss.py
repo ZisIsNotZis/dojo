@@ -86,15 +86,15 @@ class FakeClient:
 class ConclusionWriteTests(unittest.TestCase):
     def test_a_second_session_reaching_the_same_conclusion_attaches_instead_of_versioning(self):
         with tempfile.TemporaryDirectory() as temp, closing(Store(Path(temp) / "dojo.sqlite3")) as store:
-            first, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+            first, _version, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
             self.assertIsNone(error)
             self.assertEqual(1, len(store.list_candidates()))
-            reused, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+            reused, _version, error = _save_conclusion(store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
             self.assertIsNone(error)
             self.assertEqual(first, reused)
             self.assertEqual(1, len(store.list_candidates()))
             self.assertEqual(1, store.show(first)["candidate"]["version"])
-            second, error = _save_conclusion(store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False)
+            second, _version, error = _save_conclusion(store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False)
             self.assertIsNone(error)
             self.assertEqual(first, second)
             afterwards = store.show(first)["candidate"]
@@ -132,7 +132,7 @@ class EchoGateTests(unittest.TestCase):
         return [row["id"] for row in self.store.broadcast(self.QUERY)["results"]]
 
     def test_an_echoed_card_does_not_gain_a_second_independence_group(self):
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         self.assertEqual(["sess-a"], self.store.show(card)["candidate"]["sessions"])
         self.assertEqual([], self.broadcast_ids(), "one session's word is not broadcast")
@@ -141,7 +141,7 @@ class EchoGateTests(unittest.TestCase):
         self.store.record_read(card, "sess-b", surface="discuss")
 
         notices = []
-        echoed, error = _save_conclusion(
+        echoed, _version, error = _save_conclusion(
             self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -159,13 +159,13 @@ class EchoGateTests(unittest.TestCase):
 
     def test_a_session_that_was_never_shown_the_card_still_attaches(self):
         """The other direction: the gate must not become "never count a second session"."""
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         # Somebody else's read of the same card must not stand in for this session's.
         self.store.record_read(card, "sess-c", surface="search")
 
         notices = []
-        second, error = _save_conclusion(
+        second, _version, error = _save_conclusion(
             self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -181,14 +181,14 @@ class EchoGateTests(unittest.TestCase):
 
     def test_a_different_conclusion_from_a_session_that_saw_the_card_is_still_written(self):
         """Reading one card is not a licence to refuse everything else that session writes."""
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         self.store.record_read(card, "sess-b", surface="discuss")
 
         other = dict(CONCLUSION)
         other["statement"] = "先写下第一步要交付什么，可能比缩小任务更能降低启动阻力。"
         notices = []
-        new_id, error = _save_conclusion(
+        new_id, _version, error = _save_conclusion(
             self.store, other, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -200,12 +200,12 @@ class EchoGateTests(unittest.TestCase):
 
     def test_a_library_whose_reads_were_never_logged_keeps_attaching(self):
         """`holds_table: false` is not evidence of exposure; the gate stays open on absence."""
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         self.assertFalse(self.store.reads(card)["holds_table"], "this library has no read log yet")
 
         notices = []
-        second, error = _save_conclusion(
+        second, _version, error = _save_conclusion(
             self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -222,7 +222,7 @@ class EchoGateTests(unittest.TestCase):
         it gains no independence either: it grows a second single-session card. Both halves
         are asserted so a later reader cannot take this class to mean "echoes are blocked".
         """
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         self.store.record_read(card, "sess-b", surface="discuss")
 
@@ -230,7 +230,7 @@ class EchoGateTests(unittest.TestCase):
         rewritten["statement"] = "开始前把任务缩成一个能马上做的第一步，也许能减少启动时的阻力。"
         rewritten["scope"] = ["明知目标却因为任务太大而拖延时"]
         notices = []
-        new_id, error = _save_conclusion(
+        new_id, _version, error = _save_conclusion(
             self.store, rewritten, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -251,16 +251,16 @@ class EchoGateTests(unittest.TestCase):
         """
         neighbour = dict(CONCLUSION)
         neighbour["statement"] = "把每件事写成一句话，可能让判断变容易。"
-        other_card, error = _save_conclusion(self.store, neighbour, "sess-a", candidate_id=None, trace_enabled=False)
+        other_card, _version, error = _save_conclusion(self.store, neighbour, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
-        card, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
+        card, _version, error = _save_conclusion(self.store, CONCLUSION, "sess-a", candidate_id=None, trace_enabled=False)
         self.assertIsNone(error)
         self.assertNotEqual(other_card, card)
 
         self.store.record_read(other_card, "sess-b", surface="search")
 
         notices = []
-        second, error = _save_conclusion(
+        second, _version, error = _save_conclusion(
             self.store, CONCLUSION, "sess-b", candidate_id=None, trace_enabled=False,
             echo_notices=notices,
         )
@@ -397,9 +397,16 @@ class DiscussTests(unittest.TestCase):
         rounds = self.rounds_only(records)
         self.assertEqual(3, len(rounds))
         first, second, end = rounds
+        self.assertEqual(TRACE_FIELDS, set(first))
+        self.assertEqual(TRACE_FIELDS | {"approval"}, set(second))
         for row in (first, second):
-            self.assertEqual(TRACE_FIELDS, set(row))
             datetime.fromisoformat(row["at"])
+        acceptance = self.store.connection.execute(
+            "SELECT details_json FROM events WHERE event='wording_accepted'",
+        ).fetchone()
+        self.assertEqual({"id": state["id"], "version": state["version"],
+                          "agreed_at": json.loads(acceptance["details_json"])["agreed_at"]},
+                         second["approval"])
         self.assertEqual("  我总在开始动手前就拖延。  ", first["user"])
         self.assertEqual(CONCLUSION, first["candidate"])
         self.assertEqual("none", first["decision"])
@@ -412,10 +419,11 @@ class DiscussTests(unittest.TestCase):
         self.assertEqual("/认可", second["user"])
         self.assertEqual(1, second["requests_sent"])
         self.assertEqual(
-            {"event", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model",
+            {"event", "session", "reason", "saved", "requests_sent", "profile_used", "profile_updates", "model",
              "elicitation", "draft"},
             set(end),
         )
+        self.assertEqual(state["sessions"][0], end["session"])
         # An accepted conclusion is the card; nothing is left over as a draft.
         self.assertIsNone(end["draft"])
         self.assertTrue(end["profile_used"])

@@ -1085,7 +1085,7 @@ def _save_conclusion(
     echo_notices: list[str] | None = None,
     derived_from: str | None = None,
     previous: dict[str, Any] | None = None,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, int | None, str | None]:
     """Bind approval to the full reviewed content, never to a best match or stale ID."""
     echoed = None
     try:
@@ -1152,10 +1152,10 @@ def _save_conclusion(
             if not accepted_draft:
                 store.record_acceptance(saved["id"], session, path="discuss_conclusion", agreed_at=agreed_at)
     except (DojoError, OSError, sqlite3.Error) as exc:
-        return None, str(exc)
+        return None, None, str(exc)
     if echoed is not None and echo_notices is not None:
         echo_notices.append(echoed)
-    return saved["id"], None
+    return saved["id"], saved["version"], None
 
 
 def _draft_conclusion(
@@ -2669,7 +2669,7 @@ def run_discuss(
                     write_errors.append(draft_error)
         if trace is not None:
             trace.append({
-                "event": "session_end", "reason": reason, "saved": saved_ids,
+                "event": "session_end", "session": session, "reason": reason, "saved": saved_ids,
                 "draft": draft_id,
                 "requests_sent": requests_sent,
                 "profile_used": profile_used, "profile_updates": profile_entries,
@@ -2715,6 +2715,10 @@ def run_discuss(
                                 db=commands.library_argument(store.path)),
                 file=output,
             )
+        if saved_ids:
+            print("打开本场提炼清单（只读）：" + commands.dojo(
+                "distill", "--session", session, "--text", db=commands.library_argument(store.path),
+            ), file=output)
         return code
 
     opening_original = (resume_state or {}).get("opening_original")
@@ -3090,6 +3094,7 @@ def run_discuss(
             )
             return finish("failure", 2)
 
+        approval = None
         if final_error is not None:
             error = final_error_record or _trace_error(final_error)
             answer = _user_error_message(
@@ -3163,7 +3168,7 @@ def run_discuss(
                 f"，本场请求 {requests_sent}，判定 {reason}"
             )
             if candidate is not None and should_save:
-                saved_id, save_error = _save_conclusion(
+                saved_id, saved_version, save_error = _save_conclusion(
                     store, previous_pending, session,
                     candidate_id=saved_candidate_id, previous=saved_candidate,
                     trace_enabled=trace_is_open, agreed_at=turn_received_at,
@@ -3177,10 +3182,12 @@ def run_discuss(
                 if saved_id is None:
                     reason = "write_failed"
                     print(f"没有写下认可：{save_error} 可以继续说明你想保留或修改什么。", file=output)
-                elif saved_id == saved_candidate_id and saved_candidate == candidate:
+                else:
+                    approval = {"id": saved_id, "version": saved_version, "agreed_at": turn_received_at}
+                if saved_id is not None and saved_id == saved_candidate_id and saved_candidate == candidate:
                     reason = "accepted_unchanged"
                     print("库里已是本场认可的同一版，没有改写卡片。", file=output)
-                else:
+                elif saved_id is not None:
                     print(f"已记下对屏上这一版的认可：{saved_id}。", file=output)
                     note(f"结论已在认可这一轮写入：{saved_id}")
                     if saved_id in saved_ids:
@@ -3203,6 +3210,7 @@ def run_discuss(
             "seq": seq, "at": datetime.now(timezone.utc).isoformat(),
             "user": original_text, "answer": answer, "candidate": candidate,
             "stance": stance, "decision": decision, "reason": reason,
+            **({"approval": approval} if approval else {}),
             "requests_sent": requests_sent,
             "model": active_model,
             "pending_after": pending["statement"] if pending is not None else None,

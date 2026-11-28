@@ -191,13 +191,16 @@ def _parser() -> argparse.ArgumentParser:
         help="run the end-of-session passes (classify, locate, challenge) over one session's cards; each card is processed once per revision",
     )
     pipeline.add_argument("--session", required=True, help="the session whose cards to process")
-    pipeline.add_argument("--dry-run", action="store_true", help="report what each pass would do without writing marks or events")
+    pipeline.add_argument("--dry-run", action="store_true", help="preview without model requests, marks or events")
+    pipeline.add_argument("--classify", action="store_true", help="send one bounded batch of approved snapshots and local user excerpts to the configured model")
+    pipeline.add_argument("--trace", help="finished local discussion JSONL for --classify")
 
     distill_parser = sub.add_parser(
         "distill",
         help="read-only: what one session's conclusions amount to (新 / 变体 / 重复), as a list a person judges; writes nothing",
     )
-    distill_parser.add_argument("--session", required=True, help="the session whose cards to list")
+    distill_parser.add_argument("--session", required=True, help="the session whose approved versions to list")
+    distill_parser.add_argument("--text", action="store_true", help="print a human-readable list instead of JSON")
 
     export = sub.add_parser("export", help="create a new isolated B (no seed) or C (selected excerpt) prompt")
     export.add_argument("--mode", choices=["b", "c"], required=True)
@@ -583,9 +586,10 @@ def _execute(args: argparse.Namespace, store: Store) -> Any:
     # `search` is handled in `main`, before the writer `Store` below, because it must
     # open the library read-only: see `_run_search`.
     if command == "pipeline":
-        return run_pipeline(store, args.session, dry_run=args.dry_run)
-    if command == "distill":
-        return distill(store, args.session)
+        if args.classify != bool(args.trace):
+            raise DojoError("--classify 与 --trace <本场轨迹> 必须一起使用；尚未发送请求。")
+        trace = _trace_argument(args.trace, str(store.path)) if args.trace else None
+        return run_pipeline(store, args.session, dry_run=args.dry_run, classify_trace=trace)
     if command == "broadcast":
         return store.broadcast(args.query or "", args.limit, args.session)
     if command == "export":
@@ -1028,6 +1032,19 @@ def main(argv: list[str] | None = None) -> int:
             store = Store(db_path, readonly=True)
             result = freeze_materials(store, destination)
             _print_packet_result(result)
+            return 0
+
+        if args.command == "distill":
+            store = Store(db_path, readonly=True)
+            report = distill(store, args.session)
+            if args.text:
+                print(f"本场提炼清单 · {report['session']}（近邻与挑战是提议；认可不等于独立验证）")
+                for line in report["lines"]:
+                    print(line)
+                if not report["cards"]:
+                    print("本场没有可列出的卡。")
+            else:
+                print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
             return 0
 
         _secure_default_paths(db_path, export_dir)

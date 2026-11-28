@@ -918,7 +918,7 @@ class StoreTests(unittest.TestCase):
             "kind": "abstract_idea", "premises": [], "scope": ["自行车"],
             "alternatives": [], "contradictions": [], "unknowns": [],
         }
-        saved_id, error = discuss_module._save_conclusion(
+        saved_id, _version, error = discuss_module._save_conclusion(
             self.store, candidate, "sess-conv", candidate_id=None, trace_enabled=False,
         )
         self.assertIsNone(error)

@@ -364,7 +364,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md). In short: this is a scope-disciplined
 
 **Planned, honestly unfinished**
 
-- M2 is not met: `classify` reports `unavailable` instead of guessing, so it still needs one real model judgement, and the end-of-session distillation list has not been run in full and reviewed.
+- The M2 distillation list now has an [offline, full CLI walk](docs/evidence/2026-11-28-m2-distill/README.md): approved snapshots, lexical neighbours, exact user excerpts, and optional model classification proposals. Real-model classification quality and the user's review remain open.
 - The experimental harness and the tension-convergence probe are specified but not run; `docs/probe/notes/` holds zero notes.
 - There is exactly one real person's record. The cross-person promise of a shared database of "dao" has no cross-person evidence yet; until a second person's material lands, read this as one person's thought organizer, not as humanity's dao.
 - Not built and not planned near-term: UI, server, login, social features, rankings, feeds, billing, multi-node federation.

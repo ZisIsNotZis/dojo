@@ -88,26 +88,24 @@ python3 -m dojo export --mode c --id life-01 --budget-chars 6000   # 全部来�
 
 `export` 除了独立性，还要求被选中的卡当前 `status` 是 `discussable`：只是被接受、但还没标可讨论的 `draft` 会被拒（`selected candidate is not currently discussable`）。这与检索面不同——检索会返回「自己认可过的 `draft`」，出口不会。两处要求不同是有意的：能搜到一张卡，不等于它能作为跨会话材料交出去。
 
-## 会话末管线（`pipeline`）
+## 会话末提炼（`pipeline` / `distill`）
 
-`pipeline` 只处理一场会话写下的卡，按 `classify → locate → challenge` 顺序跑；每张卡对每个 pass 只处理一次，标记记的是"已处理到版本 N"，卡升版后才会再处理。重跑同一会话是空操作：不写事件、不改卡。pass 只提议，不合并、不改写、不删卡。
-
-```sh
-python3 -m dojo pipeline --session life-anon-1            # 跑一次
-python3 -m dojo pipeline --session life-anon-1            # 再跑：events_written 为 0
-python3 -m dojo pipeline --session life-anon-1 --dry-run  # 只报会做什么，不写标记与事件
-```
-
-`classify` 需要在场判定这条主张属于哪类（`kind`），本轮不猜：它报 `unavailable` 并写明理由，不写事件也不打标记，所以等端点可用时它仍会被重新跑。`locate` 给出 新 / 变体 / 重复 的提议（重复已由 `add` 挡住，这里只用于发现旧数据里的重复）；`challenge` 只在两个邻居用同一批词而肯定/否定相反时提议挑战。
-
-## 给用户读的提炼清单（`distill`）
-
-`distill` 是 `pipeline` 的读者面：同一场会话，同一套 `locate`/`challenge` 提议，按卡排成一条条给人看的行——`[新]`／`[变体]`／`[重复]`、对着哪张卡、理由，后面跟挑战提议。它**只读**：不写事件、不写处理标记，所以在 `pipeline` 之前或之后问都一样，问它不会变成第二份结论。`kind` 一列写「未判定」，因为 `classify` 还没落地——写入时给的 `kind` 不是判定结果。
+像平常一样 `discuss`：核对屏上措辞与范围，只对值得留的版本输入 `/认可`。会话结束后，用收尾印出的命令打开本场提炼清单；`--text` 是人读的版式，不加该参数输出 JSON。
 
 ```sh
-python3 -m dojo distill --session life-anon-1
-python3 -m dojo events | wc -l    # 前后不变：这条命令不改账本
+python3 -m dojo --db "$DB" distill --session "$SESSION" --text
 ```
+
+清单按**本场认可的原版快照**读回，而不是借用同 ID 最近修订的措辞。没有认可的最后一版明标「未认可草稿」，不是结论；只有 `--session` 标签、没有认可凭据的卡也不会冒充结论。`[新]`／`[变体]`／`[重复]` 是与当前库的文字近邻关系，不是等价证明或合并指令。挑战同样只是提议。打开清单不写库、不发送网络请求。
+
+**如需模型判类**（可试做法、经验陈述、待确认问题等），先明确选用已获准的 `DOJO_LLM_*` 线路，再单独运行一次管线。它会上传本场待处理的已认可卡片快照和到认可轮为止的部分用户原话（不会发送整份轨迹、主持人回复或旧库近邻）。不希望上传原话时，直接读清单即可，类型会注明未判定。
+
+```sh
+python3 -m dojo --db "$DB" pipeline --session "$SESSION" --classify --trace "$TRACE"
+python3 -m dojo --db "$DB" distill --session "$SESSION" --text
+```
+
+分类单次最多发一批（最多 8 个版本，另有请求大小限制）。有 `deferred` 时可再次显式提交下一批；已判定的版本不重发。旧轨迹、`--no-trace` 或不匹配的轨迹可能缺少认可轮绑定：只展示能找回的账本快照，不补猜原话。输出区分「原话在哪一轮」和「模型为何这样分、尚缺什么」；逐字核对不证明引语相关性、因果或事实。模型无权修改任何已认可字段或增加来源。默认管线只运行本地近邻与挑战；`--dry-run` 也不发请求、不写事件。前置条件不满足或模型响应未通过核对时，分类不写入；本地近邻/挑战仍可写提议事件。
 
 ## 7–10 分钟：同一目标下的 B/C 人工复制
 
