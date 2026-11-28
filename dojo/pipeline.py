@@ -239,11 +239,15 @@ def distill(store: Store, session: str) -> dict[str, Any]:
             report["unavailable"]["classify"] = "只读清单没有发请求；未判定不是认可、验证或内容分类。"
         kind = classification["kind"] if classification is not None else None
         kind_label = distillation.LABELS[kind] + "（模型提议）" if kind else "kind 未判定"
+        kind_conflict = bool(kind and card["kind"] and kind != card["kind"])
+        if kind_conflict:
+            kind_label = "判类待核"
         draft = status == "unaccepted_draft"
         report["counts"][verdict["type"]] += 1
         report["cards"].append({
             "id": card["id"], "version": card["version"], **distillation.fields(card),
             "kind_status": "proposed" if kind else "abstained" if classification else "unavailable",
+            "kind_conflict": kind_conflict,
             "approval_status": status, "approval_events": [record["event"] for record in records],
             "classification": classification,
             "verdict": verdict["type"], "of": verdict["of"], "reason": verdict["reason"],
@@ -270,11 +274,29 @@ def distill(store: Store, session: str) -> dict[str, Any]:
             if classification is None:
                 report["lines"].append("  已认可此版本；尚无带原话的分类提议。")
             else:
-                report["lines"].append(f"  为什么这样分：{classification['reason']}")
+                if kind_conflict:
+                    report["lines"].append(
+                        f"  标签不一致：讨论时为{distillation.LABELS[card['kind']]}；"
+                        f"后续模型提议为{distillation.LABELS[kind]}。请对照原话；认可表述不等于认可判类。"
+                    )
+                report["lines"].append(f"  模型判类理由：{classification['reason']}")
                 if classification["missing"]:
-                    report["lines"].append(f"  尚缺依据：{classification['missing']}")
+                    report["lines"].append(f"  模型指出的依据缺口：{classification['missing']}")
+                quotes_by_turn = {}
                 for quote in classification["quotes"]:
-                    report["lines"].append(f"  本场原话 · 第 {quote['seq']} 轮：「{quote['quote']}」")
+                    quotes_by_turn.setdefault(quote["seq"], []).append(quote["quote"])
+                cited_turns = {turn["seq"]: turn for turn in classification.get("cited_turns", [])}
+                if quotes_by_turn:
+                    report["lines"].append("  摘录已核对是否逐字出现，不代表它支持模型判类。")
+                for seq, quotes in quotes_by_turn.items():
+                    for quote in quotes:
+                        report["lines"].append(f"  模型摘录 · 第 {seq} 轮：「{quote}」")
+                    turn = cited_turns.get(seq)
+                    if turn and (turn.get("truncated") or quotes != [turn["text"]]):
+                        label = "原话开头（已截短）" if turn.get("truncated") else "原话整轮"
+                        report["lines"].append(f"  {label} · 第 {seq} 轮：「{turn['text']}」")
+                if quotes_by_turn and not cited_turns:
+                    report["lines"].append("  旧判类记录未保存原话上下文；请按轨迹核对。")
                 report["lines"].append(f"  轨迹：{classification['trace']}（第 {classification['approval_seq']} 轮认可）")
         for proposal in challenges:
             report["lines"].append(f"  挑战提议 → {proposal['of']}：{proposal['reason']}")
